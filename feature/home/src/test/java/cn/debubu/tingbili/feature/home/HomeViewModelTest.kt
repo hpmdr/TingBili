@@ -115,6 +115,10 @@ class HomeViewModelTest {
         override suspend fun removeTrack(playlistId: Long, bvid: String, cid: Long) { tracks.removeIf { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid } }
         override suspend fun deletePlaylist(id: Long) { playlists.removeIf { it.id == id } }
         override suspend fun clearTracks(playlistId: Long) { tracks.removeIf { it.playlistId == playlistId } }
+        override suspend fun updateOrder(playlistId: Long, bvid: String, cid: Long, newOrder: Int) {
+            val idx = tracks.indexOfFirst { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
+            if (idx >= 0) tracks[idx] = tracks[idx].copy(order = newOrder)
+        }
         fun addedCount() = tracks.size
     }
 

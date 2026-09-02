@@ -49,4 +49,7 @@ interface PlaylistDao {
 
     @Query("DELETE FROM PlaylistTrackEntity WHERE playlistId=:playlistId")
     suspend fun clearTracks(playlistId: Long)
+
+    @Query("UPDATE PlaylistTrackEntity SET `order`=:newOrder WHERE playlistId=:playlistId AND bvid=:bvid AND cid=:cid")
+    suspend fun updateOrder(playlistId: Long, bvid: String, cid: Long, newOrder: Int)
 }

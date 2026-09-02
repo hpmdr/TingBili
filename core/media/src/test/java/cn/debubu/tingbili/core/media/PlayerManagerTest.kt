@@ -84,7 +84,7 @@ class PlayerManagerTest {
     }
 
     class FakeBiliApi : BiliApi {
-        override suspend fun search(keyword: String, searchType: String): SearchDto = SearchDto(code = 0)
+        override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
             return PlayUrlDto(
