@@ -23,6 +23,17 @@ class BiliRepository @Inject constructor(
         Result.Error(e.message ?: "search failed", e)
     }
 
+    /**
+     * Paging3 entry — returns raw List<Track> or throws on error.
+     * Used by BiliPagingSource; page 1-indexed.
+     */
+    suspend fun searchPage(keyword: String, page: Int = 1): List<Track> {
+        if (keyword.isBlank()) return emptyList()
+        val dto = api.search(keyword, page = page)
+        if (dto.code != 0) throw IllegalStateException(dto.message.ifBlank { "search failed: code ${dto.code}" })
+        return dto.toTracks()
+    }
+
     suspend fun getView(bvid: String): Result<List<Track>> = try {
         val dto = api.view(bvid)
         if (dto.code != 0) {

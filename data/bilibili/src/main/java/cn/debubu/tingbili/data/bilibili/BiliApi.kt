@@ -12,7 +12,8 @@ interface BiliApi {
     @GET("/x/web-interface/search/type")
     suspend fun search(
         @Query("keyword") keyword: String,
-        @Query("search_type") searchType: String = "video"
+        @Query("search_type") searchType: String = "video",
+        @Query("page") page: Int = 1
     ): SearchDto
 
     @GET("/x/web-interface/view")
