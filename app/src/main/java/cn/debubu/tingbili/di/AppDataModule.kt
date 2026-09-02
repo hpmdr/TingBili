@@ -58,11 +58,19 @@ object AppDataModule {
     @Singleton
     fun provideJson(): Json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
+    /**
+     * App-level bridge module. Provides Room, DataStore and Bilibili network bindings
+     * required by [cn.debubu.tingbili.core.media.PlayerManager] via [cn.debubu.tingbili.navigation.MainViewModel].
+     * Kept in `:app` to avoid cross-module ksp/hilt churn for Task 6; future split:
+     * - core:data → TingBiliDatabase / HistoryDao / PlaylistDao / PreferencesRepository
+     * - data:bilibili → OkHttp / Json / Retrofit / BiliApi
+     * No duplication exists — core:data and data:bilibili currently expose no Hilt modules.
+     */
     @Provides
     @Singleton
     fun provideRetrofit(client: OkHttpClient, json: Json): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://api.bilibili.com")
+            .baseUrl("https://api.bilibili.com/")
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()

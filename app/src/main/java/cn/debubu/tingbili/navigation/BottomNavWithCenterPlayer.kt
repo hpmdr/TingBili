@@ -14,14 +14,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import cn.debubu.tingbili.core.media.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import androidx.lifecycle.ViewModel
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,12 +46,12 @@ fun BottomNavWithCenterPlayer(
     val isPlaying = state.isPlaying
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val destination = navBackStackEntry?.destination
 
-    val isHomeSelected = currentRoute?.contains("HomeRoute") == true
-    val isPlaylistSelected = currentRoute?.contains("PlaylistRoute") == true
-    val isHistorySelected = currentRoute?.contains("HistoryRoute") == true
-    val isSettingsSelected = currentRoute?.contains("SettingsRoute") == true
+    val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
+    val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
+    val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
+    val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
 
     NavigationBar {
         NavigationBarItem(
