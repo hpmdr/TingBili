@@ -6,8 +6,8 @@
 ## 恢复方式（3 条命令）
 ```bash
 cat docs/superpowers/WORK_PROGRESS.md
-git -C . log --oneline -5
-cat ./gradle.properties; cat ./settings.gradle.kts | head -n 20
+git log --oneline -5
+cat gradle.properties; cat settings.gradle.kts | head -n 20
 ```
 
 ## 全局约束（逐字）

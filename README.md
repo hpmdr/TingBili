@@ -1,5 +1,8 @@
 # TingBili — 哔哩哔哩专用音频播放器
 
+[![CI](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml/badge.svg)](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Non--Commercial%20%2B%20Disclaimer-orange)](./LICENSE)
+
 > 音频优先 · 轻量常驻 · 歌单驱动。解决 B 站官方“听视频”臃肿（GB级内存）、以视频为中心的痛点，专为听书/听音乐设计。
 
 - 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 36 / compileSdk 36 / Java 17`
@@ -46,5 +49,7 @@ feature:settings (step/dynamicColor)
 ## 二期
 登录（扫码）→ 导入收藏夹/稍后再看 → 云同步
 
-## 协议
-仅用于学习交流，B 站 API 需遵守官方与 `bilibili-API-collect` 约束。
+## 免责声明
+- 本项目仅供学习交流，禁止商用，详见 [LICENSE](./LICENSE)
+- 与哔哩哔哩（bilibili）官方无任何隶属或授权关系，内容版权归原作者及平台所有
+- 使用本软件产生的账号风险由使用者自行承担，B 站 API 需遵守官方与 `bilibili-API-collect` 约束
