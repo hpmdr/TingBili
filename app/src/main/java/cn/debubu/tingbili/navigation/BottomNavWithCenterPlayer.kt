@@ -94,9 +94,6 @@ fun BottomNavWithCenterPlayer(
                     navController.navigate(PlayerRoute) {
                         launchSingleTop = true
                     }
-                },
-                onPlayPause = {
-                    playerManager.toggle()
                 }
             )
         }

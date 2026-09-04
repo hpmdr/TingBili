@@ -28,10 +28,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,12 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import cn.debubu.tingbili.core.media.PlayerManager
 
 @Composable
 fun PlayerScreen(
-    vm: PlayerViewModel = hiltViewModel(),
-    player: PlayerManager? = null
+    vm: PlayerViewModel = hiltViewModel()
 ) {
     val s by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -112,8 +114,7 @@ fun PlayerScreen(
                         color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Gray,
                         style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.fillMaxWidth().clickable {
-                            // seek to lyric time via PlayerManager exposed via vm
-                            // vm does not expose direct seek, use player state position
+                            vm.seekToLyric(line)
                         }.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
@@ -124,9 +125,15 @@ fun PlayerScreen(
         // Progress
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(formatMs(s.positionMs), style = MaterialTheme.typography.bodySmall)
+            var dragRatio by remember { mutableStateOf<Float?>(null) }
             Slider(
-                value = if (s.durationMs > 0) s.positionMs.toFloat() / s.durationMs else 0f,
-                onValueChange = { /* seek handled via PlayerManager in real app */ },
+                value = dragRatio
+                    ?: if (s.durationMs > 0) s.positionMs.toFloat() / s.durationMs else 0f,
+                onValueChange = { dragRatio = it },
+                onValueChangeFinished = {
+                    dragRatio?.let { vm.seekTo((it * s.durationMs).toLong()) }
+                    dragRatio = null
+                },
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
             )
             Text(formatMs(s.durationMs), style = MaterialTheme.typography.bodySmall)
@@ -137,15 +144,17 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { /* previous */ }) { Icon(Icons.Default.SkipPrevious, contentDescription = "上一首") }
-            IconButton(onClick = { /* toggle */ }) {
+            IconButton(onClick = { vm.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "上一首") }
+            IconButton(onClick = { vm.toggle() }) {
                 Icon(
                     if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (s.isPlaying) "暂停" else "播放"
                 )
             }
-            IconButton(onClick = { /* next */ }) { Icon(Icons.Default.SkipNext, contentDescription = "下一首") }
-            Text("${s.speed}x", style = MaterialTheme.typography.bodyMedium)
+            IconButton(onClick = { vm.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "下一首") }
+            TextButton(onClick = { vm.cycleSpeed() }) {
+                Text("${s.speed}x", style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

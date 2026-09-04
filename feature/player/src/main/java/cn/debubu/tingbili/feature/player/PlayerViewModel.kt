@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class PlayerUiState(
     val isPlaying: Boolean = false,
@@ -70,4 +71,25 @@ class PlayerViewModel @Inject constructor(
             currentLyricIndex = idx
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerUiState())
+
+    // ---- 播放控制（委托 PlayerManager）----
+
+    fun toggle() = player.toggle()
+
+    fun previous() = player.previous()
+
+    fun next() = player.next()
+
+    fun seekTo(positionMs: Long) = player.seekTo(positionMs)
+
+    /** 点击歌词行跳转到该行时间 */
+    fun seekToLyric(line: LyricLine) = player.seekTo(line.timeMs)
+
+    /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
+    fun cycleSpeed() {
+        val steps = listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f)
+        val cur = uiState.value.speed
+        val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
+        viewModelScope.launch { player.setSpeed(next) }
+    }
 }

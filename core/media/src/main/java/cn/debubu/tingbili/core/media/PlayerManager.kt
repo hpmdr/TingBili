@@ -57,29 +57,50 @@ class PlayerManager @Inject constructor(
     suspend fun play(tracks: List<Track>, index: Int) {
         if (tracks.isEmpty()) return
         val safeIndex = index.coerceIn(0, tracks.lastIndex)
-        queue = tracks
-        currentIndex = safeIndex
 
-        // Build MediaItems — resolve playUrl per track, fallback to empty uri if failed.
-        val mediaItems = tracks.map { track ->
+        // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
+        val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
+
+        // Build MediaItems — resolve playUrl per track (audio-only); 跳过解析失败的项
+        val items = resolved.mapNotNull { track ->
             val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
                 is Result.Success -> r.data
                 is Result.Error -> null
             }
-            MediaItem.Builder()
-                .setUri(url ?: "")
-                .setMediaId("${track.bvid}:${track.cid}")
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(track.title)
-                        .setArtist(track.author)
-                        .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
-                        .build()
-                )
-                .build()
+            track.takeIf { !url.isNullOrBlank() }?.let { it to url }
+        }
+        if (items.isEmpty()) {
+            _state.update { it.copy(isPlaying = false) }
+            return
         }
 
-        player.setMediaItems(mediaItems, safeIndex, 0L)
+        // 目标曲目若不可播，取其后第一个可播项，否则第一个可播项
+        val startIndex = items.indexOfFirst { it.first == resolved[safeIndex] }
+            .takeIf { it >= 0 }
+            ?: items.indexOfFirst { it.first == resolved.getOrNull(safeIndex) }
+                .takeIf { it >= 0 }
+            ?: 0
+        val playableTracks = items.map { it.first }
+        queue = playableTracks
+        currentIndex = startIndex
+
+        player.setMediaItems(
+            items.map { (track, url) ->
+                MediaItem.Builder()
+                    .setUri(url)
+                    .setMediaId("${track.bvid}:${track.cid}")
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.title)
+                            .setArtist(track.author)
+                            .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                            .build()
+                    )
+                    .build()
+            },
+            startIndex,
+            0L
+        )
         player.prepare()
         player.play()
 
@@ -95,19 +116,20 @@ class PlayerManager @Inject constructor(
 
         _state.update {
             it.copy(
-                queue = tracks,
-                currentIndex = safeIndex,
-                currentTrack = tracks[safeIndex],
+                queue = playableTracks,
+                currentIndex = startIndex,
+                currentTrack = playableTracks[startIndex],
                 isPlaying = true,
                 positionMs = 0L,
-                durationMs = tracks[safeIndex].durationMs,
+                durationMs = playableTracks[startIndex].durationMs,
                 repeatMode = repeat,
                 speed = speed,
             )
         }
 
         // Resume track at saved history if exists
-        val saved = historyDao.get(tracks[safeIndex].bvid, tracks[safeIndex].cid)
+        val startTrack = playableTracks[startIndex]
+        val saved = historyDao.get(startTrack.bvid, startTrack.cid)
         if (saved != null && saved.positionMs > 0L) {
             player.seekTo(saved.positionMs)
             _state.update { it.copy(positionMs = saved.positionMs) }
@@ -117,6 +139,18 @@ class PlayerManager @Inject constructor(
         startPositionPoll()
         attachPlayerListener()
     }
+
+    /** cid=0（搜索结果）时经 view() 解析第一个分P 的真实 cid */
+    private suspend fun resolveCid(track: Track): Track =
+        when (val v = biliRepository.getView(track.bvid)) {
+            is Result.Success -> v.data.firstOrNull()?.let { first ->
+                track.copy(
+                    cid = first.cid,
+                    durationMs = first.durationMs.takeIf { it > 0L } ?: track.durationMs,
+                )
+            } ?: track
+            is Result.Error -> track
+        }
 
     fun pause() {
         player.pause()

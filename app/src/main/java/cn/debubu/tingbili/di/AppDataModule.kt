@@ -11,6 +11,8 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.data.bilibili.BiliApi
+import cn.debubu.tingbili.data.bilibili.WbiInterceptor
+import cn.debubu.tingbili.data.bilibili.WbiSigner
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -52,7 +54,14 @@ object AppDataModule {
 
     @Provides
     @Singleton
-    fun provideOkHttp(): OkHttpClient = OkHttpClient.Builder().build()
+    fun provideWbiSigner(json: Json): WbiSigner = WbiSigner(json)
+
+    @Provides
+    @Singleton
+    fun provideOkHttp(wbiSigner: WbiSigner): OkHttpClient =
+        OkHttpClient.Builder()
+            .addInterceptor(WbiInterceptor(wbiSigner))
+            .build()
 
     @Provides
     @Singleton

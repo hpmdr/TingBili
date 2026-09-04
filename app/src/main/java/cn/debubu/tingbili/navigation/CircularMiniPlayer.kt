@@ -25,13 +25,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 
+/**
+ * 底部圆形 mini 播放器：单一点击语义 — 整体点击进入播放页。
+ * 封面随播放旋转；播放/暂停控制由播放页与通知栏承担。
+ */
 @Composable
 fun CircularMiniPlayer(
     progress: Float,
     cover: String,
     isPlaying: Boolean,
-    onClick: () -> Unit,
-    onPlayPause: () -> Unit
+    onClick: () -> Unit
 ) {
     val clamped = progress.coerceIn(0f, 1f)
 
@@ -49,9 +52,7 @@ fun CircularMiniPlayer(
         Modifier
     }
 
-    // Distinct interaction sources to avoid nested clickable ambiguity
     val outerInteraction = remember { MutableInteractionSource() }
-    val innerInteraction = remember { MutableInteractionSource() }
 
     Box(
         modifier = Modifier
@@ -80,11 +81,6 @@ fun CircularMiniPlayer(
                 .clip(CircleShape)
                 .then(rotateModifier)
                 .testTag("coverImage")
-                .clickable(
-                    interactionSource = innerInteraction,
-                    indication = ripple(bounded = false, radius = 26.dp),
-                    onClick = onPlayPause
-                )
         )
     }
 }

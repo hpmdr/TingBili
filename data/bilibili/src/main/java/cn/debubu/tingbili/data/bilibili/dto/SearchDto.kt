@@ -59,6 +59,8 @@ internal fun String.stripHtml(): String {
 internal fun String.normalizeCover(): String {
     return when {
         startsWith("//") -> "https:$this"
+        // B 站封面常返回 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
+        startsWith("http://") -> replaceFirst("http://", "https://")
         isBlank() -> ""
         else -> this
     }

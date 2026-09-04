@@ -178,8 +178,7 @@ private fun FloatingCenteredMiniPlayer(
             progress = progress,
             cover = cover,
             isPlaying = isPlaying,
-            onClick = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
-            onPlayPause = { playerManager.toggle() }
+            onClick = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
         )
     }
 }
