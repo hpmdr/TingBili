@@ -56,4 +56,11 @@ cat gradle.properties; cat settings.gradle.kts | head -n 20
 - 最后验证 `assembleDebug --no-daemon 38s` PASS，`--stop` 后无 Daemon
 
 ---
-更新时间：2026-09-02 16:46  ·  分支 master  ·  HEAD 5ff0a2a
+更新时间：2026-09-04 17:5x  ·  分支 master  ·  HEAD b44c0b7
+
+## 追加进度（2026-09-04，接手会话 1）
+- `b44c0b7` WBI 签名实现（WbiSigner 对照官方文档示例单测）+ 拦截器 UA/Referer + ExoPlayer DataSource 带 Referer（修 CDN 403）
+- UI 接线：AppNavHost 由 Placeholder 换成真实 5 个 Screen；mini 圆环改为单一语义（点击进播放页）；播放页控制全接通（暂停/切歌/进度条/歌词跳转/倍速循环）
+- 修复：WAKE_LOCK 权限缺失闪退；搜索结果 cid=0 播放无声（play 内经 view() 解析）；封面 http:// → https://
+- 环境：local.properties + 项目级 gradle java.home（JDK21，注意不入库）；WiFi adb 已配对（小米 2311DRK48C）
+- 下一步：播放页歌词滚动已可用但字幕源部分依赖登录；待验证 DASH 音质选择；CI 已推 GitHub，首个 b44c0b7 触发构建待确认
