@@ -11,6 +11,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.data.bilibili.BiliApi
+import cn.debubu.tingbili.data.bilibili.BuvidProvider
 import cn.debubu.tingbili.data.bilibili.WbiInterceptor
 import cn.debubu.tingbili.data.bilibili.WbiSigner
 import dagger.Module
@@ -58,9 +59,16 @@ object AppDataModule {
 
     @Provides
     @Singleton
-    fun provideOkHttp(wbiSigner: WbiSigner): OkHttpClient =
+    fun provideBuvidProvider(): BuvidProvider = BuvidProvider()
+
+    @Provides
+    @Singleton
+    fun provideOkHttp(wbiSigner: WbiSigner, buvidProvider: BuvidProvider): OkHttpClient =
         OkHttpClient.Builder()
-            .addInterceptor(WbiInterceptor(wbiSigner))
+            .addInterceptor(
+                // 注入 buvid3/buvid4 Cookie，避免搜索等 WBI 接口被风控拦截（HTTP 412）
+                WbiInterceptor(wbiSigner, cookieProvider = { buvidProvider.cookie() })
+            )
             .build()
 
     @Provides

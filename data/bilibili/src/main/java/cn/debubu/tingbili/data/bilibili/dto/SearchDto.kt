@@ -27,6 +27,8 @@ data class SearchItem(
     val pic: String = "",
     val duration: String = "0:00",
     @SerialName("type") val type: String = "video",
+    // 分 P 数量（B 站搜索接口返回，多 P 视频 > 1）
+    val videos: Int = 1,
     // some fields from Bili may be present, ignore unknown
     val aid: Long = 0
 )
@@ -41,7 +43,8 @@ fun SearchDto.toTracks(): List<Track> {
             author = item.author,
             cover = item.pic.normalizeCover(),
             durationMs = item.duration.parseDurationToMs(),
-            subtitleUrl = null
+            subtitleUrl = null,
+            pageCount = item.videos.coerceAtLeast(1)
         )
     }
 }

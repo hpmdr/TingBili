@@ -2,6 +2,8 @@ package cn.debubu.tingbili.data.bilibili
 
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.data.bilibili.dto.ViewData
+import cn.debubu.tingbili.data.bilibili.dto.normalizeCover
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
@@ -41,6 +43,24 @@ class BiliRepository @Inject constructor(
         } else {
             val tracks = dto.toTracks()
             Result.Success(tracks)
+        }
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "view failed", e)
+    }
+
+    /** 详情页：返回完整 ViewData（含简介/UP主/统计/分P），调用方自行转 Track */
+    suspend fun getViewDetail(bvid: String): Result<ViewData> = try {
+        val dto = api.view(bvid)
+        if (dto.code != 0 || dto.data == null) {
+            Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
+        } else {
+            val data = dto.data
+            // 封面/头像可能是 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
+            val normalized = data.copy(
+                pic = data.pic.normalizeCover(),
+                owner = data.owner?.copy(face = data.owner.face.normalizeCover())
+            )
+            Result.Success(normalized)
         }
     } catch (e: Exception) {
         Result.Error(e.message ?: "view failed", e)

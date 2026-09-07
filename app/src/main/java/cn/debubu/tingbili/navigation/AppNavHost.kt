@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import cn.debubu.tingbili.feature.detail.DetailScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
@@ -29,6 +30,10 @@ object SettingsRoute
 @Serializable
 object PlayerRoute
 
+/** 视频详情页路由，携带 BV 号 */
+@Serializable
+data class VideoDetailRoute(val bvid: String)
+
 @Composable
 fun AppNavHost(
     navController: NavHostController,
@@ -41,7 +46,17 @@ fun AppNavHost(
         modifier = modifier.padding(innerPadding)
     ) {
         composable<HomeRoute> {
-            HomeScreen()
+            HomeScreen(
+                onTrackToDetail = { bvid ->
+                    navController.navigate(VideoDetailRoute(bvid))
+                }
+            )
+        }
+        composable<VideoDetailRoute> {
+            // bvid 通过 SavedStateHandle 注入 DetailViewModel
+            DetailScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
         composable<PlaylistRoute> {
             PlaylistScreen()
