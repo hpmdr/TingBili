@@ -149,7 +149,7 @@ class PlaylistViewModelTest {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("test_playlist_prefs_${System.nanoTime()}") })
         val repo = BiliRepository(FakeBiliApi())
-        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, repo)
+        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, repo, ctx)
     }
 
     @After

@@ -151,7 +151,7 @@ class HistoryViewModelTest {
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
-        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, repo)
+        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, repo, context)
     }
 
     @After

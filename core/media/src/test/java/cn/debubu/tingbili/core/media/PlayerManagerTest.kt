@@ -121,7 +121,7 @@ class PlayerManagerTest {
         )
         prefs = PreferencesRepository(dataStore)
         biliRepo = BiliRepository(FakeBiliApi())
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, biliRepo)
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, biliRepo, context)
         timerManager = TimerManager(fakePlayer)
     }
 
@@ -135,6 +135,17 @@ class PlayerManagerTest {
         assertEquals(1, fakePlayer.mediaItems.size)
         assertEquals(0, fakePlayer.startIndex)
         assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play starts foreground playback service`() = runTest {
+        playerManager.testScope = this
+        val appContext = ApplicationProvider.getApplicationContext<Context>()
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        val started = org.robolectric.Shadows.shadowOf(appContext as android.app.Application)
+            .peekNextStartedService()
+        assertTrue(started?.component?.className?.endsWith("TingBiliPlaybackService") == true)
         playerManager.release()
     }
 

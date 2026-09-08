@@ -1,5 +1,8 @@
 package cn.debubu.tingbili.core.media
 
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -9,6 +12,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.data.bilibili.BiliRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -28,13 +32,15 @@ import kotlinx.coroutines.launch
  * Audio-only: builds MediaItems from BiliRepository.getPlayUrl, sets ExoPlayer.
  * History throttle 1s — periodic save while playing.
  * Step seek respects PreferencesRepository.stepSec.
+ * 传输层为 PlayerHandle（生产经 MediaController），ExoPlayer 唯一释放权在 Service。
  */
 @Singleton
 class PlayerManager @Inject constructor(
-    private val player: PlayerHandle,
+    private val transport: PlayerHandle,
     private val historyDao: HistoryDao,
     private val prefs: PreferencesRepository,
     private val biliRepository: BiliRepository,
+    @ApplicationContext private val appContext: Context,
 ) {
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
@@ -52,11 +58,26 @@ class PlayerManager @Inject constructor(
 
     /**
      * Play queue starting at [index]. Builds MediaItems via BiliRepository.getPlayUrl (audio-only),
-     * calls player.setMediaItems, prepare, play. Launches history save throttle 1s.
+     * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
      */
     suspend fun play(tracks: List<Track>, index: Int) {
         if (tracks.isEmpty()) return
+        // 先拉起前台服务：后台保活 + 通知栏的前提；幂等，重复调用无副作用。
+        ContextCompat.startForegroundService(
+            appContext,
+            Intent(appContext, TingBiliPlaybackService::class.java)
+        )
         val safeIndex = index.coerceIn(0, tracks.lastIndex)
+
+        // 乐观更新：URL 逐个解析很慢，先让播放页/mini-player 立刻显示队列归属。
+        _state.update {
+            it.copy(
+                queue = tracks,
+                currentIndex = safeIndex,
+                currentTrack = tracks.getOrNull(safeIndex),
+                isPlaying = false,
+            )
+        }
 
         // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
         val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
@@ -84,7 +105,7 @@ class PlayerManager @Inject constructor(
         queue = playableTracks
         currentIndex = startIndex
 
-        player.setMediaItems(
+        transport.setMediaItems(
             items.map { (track, url) ->
                 MediaItem.Builder()
                     .setUri(url)
@@ -101,14 +122,14 @@ class PlayerManager @Inject constructor(
             startIndex,
             0L
         )
-        player.prepare()
-        player.play()
+        transport.prepare()
+        transport.play()
 
         // Restore preferences: speed, repeatMode
         val speed = prefs.speed.first()
         val repeat = prefs.repeatMode.first()
-        if (speed != 1f) player.setPlaybackSpeed(speed)
-        player.repeatMode = when (repeat) {
+        if (speed != 1f) transport.setPlaybackSpeed(speed)
+        transport.repeatMode = when (repeat) {
             PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
             PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
@@ -131,7 +152,7 @@ class PlayerManager @Inject constructor(
         val startTrack = playableTracks[startIndex]
         val saved = historyDao.get(startTrack.bvid, startTrack.cid)
         if (saved != null && saved.positionMs > 0L) {
-            player.seekTo(saved.positionMs)
+            transport.seekTo(saved.positionMs)
             _state.update { it.copy(positionMs = saved.positionMs) }
         }
 
@@ -153,24 +174,24 @@ class PlayerManager @Inject constructor(
         }
 
     fun pause() {
-        player.pause()
+        transport.pause()
         _state.update { it.copy(isPlaying = false) }
     }
 
     fun resume() {
-        player.play()
+        transport.play()
         _state.update { it.copy(isPlaying = true) }
     }
 
     fun toggle() {
-        if (player.isPlaying) pause() else resume()
+        if (transport.isPlaying) pause() else resume()
     }
 
     fun seekTo(positionMs: Long) {
-        val target = positionMs.coerceIn(0L, player.duration.coerceAtLeast(0L).let { if (it == 0L) Long.MAX_VALUE else it }.coerceAtLeast(0L))
+        val target = positionMs.coerceIn(0L, transport.duration.coerceAtLeast(0L).let { if (it == 0L) Long.MAX_VALUE else it }.coerceAtLeast(0L))
         // coerce to valid range — if duration unknown (0), just clamp at 0..MAX
         val clamped = target.coerceAtLeast(0L)
-        player.seekTo(clamped)
+        transport.seekTo(clamped)
         _state.update { it.copy(positionMs = clamped) }
     }
 
@@ -180,25 +201,25 @@ class PlayerManager @Inject constructor(
      */
     suspend fun seekStep(dir: Int) {
         val stepSec = prefs.stepSec.first()
-        val cur = player.currentPosition
-        val dur = player.duration
+        val cur = transport.currentPosition
+        val dur = transport.duration
         val max = if (dur > 0L && dur != androidx.media3.common.C.TIME_UNSET) dur else Long.MAX_VALUE
         val target = (cur + dir * stepSec * 1000L).coerceIn(0L, max)
-        player.seekTo(target)
+        transport.seekTo(target)
         _state.update { it.copy(positionMs = target) }
     }
 
     suspend fun setSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 3.0f)
         prefs.setSpeed(clamped)
-        player.setPlaybackSpeed(clamped)
+        transport.setPlaybackSpeed(clamped)
         _state.update { it.copy(speed = clamped) }
     }
 
     suspend fun setRepeatMode(mode: Int) {
         val clamped = mode.coerceIn(PlaybackState.REPEAT_MODE_OFF, PlaybackState.REPEAT_MODE_ALL)
         prefs.setRepeatMode(clamped)
-        player.repeatMode = when (clamped) {
+        transport.repeatMode = when (clamped) {
             PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
             PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
@@ -225,8 +246,8 @@ class PlayerManager @Inject constructor(
             while (true) {
                 delay(1000L)
                 val track = _state.value.currentTrack ?: continue
-                if (!player.isPlaying) continue
-                val pos = player.currentPosition
+                if (!transport.isPlaying) continue
+                val pos = transport.currentPosition
                 historyDao.save(
                     HistoryEntity(
                         bvid = track.bvid,
@@ -244,8 +265,8 @@ class PlayerManager @Inject constructor(
         positionPollJob = effectiveScope().launch {
             while (true) {
                 delay(500L)
-                if (player.isPlaying) {
-                    _state.update { it.copy(positionMs = player.currentPosition, isPlaying = true) }
+                if (transport.isPlaying) {
+                    _state.update { it.copy(positionMs = transport.currentPosition, isPlaying = true) }
                 }
             }
         }
@@ -260,12 +281,12 @@ class PlayerManager @Inject constructor(
     private fun attachPlayerListener() {
         if (listenerAttached) return
         listenerAttached = true
-        player.addListener(object : Player.Listener {
+        transport.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val idx = player.currentMediaItemIndex
+                val idx = transport.currentMediaItemIndex
                 if (idx in queue.indices) {
                     currentIndex = idx
-                    _state.update { it.copy(currentIndex = idx, currentTrack = queue[idx], positionMs = player.currentPosition, durationMs = queue[idx].durationMs) }
+                    _state.update { it.copy(currentIndex = idx, currentTrack = queue[idx], positionMs = transport.currentPosition, durationMs = queue[idx].durationMs) }
                 }
             }
 
@@ -275,7 +296,7 @@ class PlayerManager @Inject constructor(
 
             override fun onPlaybackStateChanged(state: Int) {
                 // keep isPlaying in sync
-                _state.update { it.copy(isPlaying = player.isPlaying) }
+                _state.update { it.copy(isPlaying = transport.isPlaying) }
             }
         })
     }

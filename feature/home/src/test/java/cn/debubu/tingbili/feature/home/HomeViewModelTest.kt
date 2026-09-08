@@ -134,7 +134,7 @@ class HomeViewModelTest {
         repo = BiliRepository(fakeApi)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo)
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo, context)
         playlistDao = FakePlaylistDao()
     }
 

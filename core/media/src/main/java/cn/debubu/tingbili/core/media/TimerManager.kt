@@ -13,11 +13,11 @@ import kotlinx.coroutines.launch
 
 /**
  * Sleep timer — after [durationMs] pause playback.
- * Spec: timerManager.set(durationMs) -> coroutine delay then player.pause()
+ * Spec: timerManager.set(durationMs) -> coroutine delay then transport.pause()
  */
 @Singleton
 class TimerManager @Inject constructor(
-    private val player: PlayerHandle,
+    private val transport: PlayerHandle,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null
@@ -39,7 +39,7 @@ class TimerManager @Inject constructor(
         _remainingMs.value = durationMs
         job = effectiveScope().launch {
             delay(durationMs)
-            player.pause()
+            transport.pause()
             _remainingMs.value = null
         }
     }
