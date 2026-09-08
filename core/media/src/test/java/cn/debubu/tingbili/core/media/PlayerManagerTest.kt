@@ -46,6 +46,7 @@ class PlayerManagerTest {
         var seekToPos: Long? = null
         var seekDelta: Long = 0L
         var capturedSpeed: Float = 1f
+        var storedListener: Player.Listener? = null
         private var _duration: Long = 100_000L
         override var repeatMode: Int = Player.REPEAT_MODE_OFF
         private var _currentIdx: Int = 0
@@ -60,6 +61,9 @@ class PlayerManagerTest {
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
             mediaItems = items; this.startIndex = startIndex; _currentIdx = startIndex; _pos = startPositionMs
         }
+        override fun replaceMediaItem(index: Int, item: MediaItem) {
+            mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it[index] = item }
+        }
         override fun prepare() {}
         override fun play() { _isPlaying = true }
         override fun pause() { _isPlaying = false }
@@ -69,7 +73,7 @@ class PlayerManagerTest {
             _pos = positionMs
         }
         override fun setPlaybackSpeed(speed: Float) { capturedSpeed = speed }
-        override fun addListener(listener: Player.Listener) {}
+        override fun addListener(listener: Player.Listener) { storedListener = listener }
         override fun release() {}
         // shadow duration field duplication fix — delegate
     }
@@ -313,5 +317,40 @@ class PlayerManagerTest {
         assertEquals(false, errManager.state.value.isPlaying)
         assertTrue(errManager.state.value.errorMessage != null)
         errManager.release()
+    }
+
+    @Test
+    fun `url expiry 403 triggers refresh and replaces mediaItem`() = runTest {
+        playerManager.testScope = this
+        var callCount = 0
+        val fakeApi = object : BiliApi {
+            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
+            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
+                callCount++
+                val url = if (callCount == 1) "http://example.com/audio1.mp3" else "http://example.com/audio2.mp3"
+                return PlayUrlDto(code = 0, message = "", data = PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = url)))))
+            }
+            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")
+        val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
+        val refreshPrefs = PreferencesRepository(ds)
+        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, BiliRepository(fakeApi), context)
+        m.testScope = this
+        m.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
+        runCurrent()
+        assertEquals("http://example.com/audio1.mp3", fakePlayer.mediaItems.first().localConfiguration?.uri.toString())
+        // simulate 403 error from ExoPlayer
+        val error = androidx.media3.common.PlaybackException("403", null, androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
+        fakePlayer.storedListener?.onPlayerError(error)
+        // allow retry delay 1s
+        advanceTimeBy(1100L)
+        runCurrent()
+        // should have replaced with second URL
+        assertEquals("http://example.com/audio2.mp3", fakePlayer.mediaItems.first().localConfiguration?.uri.toString())
+        assertEquals("BV1:1", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+        m.release()
     }
 }

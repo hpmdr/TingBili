@@ -14,6 +14,7 @@ interface PlayerHandle {
     var repeatMode: Int
     val currentMediaItemIndex: Int
     fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long)
+    fun replaceMediaItem(index: Int, item: MediaItem)
     fun prepare()
     fun play()
     fun pause()

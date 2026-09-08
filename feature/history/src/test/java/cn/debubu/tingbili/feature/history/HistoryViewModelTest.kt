@@ -69,6 +69,7 @@ class HistoryViewModelTest {
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
             mediaItems = items; this.startIndex = startIndex; _pos = startPositionMs
         }
+        override fun replaceMediaItem(index: Int, item: MediaItem) { if (index in mediaItems.indices) mediaItems = mediaItems.toMutableList().also { it[index] = item } }
         override fun prepare() {}
         override fun play() { playCalled = true }
         override fun pause() {}

@@ -111,6 +111,7 @@ class PlaylistViewModelTest {
             mediaItems = items
             lastTracksTitles = items.mapNotNull { it.mediaMetadata.title?.toString() }
         }
+        override fun replaceMediaItem(index: Int, item: MediaItem) { if (index in mediaItems.indices) mediaItems = mediaItems.toMutableList().also { it[index] = item } }
         override fun prepare() {}
         override fun play() { playCalled = true }
         override fun pause() {}

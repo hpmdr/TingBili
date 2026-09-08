@@ -222,6 +222,8 @@ class PlayerManager @Inject constructor(
             startHistoryThrottle()
             startPositionPoll()
             attachPlayerListener()
+            urlRefreshRetry = 0
+            scheduleProactiveRefresh()
         } catch (e: Exception) {
             _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "播放失败") }
         } finally {
@@ -368,6 +370,44 @@ class PlayerManager @Inject constructor(
     fun release() {
         historyJob?.cancel(); historyJob = null
         positionPollJob?.cancel(); positionPollJob = null
+        urlRefreshJob?.cancel(); urlRefreshJob = null
+    }
+
+    private var urlRefreshRetry = 0
+    private var urlRefreshJob: Job? = null
+    private companion object {
+        const val MAX_URL_REFRESH_RETRY = 2
+        const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
+    }
+
+    private fun scheduleProactiveRefresh() {
+        urlRefreshJob?.cancel()
+        urlRefreshJob = effectiveScope().launch {
+            delay(PROACTIVE_REFRESH_MS)
+            val track = _state.value.currentTrack ?: return@launch
+            if (!transport.isPlaying) return@launch
+            val pos = transport.currentPosition
+            when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
+                is Result.Success -> {
+                    val newUrl = r.data
+                    if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
+                        val newItem = MediaItem.Builder()
+                            .setUri(newUrl)
+                            .setMediaId("${track.bvid}:${track.cid}")
+                            .setCustomCacheKey("${track.bvid}:${track.cid}")
+                            .setMediaMetadata(
+                                MediaMetadata.Builder()
+                                    .setTitle(track.title)
+                                    .setArtist(track.author)
+                                    .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                    .build()
+                            ).build()
+                        transport.replaceMediaItem(currentIndex, newItem)
+                    }
+                }
+                is Result.Error -> { /* 下次错误时再重试 */ }
+            }
+        }
     }
 
     private var listenerAttached = false
@@ -381,21 +421,78 @@ class PlayerManager @Inject constructor(
                     currentIndex = idx
                     _state.update { it.copy(currentIndex = idx, currentTrack = queue[idx], positionMs = transport.currentPosition, durationMs = queue[idx].durationMs) }
                     persistQueue()
+                    urlRefreshRetry = 0
+                    scheduleProactiveRefresh()
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
+                if (isPlaying) urlRefreshRetry = 0
             }
 
             override fun onPlaybackStateChanged(state: Int) {
                 // keep isPlaying in sync + 驱动加载态：buffering 时显示加载，ready/idle/ended 时收敛
                 val buffering = state == Player.STATE_BUFFERING
                 _state.update { it.copy(isPlaying = transport.isPlaying, isLoading = buffering) }
+                if (state == Player.STATE_READY) urlRefreshRetry = 0
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                _state.update { it.copy(isLoading = false, errorMessage = error.message ?: "播放出错") }
+                val isRecoverable = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                    || error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                    || error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                    || error.errorCodeName.contains("403", ignoreCase = true)
+                    || error.message?.contains("403") == true
+                    || error.message?.contains("expire", ignoreCase = true) == true
+                if (!isRecoverable || urlRefreshRetry >= MAX_URL_REFRESH_RETRY) {
+                    _state.update { it.copy(isLoading = false, errorMessage = error.message ?: "播放出错") }
+                    return
+                }
+                urlRefreshRetry++
+                _state.update { it.copy(isLoading = true, errorMessage = null) }
+                effectiveScope().launch {
+                    delay(1000L * urlRefreshRetry)
+                    val track = _state.value.currentTrack ?: run {
+                        _state.update { it.copy(isLoading = false, errorMessage = "音源失效") }
+                        return@launch
+                    }
+                    val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
+                    when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
+                        is Result.Success -> {
+                            val newUrl = r.data
+                            if (newUrl.isNullOrBlank()) {
+                                _state.update { it.copy(isLoading = false, errorMessage = "音源刷新失败") }
+                                return@launch
+                            }
+                            val newItem = MediaItem.Builder()
+                                .setUri(newUrl)
+                                .setMediaId("${track.bvid}:${track.cid}")
+                                .setCustomCacheKey("${track.bvid}:${track.cid}")
+                                .setMediaMetadata(
+                                    MediaMetadata.Builder()
+                                        .setTitle(track.title)
+                                        .setArtist(track.author)
+                                        .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                        .build()
+                                ).build()
+                            val idx = currentIndex
+                            if (idx in queue.indices) {
+                                transport.replaceMediaItem(idx, newItem)
+                                transport.prepare()
+                                transport.seekTo(pos)
+                                transport.play()
+                                _state.update { it.copy(isLoading = true) }
+                                scheduleProactiveRefresh()
+                            } else {
+                                _state.update { it.copy(isLoading = false, errorMessage = "刷新失败") }
+                            }
+                        }
+                        is Result.Error -> {
+                            _state.update { it.copy(isLoading = false, errorMessage = r.msg ?: "网络重试失败") }
+                        }
+                    }
+                }
             }
         })
     }

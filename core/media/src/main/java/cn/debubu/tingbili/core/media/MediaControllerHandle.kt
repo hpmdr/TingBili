@@ -28,6 +28,10 @@ class MediaControllerHandle @Inject constructor(
         controller()?.setMediaItems(items, startIndex, startPositionMs)
     }
 
+    override fun replaceMediaItem(index: Int, item: MediaItem) {
+        controller()?.replaceMediaItem(index, item)
+    }
+
     override fun prepare() { controller()?.prepare() }
     override fun play() { controller()?.play() }
     override fun pause() { controller()?.pause() }

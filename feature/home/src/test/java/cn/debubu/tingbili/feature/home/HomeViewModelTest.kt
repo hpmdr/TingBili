@@ -85,6 +85,7 @@ class HomeViewModelTest {
         override val duration: Long get() = 0L
         override val isPlaying: Boolean get() = false
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) { mediaItems = items }
+        override fun replaceMediaItem(index: Int, item: MediaItem) { if (index in mediaItems.indices) mediaItems = mediaItems.toMutableList().also { it[index] = item } }
         override fun prepare() {}
         override fun play() {}
         override fun pause() {}
