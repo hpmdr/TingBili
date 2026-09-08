@@ -24,6 +24,7 @@
 **Files:**
 - Create: `core/media/src/main/java/cn/debubu/tingbili/core/media/PlaybackConnection.kt`
 - Test: `core/media/src/test/java/cn/debubu/tingbili/core/media/PlaybackConnectionTest.kt`
+- Create: `core/media/src/main/AndroidManifest.xml`（service 声明随实现归位；`app` Manifest 中对应 `<service>` 块同步删除。原因：`SessionToken` 构造查包管理器，单测 manifest 必须可见该 service）
 
 **Interfaces:**
 - Consumes: `TingBiliPlaybackService`（已存在，`MediaSessionService`）
