@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -219,5 +221,57 @@ class PlayerManagerTest {
         advanceTimeBy(3000L)
         assertTrue(fakePlayer.isPlaying)
         timerManager.cancel()
+    }
+
+    @Test
+    fun `restore restores queue and position from prefs`() = runTest {
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "cover1", 10000, null),
+            Track("BV2", 2, "t2", "a", "cover2", 20000, null)
+        )
+        prefs.setLastPlayback(tracks, 1, 5500L)
+        playerManager.restoreLastPlayback()
+        assertEquals(2, playerManager.state.value.queue.size)
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals("BV2", playerManager.state.value.currentTrack?.bvid)
+        assertEquals(5500L, playerManager.state.value.positionMs)
+        assertEquals("cover2", playerManager.state.value.currentTrack?.cover)
+        assertEquals(false, playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `restore with empty queue keeps empty state`() = runTest {
+        // no set, prefs empty
+        playerManager.restoreLastPlayback()
+        assertTrue(playerManager.state.value.queue.isEmpty())
+        assertEquals(-1, playerManager.state.value.currentIndex)
+        assertEquals(null, playerManager.state.value.currentTrack)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play persists queue for restore`() = runTest {
+        playerManager.testScope = this
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
+        playerManager.play(tracks, 0)
+        runCurrent()
+        // prefs should contain queue
+        assertEquals(1, prefs.lastQueue.first().size)
+        assertEquals("BV1", prefs.lastQueue.first().first().bvid)
+        assertEquals(0, prefs.lastIndex.first())
+        playerManager.release()
+    }
+
+    @Test
+    fun `seek persists position`() = runTest {
+        playerManager.testScope = this
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
+        playerManager.play(tracks, 0)
+        runCurrent()
+        playerManager.seekTo(4200L)
+        runCurrent()
+        assertEquals(4200L, prefs.lastPositionMs.first())
+        playerManager.release()
     }
 }

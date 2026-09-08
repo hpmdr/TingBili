@@ -1,5 +1,8 @@
 package cn.debubu.tingbili.core.data.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Track(
     val bvid: String,
     val cid: Long,

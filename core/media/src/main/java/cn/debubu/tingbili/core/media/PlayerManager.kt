@@ -56,6 +56,55 @@ class PlayerManager @Inject constructor(
     private var historyJob: Job? = null
     private var positionPollJob: Job? = null
 
+    init {
+        // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
+        // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
+        scope.launch { restoreLastPlayback() }
+    }
+
+    /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
+    suspend fun restoreLastPlayback() {
+        try {
+            val savedQueue = prefs.lastQueue.first()
+            if (savedQueue.isEmpty()) return
+            val savedIndex = prefs.lastIndex.first().coerceIn(0, savedQueue.lastIndex)
+            val savedPos = prefs.lastPositionMs.first().coerceAtLeast(0L)
+            val track = savedQueue.getOrNull(savedIndex) ?: return
+            queue = savedQueue
+            currentIndex = savedIndex
+            val speed = prefs.speed.first()
+            val repeat = prefs.repeatMode.first()
+            val clampedPos = savedPos.coerceIn(0L, track.durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
+            _state.update {
+                it.copy(
+                    queue = savedQueue,
+                    currentIndex = savedIndex,
+                    currentTrack = track,
+                    positionMs = clampedPos,
+                    durationMs = track.durationMs,
+                    isPlaying = false,
+                    speed = speed,
+                    repeatMode = repeat
+                )
+            }
+        } catch (_: Exception) {
+            // 损坏数据忽略，保持空状态
+        }
+    }
+
+    private fun persistQueue() {
+        val q = queue
+        val idx = currentIndex
+        val pos = _state.value.positionMs
+        if (q.isEmpty() || idx !in q.indices) return
+        effectiveScope().launch { prefs.setLastPlayback(q, idx, pos) }
+    }
+
+    private fun persistPosition(pos: Long) {
+        if (queue.isEmpty()) return
+        effectiveScope().launch { prefs.setLastPosition(pos.coerceAtLeast(0L)) }
+    }
+
     /**
      * Play queue starting at [index]. Builds MediaItems via BiliRepository.getPlayUrl (audio-only),
      * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
@@ -104,6 +153,9 @@ class PlayerManager @Inject constructor(
         val playableTracks = items.map { it.first }
         queue = playableTracks
         currentIndex = startIndex
+
+        // 持久化队列与起点进度，供下次冷启动恢复
+        effectiveScope().launch { prefs.setLastPlayback(playableTracks, startIndex, 0L) }
 
         transport.setMediaItems(
             items.map { (track, url) ->
@@ -154,6 +206,7 @@ class PlayerManager @Inject constructor(
         if (saved != null && saved.positionMs > 0L) {
             transport.seekTo(saved.positionMs)
             _state.update { it.copy(positionMs = saved.positionMs) }
+            persistPosition(saved.positionMs)
         }
 
         startHistoryThrottle()
@@ -176,9 +229,24 @@ class PlayerManager @Inject constructor(
     fun pause() {
         transport.pause()
         _state.update { it.copy(isPlaying = false) }
+        persistPosition(_state.value.positionMs)
     }
 
     fun resume() {
+        // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
+        if (queue.isNotEmpty() && transport.currentMediaItemIndex !in queue.indices) {
+            val idx = currentIndex.coerceIn(0, queue.lastIndex)
+            val pos = _state.value.positionMs
+            effectiveScope().launch {
+                play(queue, idx)
+                // play() 内会 reset position 到 0/历史，再补一次 seek 到恢复进度
+                if (pos > 0L) {
+                    transport.seekTo(pos)
+                    _state.update { it.copy(positionMs = pos) }
+                }
+            }
+            return
+        }
         transport.play()
         _state.update { it.copy(isPlaying = true) }
     }
@@ -193,6 +261,7 @@ class PlayerManager @Inject constructor(
         val clamped = target.coerceAtLeast(0L)
         transport.seekTo(clamped)
         _state.update { it.copy(positionMs = clamped) }
+        persistPosition(clamped)
     }
 
     /**
@@ -207,6 +276,7 @@ class PlayerManager @Inject constructor(
         val target = (cur + dir * stepSec * 1000L).coerceIn(0L, max)
         transport.seekTo(target)
         _state.update { it.copy(positionMs = target) }
+        persistPosition(target)
     }
 
     suspend fun setSpeed(speed: Float) {
@@ -256,6 +326,8 @@ class PlayerManager @Inject constructor(
                         updatedAt = System.currentTimeMillis()
                     )
                 )
+                // 同步更新 DataStore 里的 lastPosition，供 UI 恢复进度环使用
+                prefs.setLastPosition(pos)
             }
         }
     }
@@ -267,6 +339,8 @@ class PlayerManager @Inject constructor(
                 delay(500L)
                 if (transport.isPlaying) {
                     _state.update { it.copy(positionMs = transport.currentPosition, isPlaying = true) }
+                    // 轻量持久化进度，避免仅依赖 history 1s 节流
+                    prefs.setLastPosition(transport.currentPosition)
                 }
             }
         }
@@ -287,6 +361,7 @@ class PlayerManager @Inject constructor(
                 if (idx in queue.indices) {
                     currentIndex = idx
                     _state.update { it.copy(currentIndex = idx, currentTrack = queue[idx], positionMs = transport.currentPosition, durationMs = queue[idx].durationMs) }
+                    persistQueue()
                 }
             }
 
