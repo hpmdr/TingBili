@@ -55,7 +55,8 @@ fun AppNavHost(
         composable<VideoDetailRoute> {
             // bvid 通过 SavedStateHandle 注入 DetailViewModel
             DetailScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
             )
         }
         composable<PlaylistRoute> {

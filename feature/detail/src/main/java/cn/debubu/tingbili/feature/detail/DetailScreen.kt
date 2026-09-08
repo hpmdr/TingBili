@@ -62,6 +62,7 @@ import java.util.Locale
 @Composable
 fun DetailScreen(
     onBack: () -> Unit = {},
+    onPlayNavigate: () -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -110,9 +111,9 @@ fun DetailScreen(
                 DetailContent(
                     video = s.video,
                     tracks = s.tracks,
-                    onPlayAll = { viewModel.play(s.tracks, 0) },
+                    onPlayAll = { viewModel.play(s.tracks, 0); onPlayNavigate() },
                     onAddAll = { viewModel.showPlaylistPicker() },
-                    onPlayPage = { idx -> viewModel.play(s.tracks, idx) }
+                    onPlayPage = { idx -> viewModel.play(s.tracks, idx); onPlayNavigate() }
                 )
             }
         }
