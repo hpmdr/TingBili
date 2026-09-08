@@ -19,7 +19,7 @@ class NavigationTest {
     @Test
     fun `circular player renders progress ring`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.5f, cover = "", isPlaying = true, onClick = {}, onPlayPause = {})
+            CircularMiniPlayer(progress = 0.5f, cover = "", isPlaying = true, onClick = {})
         }
         composeTestRule.onNodeWithTag("progressRing").assertExists()
         composeTestRule.onNodeWithTag("progressRing").assertIsDisplayed()
@@ -28,16 +28,16 @@ class NavigationTest {
     @Test
     fun `circular player renders cover image`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.3f, cover = "https://example.com/cover.jpg", isPlaying = false, onClick = {}, onPlayPause = {})
+            CircularMiniPlayer(progress = 0.3f, cover = "https://example.com/cover.jpg", isPlaying = false, onClick = {})
         }
         composeTestRule.onNodeWithTag("progressRing").assertExists()
-        composeTestRule.onNodeWithTag("coverImage").assertExists()
+        composeTestRule.onNodeWithTag("coverImage", useUnmergedTree = true).assertExists()
     }
 
     @Test
     fun `circular player progress updates`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.75f, cover = "", isPlaying = true, onClick = {}, onPlayPause = {})
+            CircularMiniPlayer(progress = 0.75f, cover = "", isPlaying = true, onClick = {})
         }
         composeTestRule.onNodeWithTag("progressRing").assertExists()
     }
@@ -45,7 +45,7 @@ class NavigationTest {
     @Test
     fun `circular player handles zero progress`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0f, cover = "", isPlaying = false, onClick = {}, onPlayPause = {})
+            CircularMiniPlayer(progress = 0f, cover = "", isPlaying = false, onClick = {})
         }
         composeTestRule.onNodeWithTag("progressRing").assertExists()
     }
