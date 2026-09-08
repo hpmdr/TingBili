@@ -4,8 +4,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 
 /**
- * Testable abstraction over ExoPlayer. Production delegates to [Player] (ExoPlayer),
- * tests use lightweight fake without implementing full Player interface.
+ * 播放传输层抽象：生产走 MediaControllerHandle（经 MediaController 操作 Service 内 ExoPlayer），
+ * 单测用轻量 Fake。注意 release() 语义——生产实现为空，唯一释放权在 TingBiliPlaybackService。
  */
 interface PlayerHandle {
     val currentPosition: Long
@@ -22,32 +22,4 @@ interface PlayerHandle {
     fun setPlaybackSpeed(speed: Float)
     fun addListener(listener: Player.Listener)
     fun release()
-}
-
-/**
- * Production implementation delegating to ExoPlayer (which implements Player).
- */
-class ExoPlayerHandle(private val player: Player) : PlayerHandle {
-    override val currentPosition: Long get() = player.currentPosition
-    override val duration: Long get() = player.duration
-    override val isPlaying: Boolean get() = player.isPlaying
-    override var repeatMode: Int
-        get() = player.repeatMode
-        set(value) { player.repeatMode = value }
-    override val currentMediaItemIndex: Int get() = player.currentMediaItemIndex
-
-    override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
-        player.setMediaItems(items, startIndex, startPositionMs)
-    }
-
-    override fun prepare() = player.prepare()
-    override fun play() = player.play()
-    override fun pause() = player.pause()
-    override fun seekTo(positionMs: Long) = player.seekTo(positionMs)
-    override fun setPlaybackSpeed(speed: Float) {
-        player.setPlaybackSpeed(speed)
-    }
-
-    override fun addListener(listener: Player.Listener) = player.addListener(listener)
-    override fun release() = player.release()
 }
