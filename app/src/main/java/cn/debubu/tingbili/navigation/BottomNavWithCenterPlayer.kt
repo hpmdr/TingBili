@@ -44,6 +44,7 @@ fun BottomNavWithCenterPlayer(
     }
     val cover = state.currentTrack?.cover ?: ""
     val isPlaying = state.isPlaying
+    val isLoading = state.isLoading
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
@@ -90,6 +91,7 @@ fun BottomNavWithCenterPlayer(
                 progress = progress,
                 cover = cover,
                 isPlaying = isPlaying,
+                isLoading = isLoading,
                 onClick = {
                     navController.navigate(PlayerRoute) {
                         launchSingleTop = true

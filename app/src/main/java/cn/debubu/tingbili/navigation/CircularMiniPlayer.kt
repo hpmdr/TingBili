@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -28,12 +30,14 @@ import coil.compose.AsyncImage
 /**
  * 底部圆形 mini 播放器：单一点击语义 — 整体点击进入播放页。
  * 封面随播放旋转；播放/暂停控制由播放页与通知栏承担。
+ * 加载时显示缓冲动画并禁用点击，防止重复触发。
  */
 @Composable
 fun CircularMiniPlayer(
     progress: Float,
     cover: String,
     isPlaying: Boolean,
+    isLoading: Boolean = false,
     onClick: () -> Unit
 ) {
     val clamped = progress.coerceIn(0f, 1f)
@@ -59,6 +63,7 @@ fun CircularMiniPlayer(
             .size(64.dp)
             .clip(CircleShape)
             .clickable(
+                enabled = !isLoading,
                 interactionSource = outerInteraction,
                 indication = ripple(bounded = false, radius = 32.dp),
                 onClick = onClick
@@ -82,5 +87,21 @@ fun CircularMiniPlayer(
                 .then(rotateModifier)
                 .testTag("coverImage")
         )
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .testTag("loadingIndicator"),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+            }
+        }
     }
 }

@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
 
 data class PlayerUiState(
     val isPlaying: Boolean = false,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val speed: Float = 1f,
@@ -60,6 +62,8 @@ class PlayerViewModel @Inject constructor(
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
         PlayerUiState(
             isPlaying = p.isPlaying,
+            isLoading = p.isLoading,
+            errorMessage = p.errorMessage,
             positionMs = p.positionMs,
             durationMs = p.durationMs,
             speed = p.speed,

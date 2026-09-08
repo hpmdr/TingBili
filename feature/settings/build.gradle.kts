@@ -34,6 +34,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":data:bilibili"))
     implementation(project(":core:media"))
+    implementation("androidx.media3:media3-datasource:${libs.versions.media3.get()}")
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

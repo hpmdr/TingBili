@@ -27,6 +27,7 @@ fun SettingsScreen(
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val dynamic by vm.dynamicColor.collectAsStateWithLifecycle()
+    val cacheMb by vm.cacheSizeMb.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -71,6 +72,18 @@ fun SettingsScreen(
         ) {
             Text("动态取色 (Material3)", style = MaterialTheme.typography.bodyLarge)
             Switch(checked = dynamic, onCheckedChange = { vm.setDynamicColor(it) })
+        }
+
+        // 音频缓存
+        Column {
+            Text("音频缓存", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(4.dp))
+            Text("已缓存约 ${cacheMb}MB / 500MB，上次播放的音频会本地缓存，二次播放秒开且省流量", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { vm.refreshCacheSize() }) { Text("刷新") }
+                Button(onClick = { vm.clearCache() }) { Text("清空缓存") }
+            }
         }
 
         Spacer(Modifier.height(16.dp))

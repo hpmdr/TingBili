@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -96,6 +97,19 @@ fun PlayerScreen(
         Spacer(Modifier.height(12.dp))
         Text(s.track?.title ?: "未播放", style = MaterialTheme.typography.titleMedium, maxLines = 2)
         Text(s.track?.author ?: "", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        val errorMsg = s.errorMessage
+        if (errorMsg != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(errorMsg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        if (s.isLoading) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.size(8.dp))
+                Text("正在加载...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        }
 
         Spacer(Modifier.height(12.dp))
         // Lyric area
@@ -113,7 +127,7 @@ fun PlayerScreen(
                         text = line.text,
                         color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Gray,
                         style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.fillMaxWidth().clickable {
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = !s.isLoading) {
                             vm.seekToLyric(line)
                         }.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
@@ -129,11 +143,14 @@ fun PlayerScreen(
             Slider(
                 value = dragRatio
                     ?: if (s.durationMs > 0) s.positionMs.toFloat() / s.durationMs else 0f,
-                onValueChange = { dragRatio = it },
+                onValueChange = { if (!s.isLoading) dragRatio = it },
                 onValueChangeFinished = {
-                    dragRatio?.let { vm.seekTo((it * s.durationMs).toLong()) }
+                    if (!s.isLoading) {
+                        dragRatio?.let { vm.seekTo((it * s.durationMs).toLong()) }
+                    }
                     dragRatio = null
                 },
+                enabled = !s.isLoading,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
             )
             Text(formatMs(s.durationMs), style = MaterialTheme.typography.bodySmall)
@@ -144,15 +161,19 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { vm.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "上一首") }
-            IconButton(onClick = { vm.toggle() }) {
-                Icon(
-                    if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (s.isPlaying) "暂停" else "播放"
-                )
+            IconButton(onClick = { vm.previous() }, enabled = !s.isLoading) { Icon(Icons.Default.SkipPrevious, contentDescription = "上一首") }
+            if (s.isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
+            } else {
+                IconButton(onClick = { vm.toggle() }) {
+                    Icon(
+                        if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (s.isPlaying) "暂停" else "播放"
+                    )
+                }
             }
-            IconButton(onClick = { vm.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "下一首") }
-            TextButton(onClick = { vm.cycleSpeed() }) {
+            IconButton(onClick = { vm.next() }, enabled = !s.isLoading) { Icon(Icons.Default.SkipNext, contentDescription = "下一首") }
+            TextButton(onClick = { vm.cycleSpeed() }, enabled = !s.isLoading) {
                 Text("${s.speed}x", style = MaterialTheme.typography.bodyMedium)
             }
         }

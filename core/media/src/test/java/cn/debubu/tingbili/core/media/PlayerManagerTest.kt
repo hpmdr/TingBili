@@ -274,4 +274,44 @@ class PlayerManagerTest {
         assertEquals(4200L, prefs.lastPositionMs.first())
         playerManager.release()
     }
+
+    @Test
+    fun `play sets loading and custom cache key`() = runTest {
+        playerManager.testScope = this
+        val tracks = listOf(Track("BV99", 123, "t", "a", "", 10000, null))
+        playerManager.play(tracks, 0)
+        runCurrent()
+        // loading should be false after success
+        assertEquals(false, playerManager.state.value.isLoading)
+        assertEquals(true, playerManager.state.value.isPlaying)
+        // customCacheKey should be bvid:cid for cache hit across URL expiry
+        assertEquals("BV99:123", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+        assertEquals("BV99:123", fakePlayer.mediaItems.first().mediaId)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play with empty result sets error and not loading`() = runTest {
+        playerManager.testScope = this
+        // Fake API returns empty playUrl if cid==-1 (simulate error)
+        val fakeApi = object : BiliApi {
+            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
+            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
+                PlayUrlDto(code = -404, message = "not found", data = null)
+            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
+        val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
+        val errPrefs = PreferencesRepository(ds)
+        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, BiliRepository(fakeApi), context)
+        errManager.testScope = this
+        errManager.play(listOf(Track("BVX", 999, "t", "a", "", 1000, null)), 0)
+        runCurrent()
+        assertEquals(false, errManager.state.value.isLoading)
+        assertEquals(false, errManager.state.value.isPlaying)
+        assertTrue(errManager.state.value.errorMessage != null)
+        errManager.release()
+    }
 }

@@ -13,6 +13,8 @@ data class PlaybackState(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val isPlaying: Boolean = false,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
     val repeatMode: Int = REPEAT_MODE_OFF,
     val speed: Float = 1f,
 ) {

@@ -192,12 +192,14 @@ private fun FloatingCenteredMiniPlayer(
     } else 0f
     val cover = state.currentTrack?.cover ?: ""
     val isPlaying = state.isPlaying
+    val isLoading = state.isLoading
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         CircularMiniPlayer(
             progress = progress,
             cover = cover,
             isPlaying = isPlaying,
+            isLoading = isLoading,
             onClick = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
         )
     }

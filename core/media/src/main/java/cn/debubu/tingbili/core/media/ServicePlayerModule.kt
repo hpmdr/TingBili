@@ -5,6 +5,8 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import cn.debubu.tingbili.data.bilibili.WbiSigner
@@ -25,7 +27,10 @@ object ServicePlayerModule {
 
     @Provides
     @ServiceScoped
-    fun providePlaybackPlayer(@ApplicationContext context: Context): Player {
+    fun providePlaybackPlayer(
+        @ApplicationContext context: Context,
+        cache: SimpleCache
+    ): Player {
         // B 站音频 CDN 要求带 Referer/UA，否则 403
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(WbiSigner.BROWSER_UA)
@@ -34,8 +39,15 @@ object ServicePlayerModule {
             .setReadTimeoutMs(8_000)
             .setAllowCrossProtocolRedirects(true)
 
+        // 缓存层：先查本地缓存，未命中再走网络；写入时同时落盘
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(httpFactory)
+            .setCacheWriteDataSinkFactory(null)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
         return ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
             .apply {
                 setAudioAttributes(

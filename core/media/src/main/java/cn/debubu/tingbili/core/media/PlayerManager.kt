@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Queue owner + playback controller. Single source of truth for UI.
@@ -55,6 +57,7 @@ class PlayerManager @Inject constructor(
 
     private var historyJob: Job? = null
     private var positionPollJob: Job? = null
+    private val playMutex = Mutex()
 
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
@@ -108,110 +111,126 @@ class PlayerManager @Inject constructor(
     /**
      * Play queue starting at [index]. Builds MediaItems via BiliRepository.getPlayUrl (audio-only),
      * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
+     * 加载期间 isLoading=true 且互斥，防止重复点击。
      */
     suspend fun play(tracks: List<Track>, index: Int) {
         if (tracks.isEmpty()) return
-        // 先拉起前台服务：后台保活 + 通知栏的前提；幂等，重复调用无副作用。
-        ContextCompat.startForegroundService(
-            appContext,
-            Intent(appContext, TingBiliPlaybackService::class.java)
-        )
-        val safeIndex = index.coerceIn(0, tracks.lastIndex)
-
-        // 乐观更新：URL 逐个解析很慢，先让播放页/mini-player 立刻显示队列归属。
-        _state.update {
-            it.copy(
-                queue = tracks,
-                currentIndex = safeIndex,
-                currentTrack = tracks.getOrNull(safeIndex),
-                isPlaying = false,
+        // 防重入：正在加载时忽略新的播放请求
+        if (!playMutex.tryLock()) return
+        try {
+            _state.update { it.copy(isLoading = true, errorMessage = null) }
+            // 先拉起前台服务：后台保活 + 通知栏的前提；幂等，重复调用无副作用。
+            ContextCompat.startForegroundService(
+                appContext,
+                Intent(appContext, TingBiliPlaybackService::class.java)
             )
-        }
+            val safeIndex = index.coerceIn(0, tracks.lastIndex)
 
-        // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
-        val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
-
-        // Build MediaItems — resolve playUrl per track (audio-only); 跳过解析失败的项
-        val items = resolved.mapNotNull { track ->
-            val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
-                is Result.Success -> r.data
-                is Result.Error -> null
+            // 乐观更新：URL 逐个解析很慢，先让播放页/mini-player 立刻显示队列归属。
+            _state.update {
+                it.copy(
+                    queue = tracks,
+                    currentIndex = safeIndex,
+                    currentTrack = tracks.getOrNull(safeIndex),
+                    isPlaying = false,
+                )
             }
-            track.takeIf { !url.isNullOrBlank() }?.let { it to url }
-        }
-        if (items.isEmpty()) {
-            _state.update { it.copy(isPlaying = false) }
-            return
-        }
 
-        // 目标曲目若不可播，取其后第一个可播项，否则第一个可播项
-        val startIndex = items.indexOfFirst { it.first == resolved[safeIndex] }
-            .takeIf { it >= 0 }
-            ?: items.indexOfFirst { it.first == resolved.getOrNull(safeIndex) }
+            // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
+            val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
+
+            // Build MediaItems — resolve playUrl per track (audio-only); 跳过解析失败的项
+            val items = resolved.mapNotNull { track ->
+                val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
+                    is Result.Success -> r.data
+                    is Result.Error -> null
+                }
+                track.takeIf { !url.isNullOrBlank() }?.let { it to url }
+            }
+            if (items.isEmpty()) {
+                _state.update { it.copy(isPlaying = false, isLoading = false, errorMessage = "暂无可播放音源") }
+                return
+            }
+
+            // 目标曲目若不可播，取其后第一个可播项，否则第一个可播项
+            val startIndex = items.indexOfFirst { it.first == resolved[safeIndex] }
                 .takeIf { it >= 0 }
-            ?: 0
-        val playableTracks = items.map { it.first }
-        queue = playableTracks
-        currentIndex = startIndex
+                ?: items.indexOfFirst { it.first == resolved.getOrNull(safeIndex) }
+                    .takeIf { it >= 0 }
+                ?: 0
+            val playableTracks = items.map { it.first }
+            queue = playableTracks
+            currentIndex = startIndex
 
-        // 持久化队列与起点进度，供下次冷启动恢复
-        effectiveScope().launch { prefs.setLastPlayback(playableTracks, startIndex, 0L) }
+            // 持久化队列与起点进度，供下次冷启动恢复
+            effectiveScope().launch { prefs.setLastPlayback(playableTracks, startIndex, 0L) }
 
-        transport.setMediaItems(
-            items.map { (track, url) ->
-                MediaItem.Builder()
-                    .setUri(url)
-                    .setMediaId("${track.bvid}:${track.cid}")
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(track.title)
-                            .setArtist(track.author)
-                            .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
-                            .build()
-                    )
-                    .build()
-            },
-            startIndex,
-            0L
-        )
-        transport.prepare()
-        transport.play()
-
-        // Restore preferences: speed, repeatMode
-        val speed = prefs.speed.first()
-        val repeat = prefs.repeatMode.first()
-        if (speed != 1f) transport.setPlaybackSpeed(speed)
-        transport.repeatMode = when (repeat) {
-            PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
-            PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
-            else -> Player.REPEAT_MODE_OFF
-        }
-
-        _state.update {
-            it.copy(
-                queue = playableTracks,
-                currentIndex = startIndex,
-                currentTrack = playableTracks[startIndex],
-                isPlaying = true,
-                positionMs = 0L,
-                durationMs = playableTracks[startIndex].durationMs,
-                repeatMode = repeat,
-                speed = speed,
+            transport.setMediaItems(
+                items.map { (track, url) ->
+                    MediaItem.Builder()
+                        .setUri(url)
+                        .setMediaId("${track.bvid}:${track.cid}")
+                        .setCustomCacheKey("${track.bvid}:${track.cid}")
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(track.title)
+                                .setArtist(track.author)
+                                .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                .build()
+                        )
+                        .build()
+                },
+                startIndex,
+                0L
             )
-        }
+            transport.prepare()
+            transport.play()
 
-        // Resume track at saved history if exists
-        val startTrack = playableTracks[startIndex]
-        val saved = historyDao.get(startTrack.bvid, startTrack.cid)
-        if (saved != null && saved.positionMs > 0L) {
-            transport.seekTo(saved.positionMs)
-            _state.update { it.copy(positionMs = saved.positionMs) }
-            persistPosition(saved.positionMs)
-        }
+            // Restore preferences: speed, repeatMode
+            val speed = prefs.speed.first()
+            val repeat = prefs.repeatMode.first()
+            if (speed != 1f) transport.setPlaybackSpeed(speed)
+            transport.repeatMode = when (repeat) {
+                PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
+                PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
+                else -> Player.REPEAT_MODE_OFF
+            }
 
-        startHistoryThrottle()
-        startPositionPoll()
-        attachPlayerListener()
+            _state.update {
+                it.copy(
+                    queue = playableTracks,
+                    currentIndex = startIndex,
+                    currentTrack = playableTracks[startIndex],
+                    isPlaying = true,
+                    isLoading = false,
+                    positionMs = 0L,
+                    durationMs = playableTracks[startIndex].durationMs,
+                    repeatMode = repeat,
+                    speed = speed,
+                )
+            }
+
+            // Resume track at saved history if exists
+            val startTrack = playableTracks[startIndex]
+            val saved = historyDao.get(startTrack.bvid, startTrack.cid)
+            if (saved != null && saved.positionMs > 0L) {
+                transport.seekTo(saved.positionMs)
+                _state.update { it.copy(positionMs = saved.positionMs) }
+                persistPosition(saved.positionMs)
+            }
+
+            startHistoryThrottle()
+            startPositionPoll()
+            attachPlayerListener()
+        } catch (e: Exception) {
+            _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "播放失败") }
+        } finally {
+            // 确保加载态在异常或正常路径都收敛；若 play 已将 isLoading 置为 false 则保持
+            if (_state.value.isLoading) {
+                _state.update { it.copy(isLoading = false) }
+            }
+            if (playMutex.isLocked) playMutex.unlock()
+        }
     }
 
     /** cid=0（搜索结果）时经 view() 解析第一个分P 的真实 cid */
@@ -366,12 +385,17 @@ class PlayerManager @Inject constructor(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _state.update { it.copy(isPlaying = isPlaying) }
+                _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                // keep isPlaying in sync
-                _state.update { it.copy(isPlaying = transport.isPlaying) }
+                // keep isPlaying in sync + 驱动加载态：buffering 时显示加载，ready/idle/ended 时收敛
+                val buffering = state == Player.STATE_BUFFERING
+                _state.update { it.copy(isPlaying = transport.isPlaying, isLoading = buffering) }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _state.update { it.copy(isLoading = false, errorMessage = error.message ?: "播放出错") }
             }
         })
     }
