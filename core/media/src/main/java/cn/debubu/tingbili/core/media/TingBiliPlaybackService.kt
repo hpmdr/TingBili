@@ -12,6 +12,7 @@ import javax.inject.Inject
 /**
  * Audio-only foreground service. Single source of truth — no Surface, low memory.
  * Holds ExoPlayer + MediaSession for notification/lock-screen/BT/耳机线控.
+ * 注入的 Player 为 @ServiceScoped，唯一释放点为 onDestroy。
  */
 @AndroidEntryPoint
 class TingBiliPlaybackService : MediaSessionService() {
