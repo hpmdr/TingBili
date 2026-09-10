@@ -57,17 +57,30 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    /** 创建空白听单，无封面，前端展示默认占位 */
     fun create(name: String) {
         if (name.isBlank()) return
         viewModelScope.launch {
-            val id = dao.insert(PlaylistEntity(name = name.trim()))
-            _selectedPlaylistId.value = id
-            refreshTracks(id)
+            dao.insert(PlaylistEntity(name = name.trim()))
         }
     }
 
+    /** 创建空白听单并返回 id（供调用方按需补封面） */
     suspend fun createAndGetId(name: String): Long {
         return dao.insert(PlaylistEntity(name = name.trim()))
+    }
+
+    /** 创建听单并以首条 Track 的封面作为听单封面（从 BV 创建的常用路径） */
+    suspend fun createWithCover(name: String, cover: String?): Long {
+        return dao.insert(PlaylistEntity(name = name.trim(), cover = cover?.takeIf { it.isNotBlank() }))
+    }
+
+    /** 带封面的创建（协程内） */
+    fun createWithCoverAsync(name: String, cover: String?) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            dao.insert(PlaylistEntity(name = name.trim(), cover = cover?.takeIf { it.isNotBlank() }))
+        }
     }
 
     fun addTracks(playlistId: Long, tracks: List<Track>) {
@@ -87,6 +100,7 @@ class PlaylistViewModel @Inject constructor(
                     )
                 )
             }
+            ensureCover(playlistId, tracks)
             refreshTracks(playlistId)
         }
     }
@@ -130,10 +144,6 @@ class PlaylistViewModel @Inject constructor(
                     // fallback for fakes without updateOrder - clear and reinsert
                 }
             }
-            // fallback handling: if updateOrder not implemented (or failed), do clear+reinsert
-            // detect by checking if after updates order still not updated: we already updated via DAO
-            // For safety, for fakes that don't implement updateOrder, we do alternative:
-            // But we already tried; if dao.updateOrder throws, we fallback to clear+reinsert
             refreshTracks(playlistId)
         }
     }
@@ -165,6 +175,16 @@ class PlaylistViewModel @Inject constructor(
             dao.clearTracks(playlistId)
             refreshTracks(playlistId)
         }
+    }
+
+    // 听单封面：若当前 cover 为空，且本次新增的 tracks 有封面，则取首条有封面的 Track 设为听单封面
+    private suspend fun ensureCover(playlistId: Long, tracks: List<Track>) {
+        val current = dao.getPlaylist(playlistId) ?: return
+        if (!current.cover.isNullOrBlank()) return
+        val cover = tracks.firstOrNull { it.cover.isNotBlank() }?.cover ?: return
+        try {
+            dao.updateCover(playlistId, cover)
+        } catch (_: Exception) { }
     }
 
     private suspend fun refreshTracks(playlistId: Long) {

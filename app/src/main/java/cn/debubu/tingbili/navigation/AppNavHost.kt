@@ -11,6 +11,7 @@ import cn.debubu.tingbili.feature.detail.DetailScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
+import cn.debubu.tingbili.feature.playlist.PlaylistDetailScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.settings.SettingsScreen
 import kotlinx.serialization.Serializable
@@ -33,6 +34,10 @@ object PlayerRoute
 /** 视频详情页路由，携带 BV 号 */
 @Serializable
 data class VideoDetailRoute(val bvid: String)
+
+/** 听单详情页路由，携带听单 id */
+@Serializable
+data class PlaylistDetailRoute(val playlistId: Long)
 
 @Composable
 fun AppNavHost(
@@ -60,7 +65,12 @@ fun AppNavHost(
             )
         }
         composable<PlaylistRoute> {
-            PlaylistScreen()
+            PlaylistScreen(
+                onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) }
+            )
+        }
+        composable<PlaylistDetailRoute> {
+            PlaylistDetailScreen(onBack = { navController.popBackStack() })
         }
         composable<HistoryRoute> {
             HistoryScreen()

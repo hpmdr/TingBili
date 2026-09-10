@@ -38,7 +38,7 @@ class DetailViewModel @Inject constructor(
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
 
-    /** 加入歌单选择面板 */
+    /** 加入听单选择面板 */
     private val _showPlaylistPicker = MutableStateFlow(false)
     val showPlaylistPicker: StateFlow<Boolean> = _showPlaylistPicker.asStateFlow()
 
@@ -72,7 +72,7 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch { player.play(tracks, index) }
     }
 
-    /** 打开加入歌单面板，刷新现有歌单列表 */
+    /** 打开加入听单面板，刷新现有听单列表 */
     fun showPlaylistPicker() {
         viewModelScope.launch {
             _playlists.value = playlistDao.getPlaylists()
@@ -88,27 +88,31 @@ class DetailViewModel @Inject constructor(
         _message.value = null
     }
 
-    /** 加入已有歌单 */
+    /** 加入已有听单，封面为空时自动用首条视频封面补齐 */
     fun addToPlaylist(playlist: PlaylistEntity, tracks: List<Track>) {
         viewModelScope.launch {
             val added = insertTracks(playlist.id, tracks)
+            // 听单封面为空时，用本次加入的视频封面或详情页封面补齐
+            maybeFillCover(playlist.id, tracks)
             _showPlaylistPicker.value = false
-            _message.value = if (added > 0) "已加入歌单「${playlist.name}」（$added 首）" else "已在歌单「${playlist.name}」中"
+            _message.value = if (added > 0) "已加入听单「${playlist.name}」（$added 集）" else "已在听单「${playlist.name}」中"
         }
     }
 
-    /** 新建歌单并加入（歌单名 = 输入名，默认用视频标题） */
+    /** 新建听单并加入（听单名 = 输入名，默认用视频标题），封面取视频封面 */
     fun createPlaylistAndAdd(name: String, tracks: List<Track>) {
         viewModelScope.launch {
-            val playlistName = name.ifBlank { "歌单" }
-            val pid = playlistDao.insert(PlaylistEntity(name = playlistName))
+            val playlistName = name.ifBlank { "听单" }
+            val videoCover = (state.value as? DetailUiState.Success)?.video?.pic
+            val cover = tracks.firstOrNull { it.cover.isNotBlank() }?.cover ?: videoCover
+            val pid = playlistDao.insert(PlaylistEntity(name = playlistName, cover = cover?.takeIf { it.isNotBlank() }))
             insertTracks(pid, tracks)
             _showPlaylistPicker.value = false
-            _message.value = "已创建歌单「$playlistName」并加入 ${tracks.size} 首"
+            _message.value = "已创建听单「$playlistName」并加入 ${tracks.size} 集"
         }
     }
 
-    /** 追加分 P 到歌单，order 接在已有曲目之后；重复曲目跳过，返回实际新增数量 */
+    /** 追加分 P 到听单，order 接在已有曲目之后；重复曲目跳过，返回实际新增数量 */
     private suspend fun insertTracks(playlistId: Long, tracks: List<Track>): Int {
         if (tracks.isEmpty()) return 0
         val existing = playlistDao.getTracks(playlistId)
@@ -131,5 +135,14 @@ class DetailViewModel @Inject constructor(
             }
         }
         return added
+    }
+
+    private suspend fun maybeFillCover(playlistId: Long, tracks: List<Track>) {
+        val current = try { playlistDao.getPlaylist(playlistId) } catch (_: Exception) { null } ?: return
+        if (!current.cover.isNullOrBlank()) return
+        val cover = tracks.firstOrNull { it.cover.isNotBlank() }?.cover
+            ?: (state.value as? DetailUiState.Success)?.video?.pic?.takeIf { it.isNotBlank() }
+            ?: return
+        try { playlistDao.updateCover(playlistId, cover) } catch (_: Exception) { }
     }
 }

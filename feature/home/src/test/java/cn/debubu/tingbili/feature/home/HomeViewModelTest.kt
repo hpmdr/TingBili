@@ -120,6 +120,17 @@ class HomeViewModelTest {
             val idx = tracks.indexOfFirst { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
             if (idx >= 0) tracks[idx] = tracks[idx].copy(order = newOrder)
         }
+        override fun observePlaylist(id: Long): Flow<PlaylistEntity?> = flowOf(playlists.firstOrNull { it.id == id })
+        override fun observeTracks(id: Long): Flow<List<PlaylistTrackEntity>> = flowOf(tracks.filter { it.playlistId == id }.sortedBy { it.order })
+        override suspend fun updateName(playlistId: Long, name: String) {
+            val idx = playlists.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) playlists[idx] = playlists[idx].copy(name = name)
+        }
+        override suspend fun getPlaylist(id: Long): PlaylistEntity? = playlists.firstOrNull { it.id == id }
+        override suspend fun updateCover(playlistId: Long, cover: String) {
+            val idx = playlists.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) playlists[idx] = playlists[idx].copy(cover = cover)
+        }
         fun addedCount() = tracks.size
     }
 
@@ -166,13 +177,14 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `BiliPagingSource blank keyword returns empty`() = runTest {
+    fun `BiliPagingSource blank keyword returns recommended feed`() = runTest {
+        // 空搜不再返回空列表，而是走 DEFAULT_RECOMMEND_KEYWORD 的策展推荐
         val source = BiliPagingSource(repo, "")
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
         val page = result as PagingSource.LoadResult.Page<Int, Track>
-        assertTrue(page.data.isEmpty())
-        assertEquals(null, page.nextKey)
+        assertEquals(2, page.data.size)
+        assertEquals(2, page.nextKey)
     }
 
     @Test

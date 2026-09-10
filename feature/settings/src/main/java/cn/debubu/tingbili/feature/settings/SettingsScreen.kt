@@ -88,6 +88,6 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
         Text("预留登录入口 (二期)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-        Text("登录后可导入 B 站收藏夹为歌单", style = MaterialTheme.typography.bodySmall)
+        Text("登录后可导入 B 站收藏夹为听单", style = MaterialTheme.typography.bodySmall)
     }
 }

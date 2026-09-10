@@ -119,7 +119,7 @@ fun DetailScreen(
         }
     }
 
-    // 加入歌单选择面板：新建歌单 或 加入已有歌单
+    // 加入听单选择面板：新建听单 或 加入已有听单
     if (showPicker) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
@@ -153,15 +153,15 @@ private fun PlaylistPickerSheet(
     var newName by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Text("加入歌单", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("加入听单", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
 
-        // 新建歌单
+        // 新建听单
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = newName,
                 onValueChange = { newName = it },
-                placeholder = { Text("新建歌单名称", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text("新建听单名称", style = MaterialTheme.typography.bodySmall) },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
@@ -177,9 +177,9 @@ private fun PlaylistPickerSheet(
 
         Spacer(Modifier.height(12.dp))
         if (playlists.isEmpty()) {
-            Text("暂无已有歌单", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text("暂无已有听单", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         } else {
-            Text("选择已有歌单 (${playlists.size})", style = MaterialTheme.typography.titleSmall)
+            Text("选择已有听单 (${playlists.size})", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
                 itemsIndexed(playlists) { _, pl ->
@@ -187,21 +187,38 @@ private fun PlaylistPickerSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelect(pl) }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = pl.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatDate(pl.createdAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray
-                        )
+                        if (pl.cover.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("听", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                            }
+                        } else {
+                            AsyncImage(
+                                model = pl.cover,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = pl.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = formatDate(pl.createdAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             }
@@ -299,7 +316,7 @@ private fun DetailContent(
             )
         }
 
-        // 操作按钮：播放全部 / 加入歌单
+        // 操作按钮：播放全部 / 加入听单
         item {
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -311,7 +328,7 @@ private fun DetailContent(
                 OutlinedButton(
                     onClick = onAddAll,
                     modifier = Modifier.weight(1f)
-                ) { Text("加入歌单") }
+                ) { Text("加入听单") }
             }
         }
 

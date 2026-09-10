@@ -10,13 +10,16 @@ class BiliPagingSource(
     private val keyword: String
 ) : PagingSource<Int, Track>() {
 
+    companion object {
+        /** 空搜时用作默认推荐的策展关键词，保证首页贴合听书/有声小说定位。 */
+        const val DEFAULT_RECOMMEND_KEYWORD = "有声小说"
+    }
+
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Track> {
         val page = params.key ?: 1
         return try {
-            if (keyword.isBlank()) {
-                return LoadResult.Page(data = emptyList(), prevKey = null, nextKey = null)
-            }
-            val tracks = repo.searchPage(keyword, page)
+            val effectiveKeyword = keyword.ifBlank { DEFAULT_RECOMMEND_KEYWORD }
+            val tracks = repo.searchPage(effectiveKeyword, page)
             val nextKey = if (tracks.isEmpty()) null else page + 1
             val prevKey = if (page == 1) null else page - 1
             LoadResult.Page(data = tracks, prevKey = prevKey, nextKey = nextKey)

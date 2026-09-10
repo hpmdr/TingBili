@@ -132,7 +132,7 @@ private fun AdaptiveMainScaffold() {
                         }
                     },
                     icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text("歌单") }
+                    label = { Text("听单") }
                 )
                 item(
                     selected = isHistorySelected,

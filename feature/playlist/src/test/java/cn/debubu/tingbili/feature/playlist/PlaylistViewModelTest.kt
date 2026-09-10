@@ -96,6 +96,23 @@ class PlaylistViewModelTest {
                 tracks[idx] = old.copy(order = newOrder)
             }
         }
+
+        override fun observePlaylist(id: Long): Flow<PlaylistEntity?> = flowOf(playlists.firstOrNull { it.id == id })
+        override fun observeTracks(id: Long): Flow<List<PlaylistTrackEntity>> = flowOf(tracks.filter { it.playlistId == id }.sortedBy { it.order })
+        override suspend fun updateName(playlistId: Long, name: String) {
+            val idx = playlists.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) {
+                playlists[idx] = playlists[idx].copy(name = name)
+                playlistsFlow.value = playlists.toList()
+            }
+        }
+        override suspend fun getPlaylist(id: Long): PlaylistEntity? = playlists.firstOrNull { it.id == id }
+
+        override suspend fun updateCover(playlistId: Long, cover: String) {
+            val idx = playlists.indexOfFirst { it.id == playlistId }
+            if (idx >= 0) playlists[idx] = playlists[idx].copy(cover = cover)
+            playlistsFlow.value = playlists.toList()
+        }
     }
 
     class FakePlayerHandle : PlayerHandle {

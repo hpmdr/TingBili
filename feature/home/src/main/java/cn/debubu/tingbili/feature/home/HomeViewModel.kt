@@ -18,9 +18,11 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -33,12 +35,15 @@ class HomeViewModel @Inject constructor(
     private val _keyword = MutableStateFlow("")
     val keyword: StateFlow<String> = _keyword.asStateFlow()
 
+    // 热流：cachedIn 保证翻页复用，stateIn 保证切 Tab 回来时新收集器首帧即拿到上一份 PagingData，
+    // 避免每次 collectAsLazyPagingItems() 重建收集器就重走网络。WhileSubscribed(5000) 仅在无人收集 5s 后才上游停掉，
+    // 符合“常驻、仅内存紧张时释放”的预期。
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: Flow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
         Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
             BiliPagingSource(repo, kw)
         }.flow.cachedIn(viewModelScope)
-    }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
 
     // BV multi-P bottomSheet state
     private val _selectedBvid = MutableStateFlow<String?>(null)
@@ -140,7 +145,7 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Convenience: add single track to playlist; creates default playlist if none exists.
-     * Used by bottomSheet “单P加入” / “整集合集加入歌单”.
+     * Used by bottomSheet “单P加入” / “整集合集加入听单”.
      */
     fun addToPlaylist(track: Track) {
         viewModelScope.launch {
@@ -165,6 +170,6 @@ class HomeViewModel @Inject constructor(
     private suspend fun ensureDefaultPlaylist(): Long {
         val existing = playlistDao.getPlaylists()
         if (existing.isNotEmpty()) return existing.first().id
-        return playlistDao.insert(PlaylistEntity(name = "默认歌单"))
+        return playlistDao.insert(PlaylistEntity(name = "默认听单"))
     }
 }

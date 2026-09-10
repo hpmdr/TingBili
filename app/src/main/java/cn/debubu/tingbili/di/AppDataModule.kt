@@ -33,7 +33,10 @@ object AppDataModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): TingBiliDatabase =
-        Room.databaseBuilder(ctx, TingBiliDatabase::class.java, "tingbili.db").build()
+        Room.databaseBuilder(ctx, TingBiliDatabase::class.java, "tingbili.db")
+            .addMigrations(TingBiliDatabase.MIGRATION_1_2)
+            .fallbackToDestructiveMigrationOnDowngrade()
+            .build()
 
     @Provides
     fun provideHistoryDao(db: TingBiliDatabase): HistoryDao = db.historyDao()
