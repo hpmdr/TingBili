@@ -20,9 +20,9 @@ fun PlaylistTrackEntity.toTrack(): Track = Track(
     bvid = bvid,
     cid = cid,
     title = title,
-    author = "",
-    cover = "",
-    durationMs = 0L,
+    author = author,
+    cover = cover,
+    durationMs = durationMs,
     subtitleUrl = null
 )
 
@@ -57,7 +57,7 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
-    /** 创建空白听单，无封面，前端展示默认占位 */
+    /** 创建空白收藏，无封面，前端展示默认占位（预留手动收藏） */
     fun create(name: String) {
         if (name.isBlank()) return
         viewModelScope.launch {
@@ -65,12 +65,12 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
-    /** 创建空白听单并返回 id（供调用方按需补封面） */
+    /** 创建空白收藏并返回 id */
     suspend fun createAndGetId(name: String): Long {
         return dao.insert(PlaylistEntity(name = name.trim()))
     }
 
-    /** 创建听单并以首条 Track 的封面作为听单封面（从 BV 创建的常用路径） */
+    /** 创建收藏并以首条 Track 封面作为收藏封面 */
     suspend fun createWithCover(name: String, cover: String?): Long {
         return dao.insert(PlaylistEntity(name = name.trim(), cover = cover?.takeIf { it.isNotBlank() }))
     }
@@ -96,7 +96,10 @@ class PlaylistViewModel @Inject constructor(
                         bvid = t.bvid,
                         cid = t.cid,
                         title = t.title,
-                        order = base++
+                        order = base++,
+                        author = t.author,
+                        cover = t.cover,
+                        durationMs = t.durationMs
                     )
                 )
             }
@@ -177,7 +180,7 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
-    // 听单封面：若当前 cover 为空，且本次新增的 tracks 有封面，则取首条有封面的 Track 设为听单封面
+    // 收藏封面：若当前 cover 为空，取首条有封面的 Track 设为收藏封面
     private suspend fun ensureCover(playlistId: Long, tracks: List<Track>) {
         val current = dao.getPlaylist(playlistId) ?: return
         if (!current.cover.isNullOrBlank()) return

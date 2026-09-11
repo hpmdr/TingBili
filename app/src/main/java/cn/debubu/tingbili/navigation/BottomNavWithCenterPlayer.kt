@@ -81,7 +81,7 @@ fun BottomNavWithCenterPlayer(
                 }
             },
             icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-            label = { Text("听单") }
+            label = { Text("收藏") }
         )
         Box(
             modifier = Modifier.weight(1f),

@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * 听单详情独立 ViewModel（路由参数 playlistId）。
+ * 收藏详情 ViewModel（路由参数 playlistId）。
  * 监听 playlist + tracks 的实时流，操作（播放/排序/删除/重命名）均在此完成。
  */
 @HiltViewModel
@@ -27,7 +27,7 @@ class PlaylistDetailViewModel @Inject constructor(
     private val player: PlayerManager
 ) : ViewModel() {
 
-    val playlistId: Long = checkNotNull(savedStateHandle["playlistId"])
+    val playlistId: Long = (savedStateHandle.get<Long>("playlistId") ?: savedStateHandle.get<Int>("playlistId")?.toLong() ?: savedStateHandle.get<String>("playlistId")?.toLongOrNull() ?: error("Missing playlistId in " + savedStateHandle.keys()))
 
     val playlist: StateFlow<PlaylistEntity?> =
         dao.observePlaylist(playlistId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

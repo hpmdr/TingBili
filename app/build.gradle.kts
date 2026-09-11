@@ -54,6 +54,7 @@ dependencies {
     implementation(project(":feature:player"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:detail"))
+    implementation(project(":feature:search"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

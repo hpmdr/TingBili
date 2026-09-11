@@ -13,8 +13,12 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long = System.currentTimeMillis(),
-    /** 听单封面 URL（取首条 BV 的 pic，空白听单为 null，前端展示默认占位） */
-    val cover: String? = null
+    /** 收藏集封面（BV pic） */
+    val cover: String? = null,
+    /** 来源 BV，收藏集唯一归属；手动收藏为 null */
+    val sourceBvid: String? = null,
+    /** 种类：bv=从 BV 收藏，custom=手动（预留） */
+    val kind: String = "bv"
 )
 
 @Entity(primaryKeys = ["playlistId", "bvid", "cid"])
@@ -23,7 +27,10 @@ data class PlaylistTrackEntity(
     val bvid: String,
     val cid: Long,
     val title: String,
-    val order: Int
+    val order: Int,
+    val author: String = "",
+    val cover: String = "",
+    val durationMs: Long = 0L
 )
 
 @Dao
@@ -48,6 +55,12 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM PlaylistTrackEntity WHERE playlistId=:id ORDER BY `order`")
     fun observeTracks(id: Long): Flow<List<PlaylistTrackEntity>>
+
+    @Query("SELECT * FROM PlaylistEntity WHERE sourceBvid = :bvid LIMIT 1")
+    suspend fun getPlaylistByBvid(bvid: String): PlaylistEntity?
+
+    @Query("SELECT * FROM PlaylistEntity WHERE sourceBvid = :bvid LIMIT 1")
+    fun observePlaylistByBvid(bvid: String): kotlinx.coroutines.flow.Flow<PlaylistEntity?>
 
     @Query("UPDATE PlaylistEntity SET name = :name WHERE id = :playlistId")
     suspend fun updateName(playlistId: Long, name: String)

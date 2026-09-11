@@ -38,15 +38,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
-import cn.debubu.tingbili.navigation.AppNavHost
+import cn.debubu.tingbili.navigation.AppRootNavHost
 import cn.debubu.tingbili.navigation.BottomNavWithCenterPlayer
 import cn.debubu.tingbili.navigation.CircularMiniPlayer
-import cn.debubu.tingbili.navigation.HistoryRoute
-import cn.debubu.tingbili.navigation.HomeRoute
+import cn.debubu.tingbili.navigation.MainTabsRoute
 import cn.debubu.tingbili.navigation.MainViewModel
 import cn.debubu.tingbili.navigation.PlayerRoute
-import cn.debubu.tingbili.navigation.PlaylistRoute
-import cn.debubu.tingbili.navigation.SettingsRoute
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -87,95 +87,31 @@ private fun AdaptiveMainScaffold() {
     val navController = rememberNavController()
     val adaptiveInfo = currentWindowAdaptiveInfo()
     val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptiveInfo)
-    // Hoist navigation state outside NavigationSuiteScaffold's non-composable scope
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
-    // Use hasRoute (Companion) with hierarchy check for robustness, fallback to string if needed
-    val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
-    val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
-    val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
-    val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
-        // Phone: bottom bar with 4 tabs + centered circular mini player inside NavigationBar
-        Scaffold(
-            bottomBar = { BottomNavWithCenterPlayer(navController) }
-        ) { innerPadding ->
-            AppNavHost(
-                navController = navController,
-                innerPadding = innerPadding
-            )
+        // 手机：主页 Tab 带底栏 + 圆形 mini；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
+        val inTabs = destination?.hierarchy?.any {
+            it.hasRoute(cn.debubu.tingbili.navigation.HomeRoute::class) ||
+            it.hasRoute(cn.debubu.tingbili.navigation.PlaylistRoute::class) ||
+            it.hasRoute(cn.debubu.tingbili.navigation.HistoryRoute::class) ||
+            it.hasRoute(cn.debubu.tingbili.navigation.SettingsRoute::class) ||
+            it.hasRoute(MainTabsRoute::class)
+        } ?: true
+        if (inTabs) {
+            Scaffold(
+                bottomBar = { BottomNavWithCenterPlayer(navController) }
+            ) { innerPadding ->
+                AppRootNavHost(navController = navController, modifier = Modifier.padding(innerPadding))
+            }
+        } else {
+            // 独立全屏页：无底栏
+            AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
         }
     } else {
-        // Tablet / expanded: side NavigationRail via NavigationSuiteScaffold + floating centered mini player
-        NavigationSuiteScaffold(
-            navigationSuiteItems = {
-                item(
-                    selected = isHomeSelected,
-                    onClick = {
-                        navController.navigate(HomeRoute) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    label = { Text("首页") }
-                )
-                item(
-                    selected = isPlaylistSelected,
-                    onClick = {
-                        navController.navigate(PlaylistRoute) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text("听单") }
-                )
-                item(
-                    selected = isHistorySelected,
-                    onClick = {
-                        navController.navigate(HistoryRoute) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
-                    icon = { Icon(Icons.Default.History, contentDescription = null) },
-                    label = { Text("历史") }
-                )
-                item(
-                    selected = isSettingsSelected,
-                    onClick = {
-                        navController.navigate(SettingsRoute) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("设置") }
-                )
-            },
-            layoutType = layoutType
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                AppNavHost(
-                    navController = navController,
-                    innerPadding = PaddingValues(0.dp),
-                    modifier = Modifier.fillMaxSize()
-                )
-                // Floating centered circular mini player — remains centered on tablet
-                FloatingCenteredMiniPlayer(
-                    navController = navController,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp)
-                )
-            }
-        }
+        // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
+        cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController)
     }
 }
 

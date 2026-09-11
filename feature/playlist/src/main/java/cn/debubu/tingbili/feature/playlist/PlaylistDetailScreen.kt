@@ -5,9 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,29 +16,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,9 +47,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,17 +83,18 @@ fun PlaylistDetailScreen(
     }
 
     if (playlist == null) {
-        //  playlist 被删除或不存在
-        LaunchedEffect(Unit) { onBack() }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.CircularProgressIndicator()
+        }
         return
     }
 
     val pl = playlist!!
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部栏
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 顶部栏：返回 + 标题 + 更多
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -101,6 +103,8 @@ fun PlaylistDetailScreen(
             Text(
                 text = pl.name,
                 style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
             Box {
@@ -109,7 +113,7 @@ fun PlaylistDetailScreen(
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(text = { Text("重命名") }, onClick = { showMenu = false; showRename = true })
-                    DropdownMenuItem(text = { Text("删除听单") }, onClick = { showMenu = false; viewModel.deletePlaylist(onBack) })
+                    DropdownMenuItem(text = { Text("删除收藏") }, onClick = { showMenu = false; viewModel.deletePlaylist(onBack) })
                 }
             }
         }
@@ -124,76 +128,133 @@ fun PlaylistDetailScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // 大封面 + 信息
+            // 封面横幅：借鉴网易云/小宇宙 — 模糊背景 + 居中大封面 + 标题居中
             item {
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(240.dp)
+                ) {
+                    // 底层模糊封面（用原封面裁剪拉满 + 半透明遮罩，空白时用主色渐变）
                     if (pl.cover.isNullOrBlank()) {
                         Box(
-                            modifier = Modifier.size(110.dp).clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Album, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(44.dp))
-                        }
+                            modifier = Modifier.fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.surface
+                                        )
+                                    )
+                                )
+                        )
                     } else {
                         AsyncImage(
                             model = pl.cover,
                             contentDescription = null,
-                            modifier = Modifier.size(110.dp).clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            alpha = 0.35f
+                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color.Transparent, MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
+                                    )
+                                )
                         )
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = pl.name, style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "${tracks.size} 集", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(text = formatDate(pl.createdAt), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { viewModel.playAll(0) }, enabled = tracks.isNotEmpty()) { Text("全部播放") }
-                            TextButton(onClick = { viewModel.clearAll() }, enabled = tracks.isNotEmpty()) { Text("清空") }
+                    // 前景：小封面 + 信息（仿播客卡片）
+                    Row(
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (pl.cover.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier.size(96.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Album, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(40.dp))
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                shadowElevation = 8.dp,
+                                tonalElevation = 0.dp
+                            ) {
+                                AsyncImage(
+                                    model = pl.cover,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(96.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = pl.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${tracks.size} 集 · ${formatDate(pl.createdAt)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
 
-            // 表头
+            // 操作条：全部播放
             item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "集列表 · ${tracks.size} 集", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.playAll(0) },
+                        enabled = tracks.isNotEmpty(),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("全部播放")
+                    }
+
+                }
+                Divider(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    thickness = 1.dp
+                )
             }
 
-            itemsIndexed(tracks, key = { _, item -> "${item.playlistId}:${item.bvid}:${item.cid}" }) { idx, entity ->
-                val dismissState = rememberSwipeToDismissBoxState(
-                    confirmValueChange = { v ->
-                        if (v == SwipeToDismissBoxValue.EndToStart || v == SwipeToDismissBoxValue.StartToEnd) {
-                            viewModel.remove(entity); true
-                        } else false
-                    }
-                )
-                SwipeToDismissBox(
-                    state = dismissState,
-                    backgroundContent = {
-                        Box(
-                            modifier = Modifier.fillMaxSize().background(Color.Red).padding(12.dp),
-                            contentAlignment = Alignment.CenterEnd
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
-                        }
-                    }
+            // 表头
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    DetailTrackRow(
-                        index = idx,
-                        entity = entity,
-                        onClick = { viewModel.playAt(idx) },
-                        onMoveUp = { if (idx > 0) viewModel.reorder(idx, idx - 1) },
-                        onMoveDown = { if (idx < tracks.lastIndex) viewModel.reorder(idx, idx + 1) },
-                        onDelete = { viewModel.remove(entity) }
+                    Text(text = "集列表", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "${tracks.size} 集",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -201,17 +262,32 @@ fun PlaylistDetailScreen(
             if (tracks.isEmpty()) {
                 item {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("暂无内容", color = Color.Gray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("去首页添加一个有声书吧", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Box(
+                            modifier = Modifier.size(72.dp).clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Album, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(36.dp))
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text("暂无内容", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("去首页添加一个有声书吧", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
                 }
+            } else {
+                itemsIndexed(tracks, key = { _, item -> "${item.playlistId}:${item.bvid}:${item.cid}" }) { idx, entity ->
+                    DetailTrackRow(
+                        index = idx,
+                        entity = entity,
+                        onClick = { viewModel.playAt(idx) },
+                        onDelete = { viewModel.remove(entity) }
+                    )
+                }
             }
-
-            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
 }
@@ -221,31 +297,51 @@ private fun DetailTrackRow(
     index: Int,
     entity: PlaylistTrackEntity,
     onClick: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("移除这一集？") },
+            text = { Text(entity.title.ifBlank { entity.bvid }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("移除") } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") } }
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = String.format(Locale.getDefault(), "%02d", index + 1),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(32.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${index + 1}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(28.dp)
+                text = entity.title.ifBlank { "${entity.bvid}" },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
-            Icon(Icons.Default.DragHandle, contentDescription = "拖拽", tint = Color.Gray, modifier = Modifier.padding(end = 8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = entity.title.ifBlank { "${entity.bvid} · ${entity.cid}" }, style = MaterialTheme.typography.bodyMedium)
-                Text(text = "${entity.bvid} · cid ${entity.cid}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            Column {
-                TextButton(onClick = onMoveUp) { Text("↑") }
-                TextButton(onClick = onMoveDown) { Text("↓") }
-            }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "删除") }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = entity.bvid,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(onClick = { showDeleteConfirm = true }) {
+            Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
         }
     }
 }
@@ -259,9 +355,9 @@ private fun RenameDialog(
     var name by remember { mutableStateOf(currentName) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("重命名听单") },
+        title = { Text("重命名收藏") },
         text = {
-            OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, placeholder = { Text("听单名称") })
+            OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, placeholder = { Text("收藏名称") })
         },
         confirmButton = { TextButton(onClick = { onConfirm(name) }) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }

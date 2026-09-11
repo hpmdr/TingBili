@@ -17,22 +17,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,7 +37,7 @@ import cn.debubu.tingbili.core.data.db.PlaylistEntity
 import coil.compose.AsyncImage
 
 /**
- * 听单列表页：仅负责创建与浏览，点卡片进独立详情页。
+ * 收藏列表页：仅浏览，点卡片进详情。收藏来自 BV 一键收藏，手动创建预留。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,45 +47,19 @@ fun PlaylistScreen(
 ) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
 
-    var newName by remember { mutableStateOf("") }
-
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-        // 创建听单
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                placeholder = { Text("新建听单名称") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(
-                onClick = {
-                    if (newName.isNotBlank()) {
-                        vm.create(newName.trim())
-                        newName = ""
-                    }
-                }
-            ) { Text("创建") }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(text = "听单 (${playlists.size})", style = MaterialTheme.typography.titleMedium)
+        Text(text = "收藏 (${playlists.size})", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(playlists, key = { it.id }) { pl ->
                 PlaylistCard(
                     playlist = pl,
-                    onOpenDetail = { onPlaylistClick(pl.id) },
-                    onPlayAll = { vm.playAll(pl.id) },
-                    onDelete = { vm.deletePlaylist(pl.id) }
+                    onOpenDetail = { onPlaylistClick(pl.id) }
                 )
             }
             if (playlists.isEmpty()) {
-                item { Text("暂无听单，创建一个吧", modifier = Modifier.padding(8.dp), color = Color.Gray) }
+                item { Text("暂无收藏，去视频详情收藏一个吧", modifier = Modifier.padding(8.dp), color = Color.Gray) }
             }
         }
     }
@@ -102,15 +68,13 @@ fun PlaylistScreen(
 @Composable
 private fun PlaylistCard(
     playlist: PlaylistEntity,
-    onOpenDetail: () -> Unit,
-    onPlayAll: () -> Unit,
-    onDelete: () -> Unit
+    onOpenDetail: () -> Unit
 ) {
     Card(
+        onClick = onOpenDetail,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable { onOpenDetail() },
+            .padding(vertical = 4.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
@@ -118,7 +82,7 @@ private fun PlaylistCard(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 听单封面：有封面展示 BV 封面，空白听单展示默认图标占位
+            // 收藏封面：BV 收藏为视频封面，空为占位
             if (playlist.cover.isNullOrBlank()) {
                 Box(
                     modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
@@ -140,12 +104,7 @@ private fun PlaylistCard(
                 Text(text = playlist.name, style = MaterialTheme.typography.bodyLarge)
                 Text(text = formatDate(playlist.createdAt), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
-            IconButton(onClick = onPlayAll) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "播放全部")
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除听单")
-            }
+
         }
     }
 }

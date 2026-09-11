@@ -124,7 +124,10 @@ class HomeViewModel @Inject constructor(
                 bvid = track.bvid,
                 cid = track.cid,
                 title = track.title,
-                order = 0
+                order = 0,
+                author = track.author,
+                cover = track.cover,
+                durationMs = track.durationMs
             )
         )
     }
@@ -137,7 +140,10 @@ class HomeViewModel @Inject constructor(
                     bvid = t.bvid,
                     cid = t.cid,
                     title = t.title,
-                    order = 0
+                    order = 0,
+                    author = t.author,
+                    cover = t.cover,
+                    durationMs = t.durationMs
                 )
             )
         }
@@ -145,7 +151,7 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Convenience: add single track to playlist; creates default playlist if none exists.
-     * Used by bottomSheet “单P加入” / “整集合集加入听单”.
+     * Used by bottomSheet “单P加入” / “整集合集加入收藏”.
      */
     fun addToPlaylist(track: Track) {
         viewModelScope.launch {
@@ -170,6 +176,6 @@ class HomeViewModel @Inject constructor(
     private suspend fun ensureDefaultPlaylist(): Long {
         val existing = playlistDao.getPlaylists()
         if (existing.isNotEmpty()) return existing.first().id
-        return playlistDao.insert(PlaylistEntity(name = "默认听单"))
+        return playlistDao.insert(PlaylistEntity(name = "默认收藏"))
     }
 }
