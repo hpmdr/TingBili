@@ -30,6 +30,10 @@ android sdk --install "platforms;android-36" "build-tools;36.1.0" "platform-tool
 # 全量测试较重，建议 CI 跑： ./gradlew testDebugUnitTest --no-daemon
 ```
 
+## 多电脑开发
+- 另一台电脑：装 JDK25 + SDK（`platforms;android-37.2`、`build-tools;37.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.6 自动下载）。
+- debug 签名已统一为仓库内 `app/debug.keystore`，多台电脑编出的测试包签名一致，同一部测试机换电脑装包无需卸载重装。release 签名严禁入库。
+
 国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`），`gradle.properties` 限制 `Xmx2g` + `daemon.idletimeout 30s` + `stop`，避免 IDE 侧 NodeService 阻塞。
 
 ## 模块

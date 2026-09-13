@@ -13,6 +13,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# 例外：app/debug.keystore 为多电脑共用的 debug 测试签名（维护者已明确批准入库，release 签名严禁入库）
+!app/debug.keystore
+
 # 构建产物
 *.apk
 *.aab

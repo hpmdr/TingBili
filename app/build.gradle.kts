@@ -10,6 +10,17 @@ android {
     namespace = "cn.debubu.tingbili"
     compileSdk = 37
 
+    // 多电脑共用 debug 签名（app/debug.keystore，维护者已明确批准入库）；
+    // release 签名严禁入库。统一签名后测试机换电脑装包无需卸载重装。
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "cn.debubu.tingbili"
         minSdk = 31
