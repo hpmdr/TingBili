@@ -1,20 +1,19 @@
 plugins {
     id("com.android.application")
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.0"
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
     namespace = "cn.debubu.tingbili"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "cn.debubu.tingbili"
         minSdk = 31
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -23,9 +22,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -59,12 +55,13 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.material.icons.extended)
     implementation(libs.navigation.compose)
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.coil.compose)
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.3.1")
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.hilt.navigation.compose)
+    implementation(libs.adaptive.navigation.suite)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
     implementation(libs.datastore.preferences)
@@ -81,14 +78,20 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test:core:1.6.1")
-    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui)
     testImplementation(libs.compose.material3)
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("androidx.navigation:navigation-testing:${libs.versions.navigation.get()}")
-    testImplementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    testImplementation(libs.hilt.navigation.compose)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }

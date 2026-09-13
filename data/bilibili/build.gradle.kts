@@ -1,14 +1,13 @@
 plugins {
     id("com.android.library")
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.0"
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
     namespace = "cn.debubu.tingbili.data.bilibili"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 31
@@ -18,9 +17,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 }
 
@@ -39,4 +35,10 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
     testImplementation("androidx.test:core:1.6.1")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }

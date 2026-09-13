@@ -22,7 +22,7 @@
 
 ## 快速开始
 ```bash
-# 需 Android SDK cmdline-tools 23.0 + platform-tools 37.0.1 + build-tools 36.1.0 + JDK17
+# 需 Android SDK cmdline-tools + platform-tools + build-tools 37.0.0 + JDK25（构建）/ 字节码目标保持 Java 17
 # 推荐使用新 CLI： /path/to/android-sdk/cmdline-tools/latest/bin/android
 android sdk --install "platforms;android-36" "build-tools;36.1.0" "platform-tools"
 ./gradlew assembleDebug --no-daemon   # 轻量门禁，约 10-20s

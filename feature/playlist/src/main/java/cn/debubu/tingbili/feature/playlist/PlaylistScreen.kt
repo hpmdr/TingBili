@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 
 /**
  * 收藏列表页：仅浏览，点卡片进详情。收藏来自 BV 一键收藏，手动创建预留。

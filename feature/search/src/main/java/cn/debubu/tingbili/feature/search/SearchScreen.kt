@@ -55,7 +55,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import cn.debubu.tingbili.core.data.model.Track
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 
 @Composable
 fun SearchScreen(

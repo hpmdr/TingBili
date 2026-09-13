@@ -48,7 +48,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.LoadState
 import cn.debubu.tingbili.core.data.model.Track
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 
 @Composable
 fun HomeScreen(
