@@ -48,7 +48,7 @@ class PlaylistDetailViewModel @Inject constructor(
                 return@launch
             }
             val safe = startIndex.coerceIn(0, entities.lastIndex)
-            player.play(entities.map { it.toTrack() }, safe)
+            player.play(entities.map { it.toTrack() }, safe, playlist.value?.name ?: "收藏")
         }
     }
 

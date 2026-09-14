@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
 
     val dynamicColor: Flow<Boolean> = ds.data.map { it[DYNAMIC_COLOR] ?: true }
+    val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
 
     // 上次播放恢复：队列（JSON）+ 下标 + 进度
     val lastQueue: Flow<List<Track>> = ds.data.map { prefs ->
@@ -36,6 +38,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
     val lastIndex: Flow<Int> = ds.data.map { it[LAST_INDEX] ?: -1 }
     val lastPositionMs: Flow<Long> = ds.data.map { it[LAST_POSITION_MS] ?: 0L }
+    val lastSourceTitle: Flow<String?> = ds.data.map { it[LAST_SOURCE_TITLE] }
 
     suspend fun setStep(v: Int) {
         ds.edit { it[STEP_SEC] = v }
@@ -57,14 +60,28 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[DYNAMIC_COLOR] = v }
     }
 
+    suspend fun setImageFormat(v: ImageFormat) {
+        ds.edit { it[IMAGE_FORMAT] = v.name }
+    }
+
     /** 持久化上次播放的队列与进度，队列超 100 首截断以控大小 */
-    suspend fun setLastPlayback(queue: List<Track>, index: Int, positionMs: Long) {
+    suspend fun setLastPlayback(
+        queue: List<Track>,
+        index: Int,
+        positionMs: Long,
+        sourceTitle: String? = null,
+    ) {
         val capped = if (queue.size > 100) queue.take(100) else queue
         val json = Json.encodeToString(ListSerializer(Track.serializer()), capped)
         ds.edit {
             it[LAST_QUEUE_JSON] = json
             it[LAST_INDEX] = index.coerceIn(-1, capped.lastIndex.coerceAtLeast(-1))
             it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L)
+            if (sourceTitle.isNullOrBlank()) {
+                it.remove(LAST_SOURCE_TITLE)
+            } else {
+                it[LAST_SOURCE_TITLE] = sourceTitle
+            }
         }
     }
 
@@ -77,6 +94,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             it.remove(LAST_QUEUE_JSON)
             it.remove(LAST_INDEX)
             it.remove(LAST_POSITION_MS)
+            it.remove(LAST_SOURCE_TITLE)
         }
     }
 
@@ -86,8 +104,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val SPEED = floatPreferencesKey("speed")
         val TIMER_PRESETS = stringPreferencesKey("timer_presets")
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")
+        val IMAGE_FORMAT = stringPreferencesKey("image_format")
         val LAST_QUEUE_JSON = stringPreferencesKey("last_queue_json")
         val LAST_INDEX = intPreferencesKey("last_index")
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")
+        val LAST_SOURCE_TITLE = stringPreferencesKey("last_source_title")
     }
 }

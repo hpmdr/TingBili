@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -20,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.data.model.ImageFormat
 
 @Composable
 fun SettingsScreen(
@@ -27,17 +30,18 @@ fun SettingsScreen(
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val dynamic by vm.dynamicColor.collectAsStateWithLifecycle()
+    val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
     val cacheMb by vm.cacheSizeMb.collectAsStateWithLifecycle()
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize().statusBarsPadding().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("设置", style = MaterialTheme.typography.titleLarge)
 
         // 步进
         Column {
-            Text("自定义步进秒数: $step 秒", style = MaterialTheme.typography.bodyLarge)
+            Text("前进 / 后退步长: $step 秒", style = MaterialTheme.typography.bodyLarge)
             Slider(
                 value = step.toFloat(),
                 onValueChange = { vm.setStep(it.toInt()) },
@@ -50,6 +54,35 @@ fun SettingsScreen(
                     Button(onClick = { vm.setStep(v) }) { Text("${v}s") }
                 }
             }
+        }
+
+        // 图片格式
+        Column {
+            Text("B 站图片格式", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ImageFormat.entries.forEach { format ->
+                    FilterChip(
+                        selected = imageFormat == format,
+                        onClick = { vm.setImageFormat(format) },
+                        label = {
+                            Text(
+                                when (format) {
+                                    ImageFormat.AVIF -> "AVIF 省流量"
+                                    ImageFormat.WEBP -> "WebP 均衡"
+                                    ImageFormat.JPEG -> "JPEG 兜底"
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "默认 AVIF；若遇到图片无法显示，可切换 WebP 或 JPEG。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
 
         // 定时预设

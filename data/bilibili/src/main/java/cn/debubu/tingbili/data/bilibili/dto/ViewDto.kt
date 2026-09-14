@@ -90,14 +90,14 @@ fun ViewData.toTracks(): List<Track> {
                 cid = cidFallback,
                 title = title,
                 author = owner?.name ?: "",
-                cover = pic.normalizeCover(),
+                cover = pic.normalizeBiliImageUrl(),
                 durationMs = duration * 1000L,
                 subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
                 pageCount = 1
             )
         )
     }
-    val cover = pic.normalizeCover()
+    val cover = pic.normalizeBiliImageUrl()
     val author = owner?.name ?: ""
     // Prefer page.part title if multi-part, else use main title
     val mainTitle = title

@@ -1,25 +1,29 @@
 [versions]
 kotlin = "2.4.20"
 # KSP 已与 Kotlin 解耦：Kotlin 2.4 暂无专属 KSP 构建，用最新 KSP2 即可
-ksp = "2.3.10"
+ksp = "2.3.12"
 agp = "9.4.0"
-compose-bom = "2026.08.00"
-navigation = "2.9.8"
+compose-bom = "2026.09.00"
+navigation = "2.10.1"
 hilt = "2.60.1"
-hilt-navigation = "1.3.0"
-room = "2.8.4"
-media3 = "1.10.1"
+hilt-navigation = "1.4.0"
+room = "2.8.5"
+media3 = "1.11.1"
 retrofit = "3.0.0"
-okhttp = "5.4.0"
+okhttp = "5.5.0"
 kotlinx-serialization = "1.11.0"
-coil = "3.5.0"
-paging = "3.3.6"
-coroutines = "1.10.2"
+coil = "3.6.2"
+paging = "3.5.1"
+coroutines = "1.11.0"
 lifecycle = "2.11.0"
-core-ktx = "1.18.0"
-datastore = "1.1.2"
-robolectric = "4.16.1"
-adaptive = "1.3.2"
+core-ktx = "1.19.0"
+datastore = "1.2.1"
+robolectric = "4.17"
+adaptive = "1.4.0"
+junit = "4.13.2"
+androidx-test-core = "1.7.0"
+arch-core-testing = "2.2.0"
+turbine = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -47,6 +51,10 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 paging-compose = { module = "androidx.paging:paging-compose", version.ref = "paging" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+junit = { module = "junit:junit", version.ref = "junit" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+arch-core-testing = { module = "androidx.arch.core:core-testing", version.ref = "arch-core-testing" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 
 [plugins]
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

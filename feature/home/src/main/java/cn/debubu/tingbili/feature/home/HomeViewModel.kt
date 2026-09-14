@@ -112,7 +112,8 @@ class HomeViewModel @Inject constructor(
 
     fun playTracks(tracks: List<Track>, index: Int = 0) {
         if (tracks.isEmpty()) return
-        viewModelScope.launch { player.play(tracks, index) }
+        val sourceTitle = tracks.getOrNull(index)?.title ?: "播放列表"
+        viewModelScope.launch { player.play(tracks, index, sourceTitle) }
     }
 
     fun playSingle(track: Track) = playTracks(listOf(track), 0)

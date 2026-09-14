@@ -17,18 +17,30 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.media.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    val playerManager: PlayerManager
-) : ViewModel()
+    val playerManager: PlayerManager,
+    prefs: PreferencesRepository,
+) : ViewModel() {
+    val imageFormat = prefs.imageFormat.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = ImageFormat.AVIF,
+    )
+}
 
 @Composable
 fun BottomNavWithCenterPlayer(

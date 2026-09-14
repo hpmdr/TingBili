@@ -9,8 +9,10 @@ import androidx.media3.common.Player
  */
 interface PlayerHandle {
     val currentPosition: Long
+    val bufferedPosition: Long get() = currentPosition
     val duration: Long
     val isPlaying: Boolean
+    val mediaItemCount: Int get() = 0
     var repeatMode: Int
     val currentMediaItemIndex: Int
     fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long)

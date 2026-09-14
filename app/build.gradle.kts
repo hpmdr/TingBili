@@ -87,8 +87,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui)
@@ -98,7 +98,7 @@ dependencies {
     testImplementation("androidx.navigation:navigation-testing:${libs.versions.navigation.get()}")
     testImplementation(libs.hilt.navigation.compose)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation(libs.arch.core.testing)
 }
 
 kotlin {

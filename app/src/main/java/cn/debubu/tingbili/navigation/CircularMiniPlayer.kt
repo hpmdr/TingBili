@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 
 /**
@@ -40,6 +43,7 @@ fun CircularMiniPlayer(
     isLoading: Boolean = false,
     onClick: () -> Unit
 ) {
+    val imageFormat = LocalImageFormat.current
     val clamped = progress.coerceIn(0f, 1f)
 
     // Only create infinite transition when playing — avoids wasteful animation when paused
@@ -78,7 +82,7 @@ fun CircularMiniPlayer(
             strokeWidth = 3.dp
         )
         AsyncImage(
-            model = cover,
+            model = cover.biliImage(BiliImageVariant.SmallSquare, imageFormat),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

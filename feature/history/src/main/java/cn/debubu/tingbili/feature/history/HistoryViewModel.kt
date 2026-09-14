@@ -59,7 +59,7 @@ class HistoryViewModel @Inject constructor(
             }
             if (tracks.isEmpty()) return@launch
             val idx = tracks.indexOfFirst { it.cid == h.cid }.coerceAtLeast(0)
-            player.play(tracks, idx)
+            player.play(tracks, idx, "播放历史")
             player.seekTo(h.positionMs)
         }
     }

@@ -17,8 +17,10 @@ class MediaControllerHandle @Inject constructor(
     private fun controller() = connection.controller.value
 
     override val currentPosition: Long get() = controller()?.currentPosition ?: 0L
+    override val bufferedPosition: Long get() = controller()?.bufferedPosition ?: 0L
     override val duration: Long get() = controller()?.duration ?: 0L
     override val isPlaying: Boolean get() = controller()?.isPlaying ?: false
+    override val mediaItemCount: Int get() = controller()?.mediaItemCount ?: 0
     override var repeatMode: Int
         get() = controller()?.repeatMode ?: Player.REPEAT_MODE_OFF
         set(value) { controller()?.repeatMode = value }

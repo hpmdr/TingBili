@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.ImageFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ class SettingsViewModel @Inject constructor(
 
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
     val dynamicColor: StateFlow<Boolean> = prefs.dynamicColor.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF)
     val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90))
 
     private val _cacheSizeMb = MutableStateFlow(0L)
@@ -53,6 +55,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setDynamicColor(v: Boolean) {
         viewModelScope.launch { prefs.setDynamicColor(v) }
+    }
+
+    fun setImageFormat(v: ImageFormat) {
+        viewModelScope.launch { prefs.setImageFormat(v) }
     }
 
     fun setTimerPresets(presets: Set<Int>) {

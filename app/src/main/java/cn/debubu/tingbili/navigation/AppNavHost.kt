@@ -57,7 +57,7 @@ fun AppRootNavHost(
         composable<PlaylistDetailRoute> {
             PlaylistDetailScreen(onBack = { navController.popBackStack() })
         }
-        composable<PlayerRoute> { PlayerScreen() }
+        composable<PlayerRoute> { PlayerScreen(onBack = { navController.popBackStack() }) }
     }
 }
 

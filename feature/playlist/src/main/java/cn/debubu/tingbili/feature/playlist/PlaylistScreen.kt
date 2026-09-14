@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,7 +34,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 
 /**
@@ -47,7 +51,7 @@ fun PlaylistScreen(
 ) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
         Text(text = "收藏 (${playlists.size})", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -70,6 +74,7 @@ private fun PlaylistCard(
     playlist: PlaylistEntity,
     onOpenDetail: () -> Unit
 ) {
+    val imageFormat = LocalImageFormat.current
     Card(
         onClick = onOpenDetail,
         modifier = Modifier
@@ -93,7 +98,7 @@ private fun PlaylistCard(
                 }
             } else {
                 AsyncImage(
-                    model = playlist.cover,
+                    model = playlist.cover.orEmpty().biliImage(BiliImageVariant.SmallSquare, imageFormat),
                     contentDescription = null,
                     modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)),
                     contentScale = ContentScale.Crop

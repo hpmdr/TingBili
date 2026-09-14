@@ -167,7 +167,8 @@ class PlaylistViewModel @Inject constructor(
             if (entities.isEmpty()) return@launch
             val ts = entities.map { it.toTrack() }
             val safeIdx = startIndex.coerceIn(0, ts.lastIndex)
-            player.play(ts, safeIdx)
+            val playlistName = dao.getPlaylist(playlistId)?.name ?: "收藏"
+            player.play(ts, safeIdx, playlistName)
         }
     }
 

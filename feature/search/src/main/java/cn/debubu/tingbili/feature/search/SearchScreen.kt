@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,9 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 
 @Composable
@@ -85,7 +89,7 @@ fun SearchScreen(
         vm.onSearch(input)
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -147,12 +151,13 @@ private fun SearchResultList(
 
 @Composable
 private fun SearchRow(track: Track, onClick: () -> Unit) {
+    val imageFormat = LocalImageFormat.current
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(8.dp)
     ) {
         Box {
             AsyncImage(
-                model = track.cover,
+                model = track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
                 contentDescription = null,
                 modifier = Modifier.width(116.dp).height(72.dp).clip(RoundedCornerShape(10.dp)),
                 contentScale = ContentScale.Crop

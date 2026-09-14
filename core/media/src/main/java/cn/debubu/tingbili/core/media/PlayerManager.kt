@@ -12,6 +12,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.data.bilibili.BiliRepository
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -72,6 +73,7 @@ class PlayerManager @Inject constructor(
             if (savedQueue.isEmpty()) return
             val savedIndex = prefs.lastIndex.first().coerceIn(0, savedQueue.lastIndex)
             val savedPos = prefs.lastPositionMs.first().coerceAtLeast(0L)
+            val savedSourceTitle = prefs.lastSourceTitle.first()
             val track = savedQueue.getOrNull(savedIndex) ?: return
             queue = savedQueue
             currentIndex = savedIndex
@@ -83,6 +85,7 @@ class PlayerManager @Inject constructor(
                     queue = savedQueue,
                     currentIndex = savedIndex,
                     currentTrack = track,
+                    sourceTitle = savedSourceTitle,
                     positionMs = clampedPos,
                     durationMs = track.durationMs,
                     isPlaying = false,
@@ -100,7 +103,7 @@ class PlayerManager @Inject constructor(
         val idx = currentIndex
         val pos = _state.value.positionMs
         if (q.isEmpty() || idx !in q.indices) return
-        effectiveScope().launch { prefs.setLastPlayback(q, idx, pos) }
+        effectiveScope().launch { prefs.setLastPlayback(q, idx, pos, _state.value.sourceTitle) }
     }
 
     private fun persistPosition(pos: Long) {
@@ -113,7 +116,12 @@ class PlayerManager @Inject constructor(
      * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
      * 加载期间 isLoading=true 且互斥，防止重复点击。
      */
-    suspend fun play(tracks: List<Track>, index: Int) {
+    suspend fun play(
+        tracks: List<Track>,
+        index: Int,
+        sourceTitle: String? = null,
+        startPositionMs: Long? = null,
+    ) {
         if (tracks.isEmpty()) return
         // 防重入：正在加载时忽略新的播放请求
         if (!playMutex.tryLock()) return
@@ -132,6 +140,8 @@ class PlayerManager @Inject constructor(
                     queue = tracks,
                     currentIndex = safeIndex,
                     currentTrack = tracks.getOrNull(safeIndex),
+                    sourceTitle = sourceTitle?.takeIf { title -> title.isNotBlank() }
+                        ?: tracks.getOrNull(safeIndex)?.title,
                     isPlaying = false,
                 )
             }
@@ -161,9 +171,18 @@ class PlayerManager @Inject constructor(
             val playableTracks = items.map { it.first }
             queue = playableTracks
             currentIndex = startIndex
+            val resolvedStartPosition = startPositionMs
+                ?.coerceAtLeast(0L)
+                ?.coerceAtMost(playableTracks[startIndex].durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
+                ?: 0L
 
             // 持久化队列与起点进度，供下次冷启动恢复
-            effectiveScope().launch { prefs.setLastPlayback(playableTracks, startIndex, 0L) }
+            val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
+                ?: playableTracks.getOrNull(startIndex)?.title
+            effectiveScope().launch {
+                prefs.setLastPlayback(playableTracks, startIndex, resolvedStartPosition, resolvedSourceTitle)
+            }
+            val imageFormat = prefs.imageFormat.first()
 
             transport.setMediaItems(
                 items.map { (track, url) ->
@@ -175,13 +194,13 @@ class PlayerManager @Inject constructor(
                             MediaMetadata.Builder()
                                 .setTitle(track.title)
                                 .setArtist(track.author)
-                                .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
                                 .build()
                         )
                         .build()
                 },
                 startIndex,
-                0L
+                resolvedStartPosition,
             )
             transport.prepare()
             transport.play()
@@ -201,22 +220,28 @@ class PlayerManager @Inject constructor(
                     queue = playableTracks,
                     currentIndex = startIndex,
                     currentTrack = playableTracks[startIndex],
+                    sourceTitle = resolvedSourceTitle,
                     isPlaying = true,
                     isLoading = false,
-                    positionMs = 0L,
+                    positionMs = resolvedStartPosition,
+                    bufferedPositionMs = 0L,
                     durationMs = playableTracks[startIndex].durationMs,
                     repeatMode = repeat,
                     speed = speed,
                 )
             }
 
-            // Resume track at saved history if exists
-            val startTrack = playableTracks[startIndex]
-            val saved = historyDao.get(startTrack.bvid, startTrack.cid)
-            if (saved != null && saved.positionMs > 0L) {
-                transport.seekTo(saved.positionMs)
-                _state.update { it.copy(positionMs = saved.positionMs) }
-                persistPosition(saved.positionMs)
+            if (startPositionMs != null) {
+                persistPosition(resolvedStartPosition)
+            } else {
+                // Resume track at saved history if exists
+                val startTrack = playableTracks[startIndex]
+                val saved = historyDao.get(startTrack.bvid, startTrack.cid)
+                if (saved != null && saved.positionMs > 0L) {
+                    transport.seekTo(saved.positionMs)
+                    _state.update { it.copy(positionMs = saved.positionMs) }
+                    persistPosition(saved.positionMs)
+                }
             }
 
             startHistoryThrottle()
@@ -255,16 +280,12 @@ class PlayerManager @Inject constructor(
 
     fun resume() {
         // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
-        if (queue.isNotEmpty() && transport.currentMediaItemIndex !in queue.indices) {
+        if (queue.isNotEmpty() && (transport.mediaItemCount == 0 || transport.currentMediaItemIndex !in queue.indices)) {
             val idx = currentIndex.coerceIn(0, queue.lastIndex)
             val pos = _state.value.positionMs
+            val sourceTitle = _state.value.sourceTitle
             effectiveScope().launch {
-                play(queue, idx)
-                // play() 内会 reset position 到 0/历史，再补一次 seek 到恢复进度
-                if (pos > 0L) {
-                    transport.seekTo(pos)
-                    _state.update { it.copy(positionMs = pos) }
-                }
+                play(queue, idx, sourceTitle, pos)
             }
             return
         }
@@ -283,6 +304,10 @@ class PlayerManager @Inject constructor(
         transport.seekTo(clamped)
         _state.update { it.copy(positionMs = clamped) }
         persistPosition(clamped)
+    }
+
+    fun seekBy(deltaMs: Long) {
+        seekTo(_state.value.positionMs + deltaMs)
     }
 
     /**
@@ -359,7 +384,13 @@ class PlayerManager @Inject constructor(
             while (true) {
                 delay(500L)
                 if (transport.isPlaying) {
-                    _state.update { it.copy(positionMs = transport.currentPosition, isPlaying = true) }
+                    _state.update {
+                        it.copy(
+                            positionMs = transport.currentPosition,
+                            bufferedPositionMs = transport.bufferedPosition,
+                            isPlaying = true,
+                        )
+                    }
                     // 轻量持久化进度，避免仅依赖 history 1s 节流
                     prefs.setLastPosition(transport.currentPosition)
                 }
@@ -391,6 +422,7 @@ class PlayerManager @Inject constructor(
                 is Result.Success -> {
                     val newUrl = r.data
                     if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
+                        val imageFormat = prefs.imageFormat.first()
                         val newItem = MediaItem.Builder()
                             .setUri(newUrl)
                             .setMediaId("${track.bvid}:${track.cid}")
@@ -399,7 +431,7 @@ class PlayerManager @Inject constructor(
                                 MediaMetadata.Builder()
                                     .setTitle(track.title)
                                     .setArtist(track.author)
-                                    .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                    .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
                                     .build()
                             ).build()
                         transport.replaceMediaItem(currentIndex, newItem)
@@ -419,7 +451,15 @@ class PlayerManager @Inject constructor(
                 val idx = transport.currentMediaItemIndex
                 if (idx in queue.indices) {
                     currentIndex = idx
-                    _state.update { it.copy(currentIndex = idx, currentTrack = queue[idx], positionMs = transport.currentPosition, durationMs = queue[idx].durationMs) }
+                    _state.update {
+                        it.copy(
+                            currentIndex = idx,
+                            currentTrack = queue[idx],
+                            positionMs = transport.currentPosition,
+                            bufferedPositionMs = transport.bufferedPosition,
+                            durationMs = queue[idx].durationMs,
+                        )
+                    }
                     persistQueue()
                     urlRefreshRetry = 0
                     scheduleProactiveRefresh()
@@ -434,7 +474,13 @@ class PlayerManager @Inject constructor(
             override fun onPlaybackStateChanged(state: Int) {
                 // keep isPlaying in sync + 驱动加载态：buffering 时显示加载，ready/idle/ended 时收敛
                 val buffering = state == Player.STATE_BUFFERING
-                _state.update { it.copy(isPlaying = transport.isPlaying, isLoading = buffering) }
+                _state.update {
+                    it.copy(
+                        isPlaying = transport.isPlaying,
+                        isLoading = buffering,
+                        bufferedPositionMs = transport.bufferedPosition,
+                    )
+                }
                 if (state == Player.STATE_READY) urlRefreshRetry = 0
             }
 
@@ -465,6 +511,7 @@ class PlayerManager @Inject constructor(
                                 _state.update { it.copy(isLoading = false, errorMessage = "音源刷新失败") }
                                 return@launch
                             }
+                            val imageFormat = prefs.imageFormat.first()
                             val newItem = MediaItem.Builder()
                                 .setUri(newUrl)
                                 .setMediaId("${track.bvid}:${track.cid}")
@@ -473,7 +520,7 @@ class PlayerManager @Inject constructor(
                                     MediaMetadata.Builder()
                                         .setTitle(track.title)
                                         .setArtist(track.author)
-                                        .setArtworkUri(track.cover.let { if (it.isBlank()) null else android.net.Uri.parse(it) })
+                                        .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
                                         .build()
                                 ).build()
                             val idx = currentIndex
@@ -489,7 +536,7 @@ class PlayerManager @Inject constructor(
                             }
                         }
                         is Result.Error -> {
-                            _state.update { it.copy(isLoading = false, errorMessage = r.msg ?: "网络重试失败") }
+                            _state.update { it.copy(isLoading = false, errorMessage = r.msg) }
                         }
                     }
                 }

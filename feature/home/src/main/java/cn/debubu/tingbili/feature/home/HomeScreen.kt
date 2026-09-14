@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,6 +49,9 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.LoadState
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 
 @Composable
@@ -74,7 +78,7 @@ fun HomeScreen(
         vm.onSearch(input)
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
         // 搜索入口（假输入框）：点击进入独立搜索页
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -145,6 +149,7 @@ fun TrackRow(
     track: Track,
     onClick: () -> Unit
 ) {
+    val imageFormat = LocalImageFormat.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -153,7 +158,7 @@ fun TrackRow(
     ) {
         Box {
             AsyncImage(
-                model = track.cover,
+                model = track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
                 contentDescription = null,
                 modifier = Modifier
                     .width(116.dp)

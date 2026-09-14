@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -18,16 +20,20 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,6 +43,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
+import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
 import cn.debubu.tingbili.navigation.AppRootNavHost
 import cn.debubu.tingbili.navigation.BottomNavWithCenterPlayer
@@ -74,9 +81,25 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         enableEdgeToEdge()
+        // HyperOS 上仅靠 enforcement 会被画黑条：像哔哩哔哩一样走经典全屏标记，
+        // 让窗口自己绘制系统栏背景（透明），内容透到状态栏下
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            )
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         setContent {
             TingBiliTheme {
-                AdaptiveMainScaffold()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AdaptiveMainScaffold()
+                }
             }
         }
     }
@@ -85,11 +108,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AdaptiveMainScaffold() {
     val navController = rememberNavController()
+    val mainViewModel: MainViewModel = hiltViewModel()
+    val imageFormat by mainViewModel.imageFormat.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
     val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptiveInfo)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
 
+    CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：主页 Tab 带底栏 + 圆形 mini；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
         val inTabs = destination?.hierarchy?.any {
@@ -101,9 +127,19 @@ private fun AdaptiveMainScaffold() {
         } ?: true
         if (inTabs) {
             Scaffold(
+                modifier = Modifier.fillMaxSize(),
                 bottomBar = { BottomNavWithCenterPlayer(navController) }
             ) { innerPadding ->
-                AppRootNavHost(navController = navController, modifier = Modifier.padding(innerPadding))
+                // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
+                val layoutDirection = LocalLayoutDirection.current
+                AppRootNavHost(
+                    navController = navController,
+                    modifier = Modifier.padding(
+                        start = innerPadding.calculateStartPadding(layoutDirection),
+                        end = innerPadding.calculateEndPadding(layoutDirection),
+                        bottom = innerPadding.calculateBottomPadding()
+                    )
+                )
             }
         } else {
             // 独立全屏页：无底栏
@@ -112,6 +148,7 @@ private fun AdaptiveMainScaffold() {
     } else {
         // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
         cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController)
+    }
     }
 }
 

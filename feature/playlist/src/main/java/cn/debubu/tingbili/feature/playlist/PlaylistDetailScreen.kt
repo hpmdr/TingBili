@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,7 +56,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,6 +71,7 @@ fun PlaylistDetailScreen(
     onBack: () -> Unit = {},
     viewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
+    val imageFormat = LocalImageFormat.current
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -91,7 +96,7 @@ fun PlaylistDetailScreen(
 
     val pl = playlist!!
 
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().background(MaterialTheme.colorScheme.background)) {
         // 顶部栏：返回 + 标题 + 更多
         Row(
             modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
@@ -151,7 +156,7 @@ fun PlaylistDetailScreen(
                         )
                     } else {
                         AsyncImage(
-                            model = pl.cover,
+                            model = pl.cover.orEmpty().biliImage(BiliImageVariant.DetailHero, imageFormat),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
@@ -186,7 +191,7 @@ fun PlaylistDetailScreen(
                                 tonalElevation = 0.dp
                             ) {
                                 AsyncImage(
-                                    model = pl.cover,
+                                    model = pl.cover.orEmpty().biliImage(256, 256, imageFormat),
                                     contentDescription = null,
                                     modifier = Modifier.size(96.dp),
                                     contentScale = ContentScale.Crop

@@ -44,11 +44,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
     implementation(libs.hilt.navigation.compose)
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.junit)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
-    testImplementation("androidx.datastore:datastore-preferences:1.1.1")
+    testImplementation(libs.datastore.preferences)
 }
 
 kotlin {

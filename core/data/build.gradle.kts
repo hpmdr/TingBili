@@ -27,12 +27,12 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.robolectric)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation(libs.arch.core.testing)
 }
 
 kotlin {

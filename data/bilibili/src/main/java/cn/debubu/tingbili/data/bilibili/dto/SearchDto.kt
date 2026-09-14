@@ -41,7 +41,7 @@ fun SearchDto.toTracks(): List<Track> {
             cid = 0L,
             title = item.title.stripHtml(),
             author = item.author,
-            cover = item.pic.normalizeCover(),
+            cover = item.pic.normalizeBiliImageUrl(),
             durationMs = item.duration.parseDurationToMs(),
             subtitleUrl = null,
             pageCount = item.videos.coerceAtLeast(1)
@@ -57,16 +57,6 @@ internal fun String.stripHtml(): String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
         .trim()
-}
-
-internal fun String.normalizeCover(): String {
-    return when {
-        startsWith("//") -> "https:$this"
-        // B 站封面常返回 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
-        startsWith("http://") -> replaceFirst("http://", "https://")
-        isBlank() -> ""
-        else -> this
-    }
 }
 
 internal fun String.parseDurationToMs(): Long {

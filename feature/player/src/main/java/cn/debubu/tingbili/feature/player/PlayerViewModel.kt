@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
@@ -25,8 +26,11 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val sourceTitle: String? = null,
     val positionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val stepSec: Int = 15,
     val speed: Float = 1f,
     val repeatMode: Int = 0,
     val track: cn.debubu.tingbili.core.data.model.Track? = null,
@@ -40,7 +44,8 @@ data class PlayerUiState(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val player: PlayerManager,
-    private val repo: BiliRepository
+    private val repo: BiliRepository,
+    prefs: PreferencesRepository,
 ) : ViewModel() {
 
     private val subtitleFlow: Flow<List<LyricLine>> = player.state
@@ -58,14 +63,17 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow) { p, lyrics ->
+    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, lyrics, stepSec ->
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
         PlayerUiState(
             isPlaying = p.isPlaying,
             isLoading = p.isLoading,
             errorMessage = p.errorMessage,
+            sourceTitle = p.sourceTitle,
             positionMs = p.positionMs,
+            bufferedPositionMs = p.bufferedPositionMs,
             durationMs = p.durationMs,
+            stepSec = stepSec,
             speed = p.speed,
             repeatMode = p.repeatMode,
             track = p.currentTrack,
@@ -85,6 +93,14 @@ class PlayerViewModel @Inject constructor(
     fun next() = player.next()
 
     fun seekTo(positionMs: Long) = player.seekTo(positionMs)
+
+    fun skipBackward() {
+        viewModelScope.launch { player.seekStep(-1) }
+    }
+
+    fun skipForward() {
+        viewModelScope.launch { player.seekStep(1) }
+    }
 
     /** 点击歌词行跳转到该行时间 */
     fun seekToLyric(line: LyricLine) = player.seekTo(line.timeMs)

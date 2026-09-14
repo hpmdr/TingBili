@@ -3,7 +3,7 @@ package cn.debubu.tingbili.data.bilibili
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
-import cn.debubu.tingbili.data.bilibili.dto.normalizeCover
+import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
@@ -57,8 +57,8 @@ class BiliRepository @Inject constructor(
             val data = dto.data
             // 封面/头像可能是 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
             val normalized = data.copy(
-                pic = data.pic.normalizeCover(),
-                owner = data.owner?.copy(face = data.owner.face.normalizeCover())
+                pic = data.pic.normalizeBiliImageUrl(),
+                owner = data.owner?.copy(face = data.owner.face.normalizeBiliImageUrl())
             )
             Result.Success(normalized)
         }

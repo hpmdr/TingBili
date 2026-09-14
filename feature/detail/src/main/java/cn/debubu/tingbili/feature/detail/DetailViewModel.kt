@@ -72,7 +72,9 @@ class DetailViewModel @Inject constructor(
 
     fun play(tracks: List<Track>, index: Int) {
         if (tracks.isEmpty()) return
-        viewModelScope.launch { player.play(tracks, index) }
+        val sourceTitle = (state.value as? DetailUiState.Success)?.video?.title
+            ?: tracks.getOrNull(index)?.title
+        viewModelScope.launch { player.play(tracks, index, sourceTitle) }
     }
 
     fun consumeMessage() {

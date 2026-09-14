@@ -40,12 +40,12 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
-    testImplementation("app.cash.turbine:turbine:1.1.0")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation(libs.turbine)
+    testImplementation(libs.arch.core.testing)
 }
 
 kotlin {

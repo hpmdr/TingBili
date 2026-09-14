@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,7 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -70,7 +74,7 @@ fun DetailScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -120,13 +124,15 @@ private fun DetailContent(
     onToggleFavorite: () -> Unit,
     onPlayPage: (Int) -> Unit
 ) {
+    val imageFormat = LocalImageFormat.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
     ) {
         item {
             AsyncImage(
-                model = video.pic.takeIf { it.isNotBlank() },
+                model = video.pic.takeIf { it.isNotBlank() }
+                    ?.biliImage(BiliImageVariant.DetailHero, imageFormat),
                 contentDescription = null,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
@@ -146,7 +152,9 @@ private fun DetailContent(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
-                    model = video.owner?.face?.takeIf { it.isNotBlank() },
+                    model = video.owner?.face
+                        ?.takeIf { it.isNotBlank() }
+                        ?.biliImage(BiliImageVariant.Avatar, imageFormat),
                     contentDescription = null,
                     modifier = Modifier.size(36.dp).clip(CircleShape),
                     contentScale = ContentScale.Crop
