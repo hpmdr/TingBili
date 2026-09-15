@@ -1,10 +1,15 @@
 package cn.debubu.tingbili.feature.settings
 
 import android.content.Context
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.NoOpCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.ThemeMode
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +33,7 @@ class SettingsViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
     private lateinit var prefs: PreferencesRepository
+    private lateinit var audioCache: SimpleCache
 
     @Before
     fun setUp() {
@@ -40,35 +46,50 @@ class SettingsViewModelTest {
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
+        audioCache = SimpleCache(
+            File(context.cacheDir, "settings_cache_${System.nanoTime()}"),
+            NoOpCacheEvictor(),
+            StandaloneDatabaseProvider(context)
+        )
     }
 
     @After
     fun tearDown() {
+        audioCache.release()
         Dispatchers.resetMain()
     }
 
     @Test fun `set step persists`() = runTest(dispatcher) {
-        val vm = SettingsViewModel(prefs)
+        val vm = SettingsViewModel(prefs, audioCache)
         vm.setStep(30)
         advanceUntilIdle()
-        assertEquals(30, vm.stepSec.first())
+        assertEquals(30, prefs.stepSec.first())
     }
 
-    @Test fun `set dynamic color persists`() = runTest(dispatcher) {
-        val vm = SettingsViewModel(prefs)
-        vm.setDynamicColor(false)
+    @Test fun `set theme mode persists`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs, audioCache)
+        vm.setThemeMode(ThemeMode.CUSTOM)
         advanceUntilIdle()
-        assertEquals(false, vm.dynamicColor.first())
+        assertEquals(ThemeMode.CUSTOM, prefs.themeMode.first())
     }
 
-    @Test fun `step coerced in 5..60`() = runTest(dispatcher) {
-        val vm = SettingsViewModel(prefs)
+    @Test fun `set custom theme color persists and selects custom mode`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs, audioCache)
+        val customColor = 0xFF00AEEC.toInt()
+        vm.setCustomThemeColor(customColor)
+        advanceUntilIdle()
+        assertEquals(customColor, prefs.customThemeColor.first())
+        assertEquals(ThemeMode.CUSTOM, prefs.themeMode.first())
+    }
+
+    @Test fun `step coerced in range 5 to 60`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs, audioCache)
         vm.setStep(100)
         advanceUntilIdle()
-        assertEquals(60, vm.stepSec.first())
+        assertEquals(60, prefs.stepSec.first())
         vm.setStep(1)
         advanceUntilIdle()
-        assertEquals(5, vm.stepSec.first())
+        assertEquals(5, prefs.stepSec.first())
     }
 }
 

@@ -4,13 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -52,26 +54,30 @@ fun HistoryScreen(
     val list by vm.history.collectAsStateWithLifecycle()
     val info by vm.videoInfo.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = "播放记录 (${list.size})", style = MaterialTheme.typography.titleMedium)
-            if (list.isNotEmpty()) {
-                TextButton(onClick = { vm.clearAll() }) { Text("清空") }
-            }
+    TingBiliScaffold(
+        topBar = {
+            TingBiliTopAppBar(
+                title = "历史记录",
+                subtitle = if (list.isNotEmpty()) "共 ${list.size} 条播放记录" else null,
+                actions = {
+                    if (list.isNotEmpty()) {
+                        TextButton(onClick = { vm.clearAll() }) { Text("清空") }
+                    }
+                }
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-
+    ) { innerPadding ->
         if (list.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("暂无播放记录", color = Color.Gray)
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(list, key = { "${it.bvid}:${it.cid}" }) { item ->

@@ -6,6 +6,7 @@ import androidx.paging.PagingState
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
+import cn.debubu.tingbili.core.data.db.PlaylistSummary
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.media.PlayerHandle
@@ -56,6 +57,7 @@ class HomeViewModelTest {
 
     // --- fakes ---
     class FakeBiliApi : BiliApi {
+        var lastSearchKeyword: String = ""
         var searchResult: List<SearchItem> = listOf(
             SearchItem(bvid = "BV1xx", title = "音乐测试", author = "up1", pic = "https://cover", duration = "3:00"),
             SearchItem(bvid = "BV2yy", title = "音乐测试2", author = "up2", pic = "https://cover2", duration = "4:00")
@@ -68,6 +70,7 @@ class HomeViewModelTest {
             )
         )
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto {
+            lastSearchKeyword = keyword
             // simulate paging: page 1 returns searchResult, page 2+ empty
             val data = if (page == 1) SearchData(result = searchResult, page = page, numResults = searchResult.size, numPages = 1) else SearchData(result = emptyList(), page = page)
             return SearchDto(code = 0, data = data)
@@ -112,6 +115,16 @@ class HomeViewModelTest {
         override suspend fun addTrack(t: PlaylistTrackEntity) { tracks.add(t) }
         override suspend fun getTracks(id: Long): List<PlaylistTrackEntity> = tracks.filter { it.playlistId == id }
         override fun observePlaylists(): Flow<List<PlaylistEntity>> = flowOf(playlists)
+        override fun observePlaylistSummaries(): Flow<List<PlaylistSummary>> = flowOf(
+            playlists.map { playlist ->
+                val playlistTracks = tracks.filter { it.playlistId == playlist.id }
+                PlaylistSummary(
+                    playlist = playlist,
+                    trackCount = playlistTracks.size,
+                    totalDurationMs = playlistTracks.sumOf { it.durationMs }
+                )
+            }
+        )
         override suspend fun getPlaylists(): List<PlaylistEntity> = playlists.toList()
         override suspend fun removeTrack(playlistId: Long, bvid: String, cid: Long) { tracks.removeIf { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid } }
         override suspend fun deletePlaylist(id: Long) { playlists.removeIf { it.id == id } }
@@ -127,6 +140,10 @@ class HomeViewModelTest {
             if (idx >= 0) playlists[idx] = playlists[idx].copy(name = name)
         }
         override suspend fun getPlaylist(id: Long): PlaylistEntity? = playlists.firstOrNull { it.id == id }
+        override suspend fun getPlaylistByBvid(bvid: String): PlaylistEntity? =
+            playlists.firstOrNull { it.sourceBvid == bvid }
+        override fun observePlaylistByBvid(bvid: String): Flow<PlaylistEntity?> =
+            flowOf(playlists.firstOrNull { it.sourceBvid == bvid })
         override suspend fun updateCover(playlistId: Long, cover: String) {
             val idx = playlists.indexOfFirst { it.id == playlistId }
             if (idx >= 0) playlists[idx] = playlists[idx].copy(cover = cover)
@@ -156,16 +173,15 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `search emits paging data`() = runTest(dispatcher) {
+    fun `home exposes recommended paging data`() = runTest(dispatcher) {
         val vm = HomeViewModel(repo, player, playlistDao)
-        vm.onSearch("音乐")
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
     }
 
     @Test
-    fun `BiliPagingSource loads page`() = runTest {
-        val source = BiliPagingSource(repo, "音乐")
+    fun `HomePagingSource loads page`() = runTest {
+        val source = HomePagingSource(repo)
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
         val page = result as PagingSource.LoadResult.Page<Int, Track>
@@ -177,18 +193,15 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `BiliPagingSource blank keyword returns recommended feed`() = runTest {
-        // 空搜不再返回空列表，而是走 DEFAULT_RECOMMEND_KEYWORD 的策展推荐
-        val source = BiliPagingSource(repo, "")
+    fun `HomePagingSource uses recommended keyword`() = runTest {
+        val source = HomePagingSource(repo)
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
-        val page = result as PagingSource.LoadResult.Page<Int, Track>
-        assertEquals(2, page.data.size)
-        assertEquals(2, page.nextKey)
+        assertEquals(HomePagingSource.DEFAULT_RECOMMEND_KEYWORD, fakeApi.lastSearchKeyword)
     }
 
     @Test
-    fun `BiliPagingSource error propagates`() = runTest {
+    fun `HomePagingSource error propagates`() = runTest {
         val errorApi = object : BiliApi {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = throw RuntimeException("network error")
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
@@ -196,7 +209,7 @@ class HomeViewModelTest {
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         }
         val errRepo = BiliRepository(errorApi)
-        val source = BiliPagingSource(errRepo, "音乐")
+        val source = HomePagingSource(errRepo)
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Error)
     }
@@ -227,7 +240,7 @@ class HomeViewModelTest {
 
     @Test
     fun `getRefreshKey returns correctly`() = runTest {
-        val source = BiliPagingSource(repo, "音乐")
+        val source = HomePagingSource(repo)
         val state = PagingState<Int, Track>(
             pages = listOf(
                 PagingSource.LoadResult.Page(data = listOf(Track("BV1", 1, "t", "a", "", 0, null)), prevKey = null, nextKey = 2)

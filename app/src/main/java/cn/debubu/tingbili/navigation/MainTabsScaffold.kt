@@ -6,16 +6,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,6 +51,30 @@ fun MainTabsScaffold(
     val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
     val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
     val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
+    val selectedColor = MaterialTheme.colorScheme.primary
+    val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val itemColors = NavigationSuiteDefaults.itemColors(
+        navigationBarItemColors = NavigationBarItemDefaults.colors(
+            selectedIconColor = selectedColor,
+            selectedTextColor = selectedColor,
+            indicatorColor = selectedColor.copy(alpha = 0.14f),
+            unselectedIconColor = unselectedColor,
+            unselectedTextColor = unselectedColor
+        ),
+        navigationRailItemColors = NavigationRailItemDefaults.colors(
+            selectedIconColor = selectedColor,
+            selectedTextColor = selectedColor,
+            indicatorColor = selectedColor.copy(alpha = 0.14f),
+            unselectedIconColor = unselectedColor,
+            unselectedTextColor = unselectedColor
+        ),
+        navigationDrawerItemColors = NavigationDrawerItemDefaults.colors(
+            selectedIconColor = selectedColor,
+            selectedTextColor = selectedColor,
+            unselectedIconColor = unselectedColor,
+            unselectedTextColor = unselectedColor
+        )
+    )
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
         Scaffold(
@@ -60,7 +93,13 @@ fun MainTabsScaffold(
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                         }
                     },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    icon = {
+                        Icon(
+                            imageVector = if (isHomeSelected) Icons.Filled.Home else Icons.Outlined.Home,
+                            contentDescription = null
+                        )
+                    },
+                    colors = itemColors,
                     label = { Text("首页") }
                 )
                 item(
@@ -71,7 +110,13 @@ fun MainTabsScaffold(
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                         }
                     },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    icon = {
+                        Icon(
+                            imageVector = if (isPlaylistSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
+                            contentDescription = null
+                        )
+                    },
+                    colors = itemColors,
                     label = { Text("收藏") }
                 )
                 item(
@@ -82,7 +127,13 @@ fun MainTabsScaffold(
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                         }
                     },
-                    icon = { Icon(Icons.Default.History, contentDescription = null) },
+                    icon = {
+                        Icon(
+                            imageVector = if (isHistorySelected) Icons.Filled.History else Icons.Outlined.History,
+                            contentDescription = null
+                        )
+                    },
+                    colors = itemColors,
                     label = { Text("历史") }
                 )
                 item(
@@ -93,7 +144,13 @@ fun MainTabsScaffold(
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                         }
                     },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    icon = {
+                        Icon(
+                            imageVector = if (isSettingsSelected) Icons.Filled.Settings else Icons.Outlined.Settings,
+                            contentDescription = null
+                        )
+                    },
+                    colors = itemColors,
                     label = { Text("设置") }
                 )
             },

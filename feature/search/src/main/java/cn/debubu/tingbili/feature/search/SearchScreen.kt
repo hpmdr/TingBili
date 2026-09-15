@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -32,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -68,7 +69,7 @@ fun SearchScreen(
     vm: SearchViewModel = hiltViewModel()
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
-    val kw by vm.keyword.collectAsState()
+    val kw by vm.keyword.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf(kw) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -100,6 +101,13 @@ fun SearchScreen(
                 placeholder = { Text("搜索 B站视频 / 关键词") },
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 singleLine = true,
+                trailingIcon = {
+                    if (input.isNotEmpty()) {
+                        IconButton(onClick = { input = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "清空")
+                        }
+                    }
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { triggerSearch() })
             )
@@ -113,6 +121,7 @@ fun SearchScreen(
         }
         SearchResultList(
             paging = paging,
+            showEmptyHint = kw.isBlank(),
             onTrackClick = { onTrackToDetail(it.bvid) }
         )
     }
@@ -121,6 +130,7 @@ fun SearchScreen(
 @Composable
 private fun SearchResultList(
     paging: LazyPagingItems<Track>,
+    showEmptyHint: Boolean,
     onTrackClick: (Track) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -130,22 +140,77 @@ private fun SearchResultList(
                 SearchRow(track = track, onClick = { onTrackClick(track) })
             }
         }
-        paging.apply {
-            when {
-                loadState.refresh is LoadState.Loading && paging.itemCount == 0 -> {
-                    if (loadState.refresh is LoadState.Loading) {
-                        item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-                    }
-                }
-                loadState.append is LoadState.Loading -> {
-                    item { Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) } }
-                }
-                loadState.refresh is LoadState.Error -> {
-                    val e = (loadState.refresh as LoadState.Error).error
-                    item { Text("加载失败: ${e.message}", modifier = Modifier.padding(16.dp)) }
-                }
+        item {
+            SearchFooter(
+                paging = paging,
+                showEmptyHint = showEmptyHint
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchFooter(
+    paging: LazyPagingItems<Track>,
+    showEmptyHint: Boolean
+) {
+    val refreshState = paging.loadState.refresh
+    val appendState = paging.loadState.append
+
+    when {
+        refreshState is LoadState.Loading && paging.itemCount == 0 -> {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
         }
+        appendState is LoadState.Loading -> {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(Modifier.size(24.dp))
+            }
+        }
+        refreshState is LoadState.Error -> {
+            SearchError(
+                message = refreshState.error.message,
+                onRetry = { paging.retry() }
+            )
+        }
+        appendState is LoadState.Error -> {
+            SearchError(
+                message = appendState.error.message,
+                onRetry = { paging.retry() }
+            )
+        }
+        refreshState is LoadState.NotLoading && paging.itemCount == 0 -> {
+            Text(
+                text = if (showEmptyHint) "输入关键词搜索 B站视频" else "没有找到相关视频",
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchError(
+    message: String?,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "加载失败：${message ?: "请稍后重试"}",
+            color = MaterialTheme.colorScheme.error
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onRetry) { Text("重试") }
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,7 +24,12 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         prefs[TIMER_PRESETS]?.split(",")?.mapNotNull { it.toIntOrNull() }?.toSet() ?: setOf(15, 30, 60, 90)
     }
 
-    val dynamicColor: Flow<Boolean> = ds.data.map { it[DYNAMIC_COLOR] ?: true }
+    val themeMode: Flow<ThemeMode> = ds.data.map { prefs ->
+        prefs[THEME_MODE]?.let(ThemeMode::fromKey)
+            ?: if (prefs[DYNAMIC_COLOR] == true) ThemeMode.SYSTEM else ThemeMode.DEFAULT
+    }
+    val customThemeColor: Flow<Int> = ds.data.map { it[CUSTOM_THEME_COLOR] ?: DEFAULT_THEME_COLOR }
+    val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
 
     // 上次播放恢复：队列（JSON）+ 下标 + 进度
@@ -57,7 +63,18 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
 
     suspend fun setDynamicColor(v: Boolean) {
-        ds.edit { it[DYNAMIC_COLOR] = v }
+        setThemeMode(if (v) ThemeMode.SYSTEM else ThemeMode.DEFAULT)
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        ds.edit { it[THEME_MODE] = mode.key }
+    }
+
+    suspend fun setCustomThemeColor(color: Int) {
+        ds.edit {
+            it[CUSTOM_THEME_COLOR] = color
+            it[THEME_MODE] = ThemeMode.CUSTOM.key
+        }
     }
 
     suspend fun setImageFormat(v: ImageFormat) {
@@ -104,6 +121,9 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val SPEED = floatPreferencesKey("speed")
         val TIMER_PRESETS = stringPreferencesKey("timer_presets")
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")
+        val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
         val LAST_QUEUE_JSON = stringPreferencesKey("last_queue_json")
         val LAST_INDEX = intPreferencesKey("last_index")

@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.core.data.db
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -31,6 +32,12 @@ data class PlaylistTrackEntity(
     val author: String = "",
     val cover: String = "",
     val durationMs: Long = 0L
+)
+
+data class PlaylistSummary(
+    @Embedded val playlist: PlaylistEntity,
+    val trackCount: Int,
+    val totalDurationMs: Long
 )
 
 @Dao
@@ -67,6 +74,19 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM PlaylistEntity ORDER BY createdAt DESC")
     fun observePlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query(
+        """
+        SELECT p.*,
+               COUNT(t.bvid) AS trackCount,
+               COALESCE(SUM(t.durationMs), 0) AS totalDurationMs
+        FROM PlaylistEntity p
+        LEFT JOIN PlaylistTrackEntity t ON t.playlistId = p.id
+        GROUP BY p.id
+        ORDER BY p.createdAt DESC
+        """
+    )
+    fun observePlaylistSummaries(): Flow<List<PlaylistSummary>>
 
     @Query("SELECT * FROM PlaylistEntity ORDER BY createdAt DESC")
     suspend fun getPlaylists(): List<PlaylistEntity>

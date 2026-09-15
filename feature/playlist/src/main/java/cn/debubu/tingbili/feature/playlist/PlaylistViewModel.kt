@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
+import cn.debubu.tingbili.core.data.db.PlaylistSummary
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -32,8 +33,8 @@ class PlaylistViewModel @Inject constructor(
     private val player: PlayerManager
 ) : ViewModel() {
 
-    val playlists: StateFlow<List<PlaylistEntity>> =
-        dao.observePlaylists().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val playlists: StateFlow<List<PlaylistSummary>> =
+        dao.observePlaylistSummaries().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _selectedPlaylistId = MutableStateFlow<Long?>(null)
     val selectedPlaylistId: StateFlow<Long?> = _selectedPlaylistId.asStateFlow()

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,12 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
-    val dynamicColor: StateFlow<Boolean> = prefs.dynamicColor.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val themeMode: StateFlow<ThemeMode> = prefs.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DEFAULT)
+    val customThemeColor: StateFlow<Int> = prefs.customThemeColor.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        PreferencesRepository.DEFAULT_THEME_COLOR
+    )
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF)
     val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90))
 
@@ -53,8 +59,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setStep(v.coerceIn(5, 60)) }
     }
 
-    fun setDynamicColor(v: Boolean) {
-        viewModelScope.launch { prefs.setDynamicColor(v) }
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { prefs.setThemeMode(mode) }
+    }
+
+    fun setCustomThemeColor(color: Int) {
+        viewModelScope.launch { prefs.setCustomThemeColor(color) }
     }
 
     fun setImageFormat(v: ImageFormat) {

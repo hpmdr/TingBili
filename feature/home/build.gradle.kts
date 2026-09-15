@@ -22,6 +22,20 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.maxHeapSize = "2048m"
+                it.jvmArgs(
+                    "-Xmx2048m",
+                    "-XX:MaxMetaspaceSize=512m",
+                    "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED"
+                )
+            }
+        }
+    }
 }
 
 dependencies {
@@ -33,6 +47,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.material.icons.extended)
     implementation(libs.navigation.compose)
     implementation(libs.paging.compose)
     implementation("androidx.paging:paging-runtime:${libs.versions.paging.get()}")

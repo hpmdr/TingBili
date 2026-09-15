@@ -16,9 +16,10 @@
 - 本地自建歌单（增删改排序、拖拽、去重 bvid+cid）、多P合集一键成辑（BV → List<Track>）、长视频断点续播
 - 播放进度记忆（bvid+cid，节流1s写入 Room history）
 - 字幕逐行滚动高亮（投稿优先 > AI），点击跳转
+- 主题色支持跟随系统动态取色、默认 B 站粉 `#FF6699` 和自定义 HSV 颜色
 
 ## 导航
-底部 4 Tab `首页(发现/搜索) | 歌单 | 历史 | 设置` + **底部居中圆形 mini 播放器**（圆环进度 + 封面旋转），自适应手机 `NavigationBar` / 平板 `NavigationRail` (`NavigationSuiteScaffold`)
+底部 4 Tab `首页(发现) | 歌单 | 历史 | 设置` + **底部居中圆形 mini 播放器**（圆环进度 + 封面旋转），自适应手机 `NavigationBar` / 平板 `NavigationRail` (`NavigationSuiteScaffold`)。主页面使用统一 `TopAppBar`；首页顶部搜索入口进入全屏搜索页，发现流使用自适应网格，搜索结果使用列表；收藏卡片展示集数、总时长、类型和日期。
 
 ## 快速开始
 ```bash
@@ -43,7 +44,8 @@ core:ui (TingBiliTheme)
 core:data (Room playlists/history + DataStore prefs + Result)
 core:media (ExoPlayer audio-only + MediaSession + PlayerManager + Timer)
 data:bilibili (search/view/playurl/subtitle, Wbi stub, visitor)
-feature:home (Paging3 search + BV bottomSheet)
+feature:home (Paging3 策展发现 + 自适应网格)
+feature:search (Paging3 搜索 + 结果列表)
 feature:playlist (CRUD + dedup + reorder + playAll)
 feature:history (history flow + resume)
 feature:player (LyricState + SubtitleParser + full-screen)

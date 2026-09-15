@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,6 +57,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
+import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -87,40 +88,40 @@ fun PlaylistDetailScreen(
         }
     }
 
-    if (playlist == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.CircularProgressIndicator()
-        }
-        return
-    }
-
-    val pl = playlist!!
-
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().background(MaterialTheme.colorScheme.background)) {
-        // 顶部栏：返回 + 标题 + 更多
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(
-                text = pl.name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+    TingBiliScaffold(
+        topBar = {
+            TingBiliTopAppBar(
+                title = playlist?.name ?: "收藏详情",
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    if (playlist != null) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                            }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(text = { Text("重命名") }, onClick = { showMenu = false; showRename = true })
+                                DropdownMenuItem(text = { Text("删除收藏") }, onClick = { showMenu = false; viewModel.deletePlaylist(onBack) })
+                            }
+                        }
+                    }
+                }
             )
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "更多")
-                }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("重命名") }, onClick = { showMenu = false; showRename = true })
-                    DropdownMenuItem(text = { Text("删除收藏") }, onClick = { showMenu = false; viewModel.deletePlaylist(onBack) })
-                }
+        }
+    ) { innerPadding ->
+        val pl = playlist
+        if (pl == null) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.CircularProgressIndicator()
             }
+            return@TingBiliScaffold
         }
 
         if (showRename) {
@@ -131,7 +132,13 @@ fun PlaylistDetailScreen(
             )
         }
 
-        LazyColumn(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -292,6 +299,7 @@ fun PlaylistDetailScreen(
                         onDelete = { viewModel.remove(entity) }
                     )
                 }
+            }
             }
         }
     }

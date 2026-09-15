@@ -4,6 +4,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
+import cn.debubu.tingbili.core.data.db.PlaylistSummary
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
@@ -73,6 +74,16 @@ class PlaylistViewModelTest {
             tracks.filter { it.playlistId == id }.sortedBy { it.order }
 
         override fun observePlaylists(): Flow<List<PlaylistEntity>> = playlistsFlow
+        override fun observePlaylistSummaries(): Flow<List<PlaylistSummary>> = flowOf(
+            playlists.map { playlist ->
+                val playlistTracks = tracks.filter { it.playlistId == playlist.id }
+                PlaylistSummary(
+                    playlist = playlist,
+                    trackCount = playlistTracks.size,
+                    totalDurationMs = playlistTracks.sumOf { it.durationMs }
+                )
+            }
+        )
 
         override suspend fun getPlaylists(): List<PlaylistEntity> = playlists.toList()
 
@@ -107,6 +118,10 @@ class PlaylistViewModelTest {
             }
         }
         override suspend fun getPlaylist(id: Long): PlaylistEntity? = playlists.firstOrNull { it.id == id }
+        override suspend fun getPlaylistByBvid(bvid: String): PlaylistEntity? =
+            playlists.firstOrNull { it.sourceBvid == bvid }
+        override fun observePlaylistByBvid(bvid: String): Flow<PlaylistEntity?> =
+            flowOf(playlists.firstOrNull { it.sourceBvid == bvid })
 
         override suspend fun updateCover(playlistId: Long, cover: String) {
             val idx = playlists.indexOfFirst { it.id == playlistId }

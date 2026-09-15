@@ -93,12 +93,18 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         setContent {
-            TingBiliTheme {
+            val mainViewModel: MainViewModel = hiltViewModel()
+            val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
+            val customThemeColor by mainViewModel.customThemeColor.collectAsStateWithLifecycle()
+            TingBiliTheme(
+                themeMode = themeMode,
+                customThemeColorArgb = customThemeColor
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AdaptiveMainScaffold()
+                    AdaptiveMainScaffold(mainViewModel)
                 }
             }
         }
@@ -106,26 +112,25 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AdaptiveMainScaffold() {
+private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
-    val mainViewModel: MainViewModel = hiltViewModel()
     val imageFormat by mainViewModel.imageFormat.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
     val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptiveInfo)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
+    val inMainTabs = destination?.hierarchy?.any {
+        it.hasRoute(cn.debubu.tingbili.navigation.HomeRoute::class) ||
+        it.hasRoute(cn.debubu.tingbili.navigation.PlaylistRoute::class) ||
+        it.hasRoute(cn.debubu.tingbili.navigation.HistoryRoute::class) ||
+        it.hasRoute(cn.debubu.tingbili.navigation.SettingsRoute::class) ||
+        it.hasRoute(MainTabsRoute::class)
+    } ?: true
 
     CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：主页 Tab 带底栏 + 圆形 mini；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
-        val inTabs = destination?.hierarchy?.any {
-            it.hasRoute(cn.debubu.tingbili.navigation.HomeRoute::class) ||
-            it.hasRoute(cn.debubu.tingbili.navigation.PlaylistRoute::class) ||
-            it.hasRoute(cn.debubu.tingbili.navigation.HistoryRoute::class) ||
-            it.hasRoute(cn.debubu.tingbili.navigation.SettingsRoute::class) ||
-            it.hasRoute(MainTabsRoute::class)
-        } ?: true
-        if (inTabs) {
+        if (inMainTabs) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = { BottomNavWithCenterPlayer(navController) }
@@ -147,7 +152,11 @@ private fun AdaptiveMainScaffold() {
         }
     } else {
         // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
-        cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController)
+        if (inMainTabs) {
+            cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController)
+        } else {
+            AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
+        }
     }
     }
 }

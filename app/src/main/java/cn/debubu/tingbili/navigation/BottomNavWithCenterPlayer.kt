@@ -3,12 +3,18 @@ package cn.debubu.tingbili.navigation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +30,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.media.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -39,6 +46,16 @@ class MainViewModel @Inject constructor(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ImageFormat.AVIF,
+    )
+    val themeMode = prefs.themeMode.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = ThemeMode.DEFAULT,
+    )
+    val customThemeColor = prefs.customThemeColor.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = PreferencesRepository.DEFAULT_THEME_COLOR,
     )
 }
 
@@ -65,6 +82,13 @@ fun BottomNavWithCenterPlayer(
     val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
     val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
     val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
+    val itemColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     NavigationBar {
         NavigationBarItem(
@@ -78,7 +102,13 @@ fun BottomNavWithCenterPlayer(
                     }
                 }
             },
-            icon = { Icon(Icons.Default.Home, contentDescription = null) },
+            icon = {
+                Icon(
+                    imageVector = if (isHomeSelected) Icons.Filled.Home else Icons.Outlined.Home,
+                    contentDescription = null
+                )
+            },
+            colors = itemColors,
             label = { Text("首页") }
         )
         NavigationBarItem(
@@ -92,7 +122,13 @@ fun BottomNavWithCenterPlayer(
                     }
                 }
             },
-            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+            icon = {
+                Icon(
+                    imageVector = if (isPlaylistSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
+                    contentDescription = null
+                )
+            },
+            colors = itemColors,
             label = { Text("收藏") }
         )
         Box(
@@ -122,7 +158,13 @@ fun BottomNavWithCenterPlayer(
                     }
                 }
             },
-            icon = { Icon(Icons.Default.History, contentDescription = null) },
+            icon = {
+                Icon(
+                    imageVector = if (isHistorySelected) Icons.Filled.History else Icons.Outlined.History,
+                    contentDescription = null
+                )
+            },
+            colors = itemColors,
             label = { Text("历史") }
         )
         NavigationBarItem(
@@ -136,7 +178,13 @@ fun BottomNavWithCenterPlayer(
                     }
                 }
             },
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            icon = {
+                Icon(
+                    imageVector = if (isSettingsSelected) Icons.Filled.Settings else Icons.Outlined.Settings,
+                    contentDescription = null
+                )
+            },
+            colors = itemColors,
             label = { Text("设置") }
         )
     }

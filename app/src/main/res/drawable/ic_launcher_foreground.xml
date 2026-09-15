@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <group
+        android:pivotX="100"
+        android:pivotY="100"
+        android:scaleX="0.76"
+        android:scaleY="0.76">
+
+        <!-- 哔哩天线 -->
+        <path
+            android:pathData="M70,65 L50,40 M130,65 L150,40"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="12"
+            android:strokeLineCap="round" />
+
+        <!-- 耳机头梁 -->
+        <path
+            android:pathData="M45,105 A60,60 0 0 1 155,105"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="12"
+            android:strokeLineCap="round" />
+
+        <!-- 小电视主体 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M62,65 H138 A20,20 0 0 1 158,85 V130 A20,20 0 0 1 138,150 H62 A20,20 0 0 1 42,130 V85 A20,20 0 0 1 62,65 Z" />
+
+        <!-- 电视屏幕内凹 -->
+        <path
+            android:fillColor="#FFFF6699"
+            android:pathData="M63,72 H137 A14,14 0 0 1 151,86 V129 A14,14 0 0 1 137,143 H63 A14,14 0 0 1 49,129 V86 A14,14 0 0 1 63,72 Z" />
+
+        <!-- 左眼、右眼 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M75,94 A6,6 0 1 0 75,106 A6,6 0 1 0 75,94 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M125,94 A6,6 0 1 0 125,106 A6,6 0 1 0 125,94 Z" />
+
+        <!-- 微笑波波口 -->
+        <path
+            android:pathData="M88,112 Q100,124 112,112"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
+
+        <!-- 左右耳机罩 -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M35,85 A10,10 0 0 1 45,95 V120 A10,10 0 0 1 35,130 A10,10 0 0 1 25,120 V95 A10,10 0 0 1 35,85 Z" />
+        <path
+            android:fillColor="#FFE2E8F0"
+            android:fillAlpha="0.8"
+            android:pathData="M32,92 A3,3 0 0 1 35,95 V120 A3,3 0 0 1 32,123 A3,3 0 0 1 29,120 V95 A3,3 0 0 1 32,92 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M165,85 A10,10 0 0 1 175,95 V120 A10,10 0 0 1 165,130 A10,10 0 0 1 155,120 V95 A10,10 0 0 1 165,85 Z" />
+        <path
+            android:fillColor="#FFE2E8F0"
+            android:fillAlpha="0.8"
+            android:pathData="M168,92 A3,3 0 0 1 171,95 V120 A3,3 0 0 1 168,123 A3,3 0 0 1 165,120 V95 A3,3 0 0 1 168,92 Z" />
+
+        <!-- 动态声波 -->
+        <path
+            android:pathData="M68,128 L68,132 M84,125 L84,135 M100,122 L100,137 M116,125 L116,135 M132,128 L132,132"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeAlpha="0.9" />
+    </group>
+</vector>

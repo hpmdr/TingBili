@@ -45,6 +45,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:${libs.versions.lifecycle.get()}")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
     implementation(libs.hilt.navigation.compose)
+
+    testImplementation(libs.junit)
 }
 
 kotlin {

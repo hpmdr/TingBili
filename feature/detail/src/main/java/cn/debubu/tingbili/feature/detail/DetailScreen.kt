@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +46,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -74,42 +75,46 @@ fun DetailScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-            }
+    TingBiliScaffold(
+        topBar = {
+            TingBiliTopAppBar(
+                title = "视频详情",
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                }
+            )
         }
-
-        when (val s = state) {
-            is DetailUiState.Loading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            when (val s = state) {
+                is DetailUiState.Loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-            }
-            is DetailUiState.Error -> {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text("加载失败：${s.message}", color = Color.Gray)
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = { viewModel.load() }) { Text("重试") }
+                is DetailUiState.Error -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("加载失败：${s.message}", color = Color.Gray)
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = { viewModel.load() }) { Text("重试") }
+                    }
                 }
-            }
-            is DetailUiState.Success -> {
-                DetailContent(
-                    video = s.video,
-                    tracks = s.tracks,
-                    isFavorited = isFavorited,
-                    onPlayAll = { viewModel.play(s.tracks, 0); onPlayNavigate() },
-                    onToggleFavorite = { viewModel.toggleFavorite() },
-                    onPlayPage = { idx -> viewModel.play(s.tracks, idx); onPlayNavigate() }
-                )
+                is DetailUiState.Success -> {
+                    DetailContent(
+                        video = s.video,
+                        tracks = s.tracks,
+                        isFavorited = isFavorited,
+                        onPlayAll = { viewModel.play(s.tracks, 0); onPlayNavigate() },
+                        onToggleFavorite = { viewModel.toggleFavorite() },
+                        onPlayPage = { idx -> viewModel.play(s.tracks, idx); onPlayNavigate() }
+                    )
+                }
             }
         }
     }

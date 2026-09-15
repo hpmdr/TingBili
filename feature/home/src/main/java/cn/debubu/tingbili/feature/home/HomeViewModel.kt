@@ -15,13 +15,11 @@ import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -32,18 +30,15 @@ class HomeViewModel @Inject constructor(
     private val playlistDao: PlaylistDao
 ) : ViewModel() {
 
-    private val _keyword = MutableStateFlow("")
-    val keyword: StateFlow<String> = _keyword.asStateFlow()
-
     // 热流：cachedIn 保证翻页复用，stateIn 保证切 Tab 回来时新收集器首帧即拿到上一份 PagingData，
     // 避免每次 collectAsLazyPagingItems() 重建收集器就重走网络。WhileSubscribed(5000) 仅在无人收集 5s 后才上游停掉，
     // 符合“常驻、仅内存紧张时释放”的预期。
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val pagingFlow: Flow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
+    val pagingFlow: Flow<PagingData<Track>> =
         Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-            BiliPagingSource(repo, kw)
-        }.flow.cachedIn(viewModelScope)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
+            HomePagingSource(repo)
+        }.flow
+            .cachedIn(viewModelScope)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
 
     // BV multi-P bottomSheet state
     private val _selectedBvid = MutableStateFlow<String?>(null)
@@ -60,13 +55,6 @@ class HomeViewModel @Inject constructor(
 
     private val _bvError = MutableStateFlow<String?>(null)
     val bvError: StateFlow<String?> = _bvError.asStateFlow()
-
-    fun onSearch(kw: String) {
-        _keyword.value = kw
-    }
-
-    /** Alias per brief: search(keyword) triggers paging */
-    fun search(keyword: String) = onSearch(keyword)
 
     fun onTrackClick(track: Track, bvMulti: Boolean = false) {
         if (bvMulti) {
