@@ -28,11 +28,7 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.maxHeapSize = "2048m"
-                it.jvmArgs(
-                    "-Xmx2048m",
-                    "-XX:MaxMetaspaceSize=512m",
-                    "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED"
-                )
+                it.jvmArgs("-Xmx2048m", "-XX:MaxMetaspaceSize=512m")
             }
         }
     }

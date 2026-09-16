@@ -16,3 +16,12 @@ allprojects {
         }
     }
 }
+
+// Robolectric 在 JDK 25 上读 FileDescriptor 需要 jdk.internal.access；AGP 默认只给 java.base/java.io，
+// 缺这一项时所有 Robolectric 用例都会在 setUpApplicationState 抛
+// "Failed to interact with raw FileDescriptor internals"。统一在根脚本加，新模块不用各自记得。
+allprojects {
+    tasks.withType<Test>().configureEach {
+        jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+    }
+}
