@@ -100,8 +100,7 @@ class HomeViewModel @Inject constructor(
 
     fun playTracks(tracks: List<Track>, index: Int = 0) {
         if (tracks.isEmpty()) return
-        val sourceTitle = tracks.getOrNull(index)?.title ?: "播放列表"
-        viewModelScope.launch { player.play(tracks, index, sourceTitle) }
+        viewModelScope.launch { player.play(tracks, index) }
     }
 
     fun playSingle(track: Track) = playTracks(listOf(track), 0)
@@ -116,7 +115,9 @@ class HomeViewModel @Inject constructor(
                 order = 0,
                 author = track.author,
                 cover = track.cover,
-                durationMs = track.durationMs
+                durationMs = track.durationMs,
+                videoTitle = track.videoTitle,
+                pageIndex = track.pageIndex
             )
         )
     }
@@ -132,7 +133,9 @@ class HomeViewModel @Inject constructor(
                     order = 0,
                     author = t.author,
                     cover = t.cover,
-                    durationMs = t.durationMs
+                    durationMs = t.durationMs,
+                    videoTitle = t.videoTitle,
+                    pageIndex = t.pageIndex
                 )
             )
         }

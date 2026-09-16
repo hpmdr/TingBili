@@ -93,7 +93,9 @@ fun ViewData.toTracks(): List<Track> {
                 cover = pic.normalizeBiliImageUrl(),
                 durationMs = duration * 1000L,
                 subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
-                pageCount = 1
+                pageCount = 1,
+                videoTitle = title,
+                pageIndex = 1
             )
         )
     }
@@ -111,7 +113,9 @@ fun ViewData.toTracks(): List<Track> {
             cover = cover,
             durationMs = page.duration * 1000L,
             subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
-            pageCount = pages.size
+            pageCount = pages.size,
+            videoTitle = mainTitle,
+            pageIndex = page.page.takeIf { it > 0 }
         )
     }
 }

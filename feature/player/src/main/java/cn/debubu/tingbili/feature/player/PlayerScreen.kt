@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -64,9 +66,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.chapterLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -79,9 +83,8 @@ fun PlayerScreen(
     val imageFormat = LocalImageFormat.current
     val s by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val sourceTitle = s.sourceTitle?.takeIf { it.isNotBlank() }
-        ?: s.track?.title
-        ?: "未播放"
+    // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
+    val headerTitle = playerHeaderTitle(s.track)
 
     LaunchedEffect(s.currentLyricIndex) {
         if (s.currentLyricIndex >= 0) {
@@ -98,7 +101,7 @@ fun PlayerScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PlayerTopBar(
-            title = sourceTitle,
+            title = headerTitle,
             speed = s.speed,
             onSpeedClick = vm::cycleSpeed,
             speedEnabled = !s.isLoading,
@@ -124,7 +127,7 @@ fun PlayerScreen(
         Spacer(Modifier.height(20.dp))
 
         Text(
-            text = s.track?.title ?: "未播放",
+            text = chapterLabel(s.track?.title, s.track?.pageIndex, s.track?.pageCount ?: 1),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
@@ -175,30 +178,19 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (s.lyrics.isEmpty()) {
-                item {
-                    Text(
-                        text = "暂无字幕",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    )
-                }
-            } else {
-                itemsIndexed(s.lyrics) { idx, line ->
-                    val isCurrent = idx == s.currentLyricIndex
-                    Text(
-                        text = line.text,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !s.isLoading) { vm.seekToLyric(line) }
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
+            itemsIndexed(s.lyrics) { idx, line ->
+                val isCurrent = idx == s.currentLyricIndex
+                Text(
+                    text = line.text,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !s.isLoading) { vm.seekToLyric(line) }
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
         }
 
@@ -309,7 +301,7 @@ private fun PlayerTopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp),
+            .heightIn(min = 56.dp),
     ) {
         IconButton(
             onClick = onBack,
@@ -321,26 +313,24 @@ private fun PlayerTopBar(
             )
         }
 
-        Column(
+        Text(
+            text = title,
+            color = MaterialTheme.colorScheme.onSurface,
+            // 长标题自适应：14sp~22sp 逐档缩放，最多两行，仍放不下才省略
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = 14.sp,
+                maxFontSize = 22.sp,
+                stepSize = 1.sp,
+            ),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(horizontal = 72.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = "正在播放",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-        }
+                .fillMaxWidth()
+                .padding(horizontal = 64.dp, vertical = 6.dp),
+        )
 
         TextButton(
             onClick = onSpeedClick,

@@ -34,7 +34,12 @@ object AppDataModule {
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): TingBiliDatabase =
         Room.databaseBuilder(ctx, TingBiliDatabase::class.java, "tingbili.db")
-            .addMigrations(TingBiliDatabase.MIGRATION_1_2, TingBiliDatabase.MIGRATION_2_3)
+            .addMigrations(
+                TingBiliDatabase.MIGRATION_1_2,
+                TingBiliDatabase.MIGRATION_2_3,
+                TingBiliDatabase.MIGRATION_3_4,
+                TingBiliDatabase.MIGRATION_4_5
+            )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

@@ -140,8 +140,7 @@ class PlayerManager @Inject constructor(
                     queue = tracks,
                     currentIndex = safeIndex,
                     currentTrack = tracks.getOrNull(safeIndex),
-                    sourceTitle = sourceTitle?.takeIf { title -> title.isNotBlank() }
-                        ?: tracks.getOrNull(safeIndex)?.title,
+                    sourceTitle = sourceTitle?.takeIf { title -> title.isNotBlank() },
                     isPlaying = false,
                 )
             }
@@ -178,7 +177,6 @@ class PlayerManager @Inject constructor(
 
             // 持久化队列与起点进度，供下次冷启动恢复
             val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
-                ?: playableTracks.getOrNull(startIndex)?.title
             effectiveScope().launch {
                 prefs.setLastPlayback(playableTracks, startIndex, resolvedStartPosition, resolvedSourceTitle)
             }

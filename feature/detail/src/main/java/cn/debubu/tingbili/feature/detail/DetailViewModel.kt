@@ -72,9 +72,7 @@ class DetailViewModel @Inject constructor(
 
     fun play(tracks: List<Track>, index: Int) {
         if (tracks.isEmpty()) return
-        val sourceTitle = (state.value as? DetailUiState.Success)?.video?.title
-            ?: tracks.getOrNull(index)?.title
-        viewModelScope.launch { player.play(tracks, index, sourceTitle) }
+        viewModelScope.launch { player.play(tracks, index) }
     }
 
     fun consumeMessage() {
@@ -115,7 +113,9 @@ class DetailViewModel @Inject constructor(
                             order = order++,
                             author = t.author,
                             cover = t.cover,
-                            durationMs = t.durationMs
+                            durationMs = t.durationMs,
+                            videoTitle = t.videoTitle,
+                            pageIndex = t.pageIndex
                         )
                     )
                 }

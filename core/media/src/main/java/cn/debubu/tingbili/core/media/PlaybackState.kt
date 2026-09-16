@@ -10,7 +10,10 @@ data class PlaybackState(
     val currentTrack: Track? = null,
     val queue: List<Track> = emptyList(),
     val currentIndex: Int = -1,
-    /** 当前播放来源名称，例如收藏夹名、视频标题或“播放历史”。 */
+    /**
+     * 当前播放队列的来源名称，例如听单名、收藏或“播放历史”。
+     * 单条播放（首页/搜索/详情直接播）没有来源时为 null；曲名用 [Track.videoTitle] 表达。
+     */
     val sourceTitle: String? = null,
     val positionMs: Long = 0L,
     /** 当前音源已缓存/已缓冲到的位置，用于播放页进度条底层展示。 */

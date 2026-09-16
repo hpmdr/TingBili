@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.db.PlaylistSummary
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.playedProgressLabel
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
@@ -147,6 +148,16 @@ private fun PlaylistCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                summary.lastPlayedPositionMs?.let { positionMs ->
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "上次听到 " + playedProgressLabel(summary.lastPlayedPageIndex, positionMs),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = formatPlaylistMeta(playlist.sourceBvid, playlist.createdAt),

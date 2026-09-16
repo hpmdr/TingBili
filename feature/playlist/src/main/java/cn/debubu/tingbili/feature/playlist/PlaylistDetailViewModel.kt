@@ -3,16 +3,21 @@ package cn.debubu.tingbili.feature.playlist
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.media.PlayerManager
+import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -24,6 +29,8 @@ import kotlinx.coroutines.launch
 class PlaylistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val dao: PlaylistDao,
+    private val historyDao: HistoryDao,
+    private val repo: BiliRepository,
     private val player: PlayerManager
 ) : ViewModel() {
 
@@ -35,8 +42,47 @@ class PlaylistDetailViewModel @Inject constructor(
     val tracks: StateFlow<List<PlaylistTrackEntity>> =
         dao.observeTracks(playlistId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** "bvid:cid" -> 该集的播放记录，用于列表显示“上次听到 P{n} · 时间” */
+    val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeAll()
+        .map { list -> list.associateBy { "${it.bvid}:${it.cid}" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    init {
+        viewModelScope.launch { backfillMissingTrackMeta() }
+    }
+
+    /**
+     * videoTitle / pageIndex 是后加的列，老收藏里为空。打开详情时按 BV 拉一次 view 接口补齐，
+     * 这样列表能显示 P 号、从收藏播放时播放页也能显示合集名。失败就静默跳过（下次打开再试）。
+     */
+    private suspend fun backfillMissingTrackMeta() {
+        val missing = dao.getTracks(playlistId)
+            .filter { it.pageIndex == null || it.videoTitle.isNullOrBlank() }
+        if (missing.isEmpty()) return
+        missing.map { it.bvid }.distinct().forEach { bvid ->
+            val tracks = when (val result = repo.getView(bvid)) {
+                is Result.Success -> result.data
+                is Result.Error -> return@forEach
+            }
+            val byCid = tracks.associateBy { it.cid }
+            missing.asSequence()
+                .filter { it.bvid == bvid }
+                .forEach { entity ->
+                    val track = byCid[entity.cid] ?: return@forEach
+                    if (entity.pageIndex == track.pageIndex && entity.videoTitle == track.videoTitle) return@forEach
+                    dao.updateTrackMeta(
+                        playlistId = entity.playlistId,
+                        bvid = entity.bvid,
+                        cid = entity.cid,
+                        videoTitle = track.videoTitle,
+                        pageIndex = track.pageIndex
+                    )
+                }
+        }
+    }
 
     fun consumeMessage() { _message.value = null }
 

@@ -31,13 +31,21 @@ data class PlaylistTrackEntity(
     val order: Int,
     val author: String = "",
     val cover: String = "",
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    /** BV 合集名（分 P 名之外的视频总标题），老数据为 null */
+    val videoTitle: String? = null,
+    /** 第几个分 P（从 1 开始），老数据为 null */
+    val pageIndex: Int? = null
 )
 
 data class PlaylistSummary(
     @Embedded val playlist: PlaylistEntity,
     val trackCount: Int,
-    val totalDurationMs: Long
+    val totalDurationMs: Long,
+    /** 该收藏里最近播放一集的分 P 序号（没播放过为 null） */
+    val lastPlayedPageIndex: Int? = null,
+    /** 该收藏里最近播放一集的进度毫秒（没播放过为 null） */
+    val lastPlayedPositionMs: Long? = null
 )
 
 @Dao
@@ -79,7 +87,19 @@ interface PlaylistDao {
         """
         SELECT p.*,
                COUNT(t.bvid) AS trackCount,
-               COALESCE(SUM(t.durationMs), 0) AS totalDurationMs
+               COALESCE(SUM(t.durationMs), 0) AS totalDurationMs,
+               (
+                   SELECT t2.pageIndex FROM PlaylistTrackEntity t2
+                   INNER JOIN HistoryEntity h2 ON h2.bvid = t2.bvid AND h2.cid = t2.cid
+                   WHERE t2.playlistId = p.id
+                   ORDER BY h2.updatedAt DESC LIMIT 1
+               ) AS lastPlayedPageIndex,
+               (
+                   SELECT h3.positionMs FROM PlaylistTrackEntity t3
+                   INNER JOIN HistoryEntity h3 ON h3.bvid = t3.bvid AND h3.cid = t3.cid
+                   WHERE t3.playlistId = p.id
+                   ORDER BY h3.updatedAt DESC LIMIT 1
+               ) AS lastPlayedPositionMs
         FROM PlaylistEntity p
         LEFT JOIN PlaylistTrackEntity t ON t.playlistId = p.id
         GROUP BY p.id
@@ -102,4 +122,20 @@ interface PlaylistDao {
 
     @Query("UPDATE PlaylistTrackEntity SET `order`=:newOrder WHERE playlistId=:playlistId AND bvid=:bvid AND cid=:cid")
     suspend fun updateOrder(playlistId: Long, bvid: String, cid: Long, newOrder: Int)
+
+    /** 老收藏补齐合集名/分 P 序号（这些字段是后加的列，历史数据为空） */
+    @Query(
+        """
+        UPDATE PlaylistTrackEntity
+        SET videoTitle = :videoTitle, pageIndex = :pageIndex
+        WHERE playlistId=:playlistId AND bvid=:bvid AND cid=:cid
+        """
+    )
+    suspend fun updateTrackMeta(
+        playlistId: Long,
+        bvid: String,
+        cid: Long,
+        videoTitle: String?,
+        pageIndex: Int?
+    )
 }

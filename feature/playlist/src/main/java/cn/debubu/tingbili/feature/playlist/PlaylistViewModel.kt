@@ -24,7 +24,9 @@ fun PlaylistTrackEntity.toTrack(): Track = Track(
     author = author,
     cover = cover,
     durationMs = durationMs,
-    subtitleUrl = null
+    subtitleUrl = null,
+    videoTitle = videoTitle,
+    pageIndex = pageIndex
 )
 
 @HiltViewModel
@@ -100,7 +102,9 @@ class PlaylistViewModel @Inject constructor(
                         order = base++,
                         author = t.author,
                         cover = t.cover,
-                        durationMs = t.durationMs
+                        durationMs = t.durationMs,
+                        videoTitle = t.videoTitle,
+                        pageIndex = t.pageIndex
                     )
                 )
             }

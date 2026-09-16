@@ -108,6 +108,11 @@ class PlaylistViewModelTest {
             }
         }
 
+        override suspend fun updateTrackMeta(playlistId: Long, bvid: String, cid: Long, videoTitle: String?, pageIndex: Int?) {
+            val idx = tracks.indexOfFirst { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
+            if (idx >= 0) tracks[idx] = tracks[idx].copy(videoTitle = videoTitle, pageIndex = pageIndex)
+        }
+
         override fun observePlaylist(id: Long): Flow<PlaylistEntity?> = flowOf(playlists.firstOrNull { it.id == id })
         override fun observeTracks(id: Long): Flow<List<PlaylistTrackEntity>> = flowOf(tracks.filter { it.playlistId == id }.sortedBy { it.order })
         override suspend fun updateName(playlistId: Long, name: String) {

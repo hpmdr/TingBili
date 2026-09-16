@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.playedProgressLabel
+import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
@@ -75,6 +77,7 @@ fun PlaylistDetailScreen(
     val imageFormat = LocalImageFormat.current
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -295,6 +298,7 @@ fun PlaylistDetailScreen(
                     DetailTrackRow(
                         index = idx,
                         entity = entity,
+                        played = progress["${entity.bvid}:${entity.cid}"],
                         onClick = { viewModel.playAt(idx) },
                         onDelete = { viewModel.remove(entity) }
                     )
@@ -309,6 +313,7 @@ fun PlaylistDetailScreen(
 private fun DetailTrackRow(
     index: Int,
     entity: PlaylistTrackEntity,
+    played: HistoryEntity?,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -343,14 +348,16 @@ private fun DetailTrackRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = entity.bvid,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            played?.let { record ->
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "上次听到 ${playedProgressLabel(entity.pageIndex, record.positionMs, entity.durationMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Spacer(modifier = Modifier.width(8.dp))
         IconButton(onClick = { showDeleteConfirm = true }) {
