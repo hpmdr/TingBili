@@ -34,4 +34,5 @@ Tab（`MainTabsRoute`：首页/听单/历史/设置，带底栏）与全屏页�
 
 - 主题只用 `TingBiliTheme(dynamicColor)`；自适应走 `NavigationSuiteScaffold`；`enableEdgeToEdge() + innerPadding` 必处理。分页抄 `HomeViewModel` 模板（pageSize 20、`cachedIn` + `WhileSubscribed(5000)`）。
 - 测试在各模块 `src/test`（`*Test`）；时间逻辑用虚拟时间。跑受影响的层，不必每次全量。
+- **真机验证只看控件树，不靠截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb exec-out cat /sdcard/ui.xml` 拿到 class/text/clickable/bounds，用 bounds 中心 `adb shell input tap x y` 操作，改完再 dump 校验文本与结构。截图仅用于给用户看最终视觉效果，不作为“验证通过”的依据，也不用来反推坐标。
 - 分支 `codex/<简称>`，提交 `feat/fix/docs/test/refactor(范围): 简述`，禁直推 master。PR 前：门禁绿 + 相关单测绿 + `git status` 干净。大重构在 `docs/` 下留设计说明（历史 superpowers 目录已删除，不再新增）。
