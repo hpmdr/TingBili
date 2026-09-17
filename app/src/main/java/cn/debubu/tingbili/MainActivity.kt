@@ -26,7 +26,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,7 +46,6 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
 import cn.debubu.tingbili.navigation.AppRootNavHost
 import cn.debubu.tingbili.navigation.BottomNavWithCenterPlayer
-import cn.debubu.tingbili.navigation.CircularMiniPlayer
 import cn.debubu.tingbili.navigation.MainTabsRoute
 import cn.debubu.tingbili.navigation.MainViewModel
 import cn.debubu.tingbili.navigation.PlayerRoute
@@ -59,8 +57,8 @@ import javax.inject.Inject
 
 /**
  * Main entry with TingBiliTheme + Navigation Compose 2.8 type-safe.
- * Phone: Scaffold + NavigationBar (4 tabs + centered CircularMiniPlayer via BottomNavWithCenterPlayer).
- * Tablet: NavigationSuiteScaffold auto-switches to NavigationRail (via calculateFromAdaptiveInfo),
+ * Phone: Scaffold + NavigationBar (4 tabs + floating MiniPlayerBar via BottomNavWithCenterPlayer).
+ * Tablet/wide: explicit mapping to NavigationRail (Compact -> NavigationBar).
  *         mini player remains centered floating at bottom.
  */
 @AndroidEntryPoint
@@ -116,7 +114,13 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
     val imageFormat by mainViewModel.imageFormat.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
-    val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptiveInfo)
+    // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
+    // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
+    val layoutType = if (!adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(600)) {
+        NavigationSuiteType.NavigationBar
+    } else {
+        NavigationSuiteType.NavigationRail
+    }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
     val inMainTabs = destination?.hierarchy?.any {
@@ -129,7 +133,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
 
     CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
-        // 手机：主页 Tab 带底栏 + 圆形 mini；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
+        // 手机：主页 Tab 带底栏 + 悬浮 mini 条；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
         if (inMainTabs) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -161,28 +165,3 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     }
 }
 
-@Composable
-private fun FloatingCenteredMiniPlayer(
-    navController: androidx.navigation.NavController,
-    modifier: Modifier = Modifier,
-    viewModel: MainViewModel = hiltViewModel()
-) {
-    val playerManager = viewModel.playerManager
-    val state by playerManager.state.collectAsStateWithLifecycle()
-    val progress = if (state.durationMs > 0L) {
-        (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-    val cover = state.currentTrack?.cover ?: ""
-    val isPlaying = state.isPlaying
-    val isLoading = state.isLoading
-
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        CircularMiniPlayer(
-            progress = progress,
-            cover = cover,
-            isPlaying = isPlaying,
-            isLoading = isLoading,
-            onClick = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
-        )
-    }
-}

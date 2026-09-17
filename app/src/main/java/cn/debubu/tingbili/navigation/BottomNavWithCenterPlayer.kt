@@ -1,25 +1,25 @@
 package cn.debubu.tingbili.navigation
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,15 +82,24 @@ fun BottomNavWithCenterPlayer(
     val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
     val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
     val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
-    val itemColors = NavigationBarItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.primary,
-        selectedTextColor = MaterialTheme.colorScheme.primary,
-        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    // M3 默认配色：选中指示块为 secondaryContainer 胶囊
+    val itemColors = NavigationBarItemDefaults.colors()
+    val track = state.currentTrack
 
-    NavigationBar {
+    Column {
+        if (track != null) {
+            MiniPlayerBar(
+                track = track,
+                isPlaying = isPlaying,
+                isLoading = isLoading,
+                onToggle = { playerManager.toggle() },
+                onOpen = {
+                    navController.navigate(PlayerRoute) { launchSingleTop = true }
+                },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+        NavigationBar {
         NavigationBarItem(
             selected = isHomeSelected,
             onClick = {
@@ -104,12 +113,12 @@ fun BottomNavWithCenterPlayer(
             },
             icon = {
                 Icon(
-                    imageVector = if (isHomeSelected) Icons.Filled.Home else Icons.Outlined.Home,
+                    imageVector = if (isHomeSelected) Icons.Filled.Explore else Icons.Outlined.Explore,
                     contentDescription = null
                 )
             },
             colors = itemColors,
-            label = { Text("首页") }
+            label = { Text("推荐") }
         )
         NavigationBarItem(
             selected = isPlaylistSelected,
@@ -131,22 +140,6 @@ fun BottomNavWithCenterPlayer(
             colors = itemColors,
             label = { Text("收藏") }
         )
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularMiniPlayer(
-                progress = progress,
-                cover = cover,
-                isPlaying = isPlaying,
-                isLoading = isLoading,
-                onClick = {
-                    navController.navigate(PlayerRoute) {
-                        launchSingleTop = true
-                    }
-                }
-            )
-        }
         NavigationBarItem(
             selected = isHistorySelected,
             onClick = {
@@ -187,5 +180,6 @@ fun BottomNavWithCenterPlayer(
             colors = itemColors,
             label = { Text("设置") }
         )
+        }
     }
 }

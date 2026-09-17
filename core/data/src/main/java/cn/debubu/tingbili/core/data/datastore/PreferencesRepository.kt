@@ -31,6 +31,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val customThemeColor: Flow<Int> = ds.data.map { it[CUSTOM_THEME_COLOR] ?: DEFAULT_THEME_COLOR }
     val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
+    val cacheMaxMb: Flow<Int> = ds.data.map { (it[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB).coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
 
     // 上次播放恢复：队列（JSON）+ 下标 + 进度
     val lastQueue: Flow<List<Track>> = ds.data.map { prefs ->
@@ -81,6 +82,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[IMAGE_FORMAT] = v.name }
     }
 
+    suspend fun setCacheMaxMb(v: Int) {
+        ds.edit { it[CACHE_MAX_MB] = v.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
+    }
+
     /** 持久化上次播放的队列与进度，队列超 100 首截断以控大小 */
     suspend fun setLastPlayback(
         queue: List<Track>,
@@ -125,6 +130,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")
         val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
+        val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
+        const val DEFAULT_CACHE_MAX_MB = 500
+        const val MIN_CACHE_MAX_MB = 100
+        const val MAX_CACHE_MAX_MB = 2048
         val LAST_QUEUE_JSON = stringPreferencesKey("last_queue_json")
         val LAST_INDEX = intPreferencesKey("last_index")
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")

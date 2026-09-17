@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +52,10 @@ fun SettingsScreen(
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
-    val cacheMb by vm.cacheSizeMb.collectAsStateWithLifecycle()
+    val cacheBytes by vm.cacheSizeBytes.collectAsStateWithLifecycle()
+    val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { vm.refreshCacheSize() }
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val customThemeColor by vm.customThemeColor.collectAsStateWithLifecycle()
 
@@ -135,7 +139,23 @@ fun SettingsScreen(
                 Text("音频缓存", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "已缓存约 ${cacheMb}MB / 500MB，上次播放的音频会本地缓存，二次播放秒开且省流量",
+                    "已缓存约 ${formatCacheSize(cacheBytes)} / ${cacheMaxMb}MB，上次播放的音频会本地缓存，二次播放秒开且省流量",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(100, 200, 500, 1024, 2048).forEach { max ->
+                        FilterChip(
+                            selected = cacheMaxMb == max,
+                            onClick = { vm.setCacheMaxMb(max) },
+                            label = { Text(if (max >= 1024) "${max / 1024}GB" else "${max}MB") }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "调整上限后重启应用生效；调小后超量部分会在使用中按最近最少使用逐出。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -145,14 +165,6 @@ fun SettingsScreen(
                     Button(onClick = { vm.clearCache() }) { Text("清空缓存") }
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "预留登录入口 (二期)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-            Text("登录后可导入 B 站收藏夹为收藏", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -335,6 +347,12 @@ private fun CustomColorDialog(
 }
 
 private fun Color.toHex(): String = String.format("#%06X", toArgb() and 0xFFFFFF)
+
+private fun formatCacheSize(bytes: Long): String = when {
+    bytes <= 0L -> "0MB"
+    bytes < 1024L * 1024L -> "${bytes / 1024L}KB"
+    else -> String.format("%.1fMB", bytes / (1024.0 * 1024.0))
+}
 
 private fun ThemeMode.label(): String = when (this) {
     ThemeMode.DEFAULT -> "默认"

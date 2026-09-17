@@ -131,8 +131,10 @@ private fun TrackPagingGrid(
     ) {
         items(
             count = paging.itemCount,
+            // key 必须全局唯一：B 站搜索常返回重复 BV（cid=0 的未解析项），
+            // 同一 BV 在一页出现两次时 "bvid:cid" 会撞车闪退，故缀上 index 兜底。
             key = { index ->
-                paging.peek(index)?.let { "${it.bvid}:${it.cid}" } ?: "placeholder-$index"
+                paging.peek(index)?.let { "${it.bvid}:${it.cid}#$index" } ?: "placeholder-$index"
             }
         ) { index ->
             val track = paging[index]

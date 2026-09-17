@@ -2,7 +2,11 @@ package cn.debubu.tingbili.navigation
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import cn.debubu.tingbili.core.data.model.Track
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,37 +20,90 @@ class NavigationTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    private fun demoTrack() = Track(
+        bvid = "BV1xx",
+        cid = 1L,
+        title = "P1 · 测试章节",
+        author = "测试UP",
+        cover = "",
+        durationMs = 60_000L,
+        subtitleUrl = null,
+        pageCount = 3,
+        videoTitle = "测试书籍",
+        pageIndex = 1
+    )
+
     @Test
-    fun `circular player renders progress ring`() {
+    fun `mini bar renders with track`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.5f, cover = "", isPlaying = true, onClick = {})
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = true,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {}
+            )
         }
-        composeTestRule.onNodeWithTag("progressRing").assertExists()
-        composeTestRule.onNodeWithTag("progressRing").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertExists()
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertIsDisplayed()
+        composeTestRule.onNodeWithText("测试书籍").assertIsDisplayed()
     }
 
     @Test
-    fun `circular player renders cover image`() {
+    fun `mini bar hidden without track`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.3f, cover = "https://example.com/cover.jpg", isPlaying = false, onClick = {})
+            MiniPlayerBar(
+                track = null,
+                isPlaying = false,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {}
+            )
         }
-        composeTestRule.onNodeWithTag("progressRing").assertExists()
-        composeTestRule.onNodeWithTag("coverImage", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertDoesNotExist()
     }
 
     @Test
-    fun `circular player progress updates`() {
+    fun `mini bar shows pause when playing`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0.75f, cover = "", isPlaying = true, onClick = {})
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = true,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {}
+            )
         }
-        composeTestRule.onNodeWithTag("progressRing").assertExists()
+        composeTestRule.onNodeWithContentDescription("暂停").assertIsDisplayed()
     }
 
     @Test
-    fun `circular player handles zero progress`() {
+    fun `mini bar shows play when paused`() {
         composeTestRule.setContent {
-            CircularMiniPlayer(progress = 0f, cover = "", isPlaying = false, onClick = {})
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = false,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {}
+            )
         }
-        composeTestRule.onNodeWithTag("progressRing").assertExists()
+        composeTestRule.onNodeWithContentDescription("播放").assertIsDisplayed()
+    }
+
+    @Test
+    fun `mini bar toggle fires on pause button click`() {
+        var toggled = 0
+        composeTestRule.setContent {
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = true,
+                isLoading = false,
+                onToggle = { toggled++ },
+                onOpen = {}
+            )
+        }
+        composeTestRule.onNodeWithTag("miniPlayPause").performClick()
+        assert(toggled == 1)
     }
 }

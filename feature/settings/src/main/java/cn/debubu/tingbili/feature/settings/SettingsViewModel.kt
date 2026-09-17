@@ -29,10 +29,15 @@ class SettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_THEME_COLOR
     )
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF)
+    val cacheMaxMb: StateFlow<Int> = prefs.cacheMaxMb.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        PreferencesRepository.DEFAULT_CACHE_MAX_MB
+    )
     val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90))
 
-    private val _cacheSizeMb = MutableStateFlow(0L)
-    val cacheSizeMb: StateFlow<Long> = _cacheSizeMb.asStateFlow()
+    private val _cacheSizeBytes = MutableStateFlow(0L)
+    val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()
 
     init {
         refreshCacheSize()
@@ -40,8 +45,8 @@ class SettingsViewModel @Inject constructor(
 
     fun refreshCacheSize() {
         viewModelScope.launch {
-            _cacheSizeMb.value = try {
-                audioCache.cacheSpace / (1024 * 1024)
+            _cacheSizeBytes.value = try {
+                audioCache.cacheSpace
             } catch (_: Exception) { 0L }
         }
     }
@@ -69,6 +74,12 @@ class SettingsViewModel @Inject constructor(
 
     fun setImageFormat(v: ImageFormat) {
         viewModelScope.launch { prefs.setImageFormat(v) }
+    }
+
+    fun setCacheMaxMb(v: Int) {
+        viewModelScope.launch {
+            prefs.setCacheMaxMb(v.coerceIn(PreferencesRepository.MIN_CACHE_MAX_MB, PreferencesRepository.MAX_CACHE_MAX_MB))
+        }
     }
 
     fun setTimerPresets(presets: Set<Int>) {

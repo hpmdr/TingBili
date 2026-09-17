@@ -4,26 +4,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationDrawerItemDefaults
-import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,44 +33,28 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 
-/** 主页 4 Tab 的壳：仅在此显示底栏 + 圆形 mini 播放器 */
+/** 主页 4 Tab 的壳：窄屏底栏 + 悬浮 mini 条；宽屏 Rail + 右下悬浮 mini 条 */
 @Composable
 fun MainTabsScaffold(
     navController: NavHostController,
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfo()
-    val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptiveInfo)
+    // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
+    // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
+    val layoutType = if (!adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(600)) {
+        NavigationSuiteType.NavigationBar
+    } else {
+        NavigationSuiteType.NavigationRail
+    }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
     val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
     val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
     val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
     val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
-    val selectedColor = MaterialTheme.colorScheme.primary
-    val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val itemColors = NavigationSuiteDefaults.itemColors(
-        navigationBarItemColors = NavigationBarItemDefaults.colors(
-            selectedIconColor = selectedColor,
-            selectedTextColor = selectedColor,
-            indicatorColor = selectedColor.copy(alpha = 0.14f),
-            unselectedIconColor = unselectedColor,
-            unselectedTextColor = unselectedColor
-        ),
-        navigationRailItemColors = NavigationRailItemDefaults.colors(
-            selectedIconColor = selectedColor,
-            selectedTextColor = selectedColor,
-            indicatorColor = selectedColor.copy(alpha = 0.14f),
-            unselectedIconColor = unselectedColor,
-            unselectedTextColor = unselectedColor
-        ),
-        navigationDrawerItemColors = NavigationDrawerItemDefaults.colors(
-            selectedIconColor = selectedColor,
-            selectedTextColor = selectedColor,
-            unselectedIconColor = unselectedColor,
-            unselectedTextColor = unselectedColor
-        )
-    )
+    // M3 默认配色：选中指示块为 secondaryContainer 胶囊
+    val itemColors = NavigationSuiteDefaults.itemColors()
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
         Scaffold(
@@ -95,12 +75,12 @@ fun MainTabsScaffold(
                     },
                     icon = {
                         Icon(
-                            imageVector = if (isHomeSelected) Icons.Filled.Home else Icons.Outlined.Home,
+                            imageVector = if (isHomeSelected) Icons.Filled.Explore else Icons.Outlined.Explore,
                             contentDescription = null
                         )
                     },
                     colors = itemColors,
-                    label = { Text("首页") }
+                    label = { Text("推荐") }
                 )
                 item(
                     selected = isPlaylistSelected,
@@ -160,19 +140,18 @@ fun MainTabsScaffold(
                 AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
                 val playerManager = viewModel.playerManager
                 val state by playerManager.state.collectAsStateWithLifecycle()
-                val progress = if (state.durationMs > 0L) {
-                    (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-                } else 0f
-                Box(
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularMiniPlayer(
-                        progress = progress,
-                        cover = state.currentTrack?.cover ?: "",
+                val track = state.currentTrack
+                if (track != null) {
+                    MiniPlayerBar(
+                        track = track,
                         isPlaying = state.isPlaying,
                         isLoading = state.isLoading,
-                        onClick = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
+                        onToggle = { playerManager.toggle() },
+                        onOpen = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .width(320.dp)
                     )
                 }
             }

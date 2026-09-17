@@ -82,6 +82,23 @@ class SettingsViewModelTest {
         assertEquals(ThemeMode.CUSTOM, prefs.themeMode.first())
     }
 
+    @Test fun `set cache max persists`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs, audioCache)
+        vm.setCacheMaxMb(1024)
+        advanceUntilIdle()
+        assertEquals(1024, prefs.cacheMaxMb.first())
+    }
+
+    @Test fun `cache max coerced in range 100 to 2048`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs, audioCache)
+        vm.setCacheMaxMb(10000)
+        advanceUntilIdle()
+        assertEquals(2048, prefs.cacheMaxMb.first())
+        vm.setCacheMaxMb(1)
+        advanceUntilIdle()
+        assertEquals(100, prefs.cacheMaxMb.first())
+    }
+
     @Test fun `step coerced in range 5 to 60`() = runTest(dispatcher) {
         val vm = SettingsViewModel(prefs, audioCache)
         vm.setStep(100)

@@ -40,10 +40,10 @@ object ServicePlayerModule {
             .setAllowCrossProtocolRedirects(true)
 
         // 缓存层：先查本地缓存，未命中再走网络；写入时同时落盘
+        // 注意：不要 setCacheWriteDataSinkFactory(null)，那会关闭缓存写入导致缓存永不增长
         val cacheFactory = CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(httpFactory)
-            .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
         return ExoPlayer.Builder(context)
