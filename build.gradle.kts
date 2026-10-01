@@ -3,8 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
-    id("com.android.application") version "9.4.0" apply false
-    id("com.android.library") version "9.4.0" apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
 }
 
 // Hilt 注解处理器捆绑的 kotlin-metadata-jvm 若落后于 Kotlin 发出的元数据版本，
