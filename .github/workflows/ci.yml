@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 17
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           java-version: '25'
@@ -23,6 +23,11 @@ jobs:
         run: yes | sdkmanager --licenses || true
       - name: Assemble Debug (lightweight gate)
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+      # 只编译全部模块的测试源码、不执行：拦住「测试没跟上主源码」的腐化。
+      # 之前只有下面那条 || 回退，而 :core:* 一旦通过，回退分支永远不会执行，
+      # feature 模块的测试编译错误就这样长期溜过。
+      - name: Compile all unit-test sources (fail fast on stale tests)
+        run: ./gradlew compileDebugUnitTestKotlin --no-daemon --stacktrace
       - name: Unit tests (single module, avoid OOM)
         run: ./gradlew :core:data:testDebugUnitTest :core:media:testDebugUnitTest --no-daemon --stacktrace || ./gradlew testDebugUnitTest --no-daemon --stacktrace
       - name: Upload APK
