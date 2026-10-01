@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 25
@@ -17,10 +17,41 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
           cache: gradle
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Accept licenses
-        run: yes | sdkmanager --licenses || true
+      # 原来用 android-actions/setup-android@v3，它在当前 runner 上直接失败：
+      # 该步一挂，后面的 Accept licenses / 构建 / 测试 / 上传全部 skipped，
+      # 于是从 2026-09-17 起 CI 根本没跑到过构建。改为按官方方式自装 cmdline-tools。
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/android-sdk
+          key: android-sdk-cmdline-tools-23.0-platform-37.0-buildtools-36.0.0
+      - name: Setup Android SDK (official cmdline-tools)
+        run: |
+          set -euo pipefail
+          SDK="$HOME/android-sdk"
+          if [ -x "$SDK/cmdline-tools/latest/bin/android" ]; then
+            echo "cmdline-tools 命中缓存，跳过下载"
+          else
+            mkdir -p "$SDK/cmdline-tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+            # 校验和取自 Google 官方仓库清单 repository2-3.xml（cmdline-tools 23.0）
+            echo "e025545c62a8e64c7559119566a569fb1dec5f60  /tmp/cmdline-tools.zip" | sha1sum -c -
+            rm -rf /tmp/ct && mkdir -p /tmp/ct
+            unzip -q /tmp/cmdline-tools.zip -d /tmp/ct
+            rm -rf "$SDK/cmdline-tools/latest"
+            mv /tmp/ct/cmdline-tools "$SDK/cmdline-tools/latest"
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+      # 新版 android CLI（sdkmanager 已废弃）会自行接受许可，不再需要 `sdkmanager --licenses`。
+      # 装的组件与本地实测一致：compileSdk 37 会解析到 platforms;android-37.0，AGP 9.4 默认 build-tools 36.0.0。
+      - name: Install SDK components
+        run: |
+          set -euo pipefail
+          android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
       - name: Assemble Debug (lightweight gate)
         run: ./gradlew assembleDebug --no-daemon --stacktrace
       # 只编译全部模块的测试源码、不执行：拦住「测试没跟上主源码」的腐化。
