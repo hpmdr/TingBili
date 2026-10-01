@@ -31,6 +31,7 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 
 - 只用相对路径。禁止把本机绝对路径、个人工具链、密钥写进仓库。
 - `build/ .gradle/ .idea/ local.properties *.apk *.log .superpowers/ .codebuddy/` 不提交（见 `.gitignore`）。
+- 单人开发：直接提交 `master`，不走分支、不开 PR，一次改动一个提交。提交信息 `feat/fix/docs/test/refactor/chore(范围): 简述`。提交前门禁绿 + 相关单测绿 + `git status` 干净（`gradlew` 可执行位 100755 别提交成 100644，否则 Linux CI 跑不了）。
 - `feature` 之间禁止互相依赖，复用下沉到 `core`。UI 用 `collectAsStateWithLifecycle()` 收 `StateFlow`；错误用 `Result.Error` / `UiState` 表达，不要把堆栈抛到界面。
 - 导航：路由只定义在 `Routes.kt`，`AppRootNavHost` 是唯一入口；改路由必须同步改 `NavigationTest`。
 - Room 升级必须手写 `Migration`，禁止破坏性迁移。改动最小化，收尾前跑通构建和相关测试。

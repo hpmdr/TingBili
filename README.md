@@ -5,8 +5,9 @@
 
 > 音频优先 · 轻量常驻 · 歌单驱动。解决 B 站官方“听视频”臃肿（GB级内存）、以视频为中心的痛点，专为听书/听音乐设计。
 
-- 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 36 / compileSdk 36 / Java 17`
-- 技术栈：Kotlin 2.1 + Compose BOM + Material3 (dynamicColor) + Navigation 2.8 + Hilt 2.53 + Room 2.6 + DataStore + Media3 1.4.1 + Retrofit/OkHttp + Coil + Paging3
+- 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 37 / compileSdk 37 / Java 17`
+- 技术栈：Kotlin + Compose (Material3, dynamicColor) + Navigation + Hilt + Room + DataStore + Media3 + Retrofit/OkHttp + Coil + Paging3
+  （依赖与插件版本统一在 `gradle/libs.versions.toml` 维护，文档里不再重复，免得两处跑偏）
 - 架构：`app` 壳 + `core:ui/media/data` + `feature:home/playlist/history/player/settings` + `data:bilibili`（特性模块化 Clean Architecture）
 
 ## 功能（MVP）
