@@ -20,14 +20,16 @@ import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -185,7 +187,13 @@ class PlaylistViewModelTest {
         dao = FakePlaylistDao()
         playerHandle = FakePlayerHandle()
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("test_playlist_prefs_${System.nanoTime()}") })
+        // DataStore 必须跑在测试调度器上：否则读写发生在别的线程、不受虚拟时间控制，
+        // runCurrent() 等不到它，而节流任务在它上面阻塞会和测试线程互等。
+        val prefs = PreferencesRepository(
+            androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+                scope = CoroutineScope(SupervisorJob() + dispatcher)
+            ) { ctx.preferencesDataStoreFile("test_playlist_prefs_${System.nanoTime()}") }
+        )
         val repo = BiliRepository(FakeBiliApi())
         player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, repo, ctx)
     }
@@ -199,14 +207,14 @@ class PlaylistViewModelTest {
     fun `create playlist and add tracks dedup by bvid+cid`() = runTest(dispatcher) {
         val vm = PlaylistViewModel(dao, player)
         vm.create("我的歌单")
-        advanceUntilIdle()
+        runCurrent()
         // vm.playlists uses Eagerly, value should reflect, but use dao as ground truth
         assertEquals(1, dao.getPlaylists().size)
         val pid = dao.getPlaylists().first().id
 
         val track = Track("BV1", 1, "a", "", "", 0, null)
         vm.addTracks(pid, listOf(track, track.copy()))
-        advanceUntilIdle()
+        runCurrent()
         // dedup via IGNORE, same bvid+cid only one row
         assertEquals(1, vm.tracks.first().size)
         // also verify dao directly
@@ -214,7 +222,7 @@ class PlaylistViewModelTest {
 
         // different cid should be considered distinct
         vm.addTracks(pid, listOf(Track("BV1", 2, "b", "", "", 0, null)))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(2, vm.tracks.first().size)
     }
 
@@ -222,17 +230,17 @@ class PlaylistViewModelTest {
     fun `reorder updates order field`() = runTest(dispatcher) {
         val vm = PlaylistViewModel(dao, player)
         vm.create("reorder")
-        advanceUntilIdle()
+        runCurrent()
         val pid = dao.getPlaylists().first().id
         val t1 = Track("BV1", 1, "a", "", "", 0, null)
         val t2 = Track("BV1", 2, "b", "", "", 0, null)
         val t3 = Track("BV2", 1, "c", "", "", 0, null)
         vm.addTracks(pid, listOf(t1, t2, t3))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(listOf("a", "b", "c"), vm.tracks.first().map { it.title })
 
         vm.reorder(pid, 0, 2)
-        advanceUntilIdle()
+        runCurrent()
         val reordered = vm.tracks.first().map { it.title }
         assertEquals(listOf("b", "c", "a"), reordered)
         // order field should be 0,1,2 accordingly
@@ -246,45 +254,51 @@ class PlaylistViewModelTest {
     fun `remove track via swipe delete`() = runTest(dispatcher) {
         val vm = PlaylistViewModel(dao, player)
         vm.create("del")
-        advanceUntilIdle()
+        runCurrent()
         val pid = dao.getPlaylists().first().id
         val t = Track("BV1", 1, "a", "", "", 0, null)
         vm.addTracks(pid, listOf(t))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(1, vm.tracks.first().size)
         vm.remove(pid, t)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(0, vm.tracks.first().size)
         assertEquals(0, dao.getTracks(pid).size)
     }
 
     @Test
     fun `playAll delegates to PlayerManager with queue`() = runTest(dispatcher) {
-        val vm = PlaylistViewModel(dao, player)
-        vm.create("play")
-        advanceUntilIdle()
-        val pid = dao.getPlaylists().first().id
-        val tracks = listOf(Track("BV1", 1, "a", "", "", 1000, null), Track("BV1", 2, "b", "", "", 1000, null))
-        vm.addTracks(pid, tracks)
-        advanceUntilIdle()
-        vm.playAll(pid)
-        advanceUntilIdle()
-        assertTrue(playerHandle.playCalled)
-        assertEquals(2, playerHandle.mediaItems.size)
-        assertEquals("BV1:1", playerHandle.mediaItems[0].mediaId)
-        assertEquals("BV1:2", playerHandle.mediaItems[1].mediaId)
+        try {
+            val vm = PlaylistViewModel(dao, player)
+            vm.create("play")
+            runCurrent()
+            val pid = dao.getPlaylists().first().id
+            val tracks = listOf(Track("BV1", 1, "a", "", "", 1000, null), Track("BV1", 2, "b", "", "", 1000, null))
+            vm.addTracks(pid, tracks)
+            runCurrent()
+            vm.playAll(pid)
+            runCurrent()
+            assertTrue(playerHandle.playCalled)
+            assertEquals(2, playerHandle.mediaItems.size)
+            assertEquals("BV1:1", playerHandle.mediaItems[0].mediaId)
+            assertEquals("BV1:2", playerHandle.mediaItems[1].mediaId)
+        } finally {
+            // playAll -> play() 启动的 while(true){delay()} 节流任务必须先停掉：
+            // runTest 收尾自己会 advanceUntilIdle，留着它们就永不返回。
+            player.release()
+        }
     }
 
     @Test
     fun `delete playlist clears tracks and selection`() = runTest(dispatcher) {
         val vm = PlaylistViewModel(dao, player)
         vm.create("toDelete")
-        advanceUntilIdle()
+        runCurrent()
         val pid = dao.getPlaylists().first().id
         vm.addTracks(pid, listOf(Track("BV1", 1, "a", "", "", 0, null)))
-        advanceUntilIdle()
+        runCurrent()
         vm.deletePlaylist(pid)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(0, dao.getPlaylists().size)
     }
 
@@ -292,13 +306,13 @@ class PlaylistViewModelTest {
     fun `addTracks dedup across multiple calls`() = runTest(dispatcher) {
         val vm = PlaylistViewModel(dao, player)
         vm.create("multi")
-        advanceUntilIdle()
+        runCurrent()
         val pid = dao.getPlaylists().first().id
         val t = Track("BV1", 1, "a", "", "", 0, null)
         vm.addTracks(pid, listOf(t))
-        advanceUntilIdle()
+        runCurrent()
         vm.addTracks(pid, listOf(t))
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(1, vm.tracks.first().size)
     }
 }

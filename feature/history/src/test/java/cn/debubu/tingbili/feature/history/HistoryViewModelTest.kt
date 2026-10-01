@@ -29,12 +29,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -147,8 +148,9 @@ class HistoryViewModelTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_history_prefs_${System.nanoTime()}")
         if (file.exists()) file.delete()
+        // DataStore 也跑在测试调度器上，读写才受虚拟时间控制（否则断言可能读到默认值）
         val dataStore = PreferenceDataStoreFactory.create(
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            scope = CoroutineScope(SupervisorJob() + dispatcher),
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
@@ -163,14 +165,22 @@ class HistoryViewModelTest {
 
     @Test
     fun `resume seeks to saved position`() = runTest(dispatcher) {
-        fakeDao.save(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
-        // brief's History(bvid,cid) maps to HistoryEntity
-        vm.resume(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
-        advanceUntilIdle()
-        assertEquals(12345, fakePlayer.seekToPos)
-        // also verify play was called with correct index (cid 1 -> idx 0)
-        assertEquals(0, fakePlayer.startIndex)
+        try {
+            fakeDao.save(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
+            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            // brief's History(bvid,cid) maps to HistoryEntity
+            vm.resume(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
+            runCurrent()
+            // seekToPos 是 Long?：字面量必须带 L，否则只能走 assertEquals(Object,Object)，
+            // 变成 Integer 与 Long 比较，必然不等。
+            assertEquals(12345L, fakePlayer.seekToPos)
+            // also verify play was called with correct index (cid 1 -> idx 0)
+            assertEquals(0, fakePlayer.startIndex)
+        } finally {
+            // play() 启动的 while(true){delay()} 节流任务必须先停掉：runTest 收尾自己会 advanceUntilIdle，
+            // 留着它们就永不返回（表现为 100% CPU 卡死）。放 finally 保证断言失败时也不会挂住。
+            playerManager.release()
+        }
     }
 
     @Test
@@ -178,7 +188,7 @@ class HistoryViewModelTest {
         val vm = HistoryViewModel(fakeDao, playerManager, repo)
         fakeDao.save(HistoryEntity("BV1", 1, 1000, 1L))
         fakeDao.save(HistoryEntity("BV2", 2, 2000, 2L))
-        advanceUntilIdle()
+        runCurrent()
         val list = vm.history.first()
         // observeAll sorts by updatedAt DESC, so BV2 first
         assertEquals(2, list.size)
@@ -187,42 +197,54 @@ class HistoryViewModelTest {
 
     @Test
     fun `resume falls back to index 0 when cid not found`() = runTest(dispatcher) {
-        // dao contains cid 999 which is not in view pages (1,2)
-        fakeDao.save(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
-        fakeApi.viewResult = ViewDto(
-            code = 0,
-            data = ViewData(
-                bvid = "BV1", title = "T", pic = "",
-                owner = cn.debubu.tingbili.data.bilibili.dto.Owner(name = "a"),
-                pages = listOf(ViewPage(cid = 1, page = 1, part = "P1", duration = 60)),
-                duration = 60
+        try {
+            // dao contains cid 999 which is not in view pages (1,2)
+            fakeDao.save(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
+            fakeApi.viewResult = ViewDto(
+                code = 0,
+                data = ViewData(
+                    bvid = "BV1", title = "T", pic = "",
+                    owner = cn.debubu.tingbili.data.bilibili.dto.Owner(name = "a"),
+                    pages = listOf(ViewPage(cid = 1, page = 1, part = "P1", duration = 60)),
+                    duration = 60
+                )
             )
-        )
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
-        vm.resume(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
-        advanceUntilIdle()
-        // should play at idx 0 and seek to 54321
-        assertEquals(0, fakePlayer.startIndex)
-        assertEquals(54321, fakePlayer.seekToPos)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            vm.resume(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
+            runCurrent()
+            // should play at idx 0 and seek to 54321
+            assertEquals(0, fakePlayer.startIndex)
+            assertEquals(54321L, fakePlayer.seekToPos)
+        } finally {
+            playerManager.release()
+        }
     }
 
     @Test
     fun `resume does nothing when view returns error`() = runTest(dispatcher) {
-        fakeApi.viewResult = ViewDto(code = -404, message = "not found", data = null)
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
-        vm.resume(HistoryEntity("BV_NOT_EXIST", 1, 9999, System.currentTimeMillis()))
-        advanceUntilIdle()
-        assertEquals(null, fakePlayer.seekToPos)
+        try {
+            fakeApi.viewResult = ViewDto(code = -404, message = "not found", data = null)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            vm.resume(HistoryEntity("BV_NOT_EXIST", 1, 9999, System.currentTimeMillis()))
+            runCurrent()
+            assertNull(fakePlayer.seekToPos)
+        } finally {
+            playerManager.release()
+        }
     }
 
     @Test
     fun `resume chooses correct index for second part`() = runTest(dispatcher) {
-        fakeDao.save(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
-        vm.resume(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
-        advanceUntilIdle()
-        assertEquals(1, fakePlayer.startIndex)
-        assertEquals(7777, fakePlayer.seekToPos)
+        try {
+            fakeDao.save(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
+            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            vm.resume(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
+            runCurrent()
+            assertEquals(1, fakePlayer.startIndex)
+            assertEquals(7777L, fakePlayer.seekToPos)
+        } finally {
+            playerManager.release()
+        }
     }
 }
 
