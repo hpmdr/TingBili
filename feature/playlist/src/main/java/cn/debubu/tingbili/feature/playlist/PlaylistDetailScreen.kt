@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.feature.playlist
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,9 +24,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,12 +55,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.headerOffsetOf
 import cn.debubu.tingbili.core.ui.playedProgressLabel
+import cn.debubu.tingbili.core.ui.scrollToItemCentered
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
@@ -79,6 +87,11 @@ fun PlaylistDetailScreen(
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val startingPlay by viewModel.startingPlay.collectAsStateWithLifecycle()
+    val pendingIndex by viewModel.pendingIndex.collectAsStateWithLifecycle()
+    val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
+    val focus by viewModel.focus.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
     val context = LocalContext.current
 
     var showRename by remember { mutableStateOf(false) }
@@ -89,6 +102,15 @@ fun PlaylistDetailScreen(
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
             viewModel.consumeMessage()
         }
+    }
+
+    // 打开页面不自动定位续播项——列表默认从头看，用户点了"继续播放"再滚过去。
+    val scope = rememberCoroutineScope()
+    fun scrollFocusIntoView() {
+        val target = focus?.index ?: return
+        val header = listState.headerOffsetOf(tracks.size)
+        if (header <= 0) return
+        scope.launch { listState.scrollToItemCentered(header + target) }
     }
 
     TingBiliScaffold(
@@ -142,6 +164,7 @@ fun PlaylistDetailScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -235,15 +258,34 @@ fun PlaylistDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = { viewModel.playAll(0) },
-                        enabled = tracks.isNotEmpty(),
+                        onClick = {
+                            viewModel.playAll(focus?.index ?: 0)
+                            scrollFocusIntoView()
+                        },
+                        enabled = tracks.isNotEmpty() && !startingPlay,
                         shape = RoundedCornerShape(20.dp),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("全部播放")
+                        // 取音源要等网络，等待期间必须给可见反馈并禁掉重复点击
+                        if (startingPlay) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("准备中…")
+                        } else {
+                            Icon(
+                                if (focus != null) Icons.Default.Replay else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            // 有过播放记录就是"继续"，从重点项接着听，而不是从头
+                            Text(if (focus != null) "继续播放" else "全部播放")
+                        }
                     }
 
                 }
@@ -299,6 +341,9 @@ fun PlaylistDetailScreen(
                         index = idx,
                         entity = entity,
                         played = progress["${entity.bvid}:${entity.cid}"],
+                        isPending = startingPlay && pendingIndex == idx,
+                        focused = focus?.index == idx,
+                        playing = playingTrack?.takeIf { it.key == "${entity.bvid}:${entity.cid}" },
                         onClick = { viewModel.playAt(idx) },
                         onDelete = { viewModel.remove(entity) }
                     )
@@ -314,6 +359,9 @@ private fun DetailTrackRow(
     index: Int,
     entity: PlaylistTrackEntity,
     played: HistoryEntity?,
+    isPending: Boolean = false,
+    focused: Boolean = false,
+    playing: PlayingTrack? = null,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -331,16 +379,30 @@ private fun DetailTrackRow(
 
     Row(
         modifier = Modifier.fillMaxWidth()
-            .clickable { onClick() }
+            // 整行铺一层浅色底，标出"这一刻该听哪一条"
+            .background(
+                if (focused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                else Color.Transparent
+            )
+            .clickable(enabled = !isPending) { onClick() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = String.format(Locale.getDefault(), "%02d", index + 1),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(32.dp)
-        )
+        if (isPending) {
+            // 正在起播的这一行就地转圈，别让用户以为点空了又去连点
+            Box(modifier = Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        } else {
+            Text(
+                text = String.format(Locale.getDefault(), "%02d", index + 1),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal,
+                color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.width(32.dp)
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = entity.title.ifBlank { "${entity.bvid}" },
@@ -348,15 +410,39 @@ private fun DetailTrackRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            played?.let { record ->
+            // 一个列表只标一项：正在播的给实时进度，否则给"上次听到"。
+            // 其余行不显示进度——同一个列表挂好几个"上次听到"既没意义也误导。
+            if (focused) {
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "上次听到 ${playedProgressLabel(entity.pageIndex, record.positionMs, entity.durationMs)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (playing != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "正在播放 ${playedProgressLabel(entity.pageIndex, playing.positionMs, entity.durationMs)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    played?.let { record ->
+                        Text(
+                            text = "上次听到 ${playedProgressLabel(entity.pageIndex, record.positionMs, entity.durationMs)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.width(8.dp))

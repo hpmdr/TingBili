@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.feature.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,14 +14,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,10 +49,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import cn.debubu.tingbili.core.ui.headerOffsetOf
+import cn.debubu.tingbili.core.ui.scrollToItemCentered
+import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
+import cn.debubu.tingbili.core.ui.playedProgressLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -66,6 +76,23 @@ fun DetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isFavorited by viewModel.isFavorited.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val startingPlay by viewModel.startingPlay.collectAsStateWithLifecycle()
+    val pendingIndex by viewModel.pendingIndex.collectAsStateWithLifecycle()
+    val focus by viewModel.focus.collectAsStateWithLifecycle()
+    val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+
+    // 打开页面不自动定位续播项；点了"继续播放"再滚过去（收藏详情同理）
+    val scope = rememberCoroutineScope()
+    val trackCount = (state as? DetailUiState.Success)?.tracks?.size ?: 0
+    fun scrollFocusIntoView() {
+        val target = focus?.index ?: return
+        if (trackCount <= 1) return
+        val header = listState.headerOffsetOf(trackCount, trailingItems = 1) // 末尾还有一个 Spacer item
+        if (header <= 0) return
+        scope.launch { listState.scrollToItemCentered(header + target) }
+    }
     val context = LocalContext.current
 
     LaunchedEffect(message) {
@@ -110,7 +137,17 @@ fun DetailScreen(
                         video = s.video,
                         tracks = s.tracks,
                         isFavorited = isFavorited,
-                        onPlayAll = { viewModel.play(s.tracks, 0); onPlayNavigate() },
+                        startingPlay = startingPlay,
+                        pendingIndex = pendingIndex,
+                        focus = focus,
+                        playingTrack = playingTrack,
+                        progress = progress,
+                        listState = listState,
+                        onPlayAll = {
+                            viewModel.play(s.tracks, focus?.index ?: 0)
+                            scrollFocusIntoView()
+                            onPlayNavigate()
+                        },
                         onToggleFavorite = { viewModel.toggleFavorite() },
                         onPlayPage = { idx -> viewModel.play(s.tracks, idx); onPlayNavigate() }
                     )
@@ -125,12 +162,19 @@ private fun DetailContent(
     video: ViewData,
     tracks: List<Track>,
     isFavorited: Boolean,
+    startingPlay: Boolean,
+    pendingIndex: Int?,
+    focus: DetailFocus?,
+    playingTrack: PlayingTrack?,
+    progress: Map<String, HistoryEntity>,
+    listState: LazyListState,
     onPlayAll: () -> Unit,
     onToggleFavorite: () -> Unit,
     onPlayPage: (Int) -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
     ) {
@@ -209,9 +253,25 @@ private fun DetailContent(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = onPlayAll,
+                    enabled = !startingPlay,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors()
-                ) { Text(if (tracks.size > 1) "播放全部 (${tracks.size}P)" else "播放") }
+                ) {
+                    if (startingPlay) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("准备中…")
+                    } else if (focus != null) {
+                        // 有播放记录就是"继续"，并写明会从哪个分P接上
+                        Text("继续播放 P${focus.index + 1}")
+                    } else {
+                        Text(if (tracks.size > 1) "播放全部 (${tracks.size}P)" else "播放")
+                    }
+                }
                 OutlinedButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier.weight(1f)
@@ -241,12 +301,69 @@ private fun DetailContent(
                 Spacer(Modifier.height(4.dp))
             }
             itemsIndexed(tracks) { idx, t ->
+                val isPending = startingPlay && pendingIndex == idx
+                val focused = focus?.index == idx
+                val playing = playingTrack?.takeIf { it.key == "${t.bvid}:${t.cid}" }
+                val played = progress["${t.bvid}:${t.cid}"]
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onPlayPage(idx) }.padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                        .background(
+                            if (focused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            else Color.Transparent
+                        )
+                        .clickable(enabled = !isPending) { onPlayPage(idx) }
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "P${idx + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(32.dp))
-                    Text(text = t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (isPending) {
+                        Box(modifier = Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        Text(
+                            text = "P${idx + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal,
+                            color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(32.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // 一个列表只标一项：正在播的给实时进度，否则给"上次听到"。
+                        // 其余分P 不显示进度——挂好几个"上次听到"既没意义也误导。
+                        if (focused) {
+                            if (playing != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "正在播放 ${playedProgressLabel(null, playing.positionMs, t.durationMs)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1
+                                    )
+                                }
+                            } else {
+                                played?.let {
+                                    Text(
+                                        text = "上次听到 ${playedProgressLabel(null, it.positionMs, t.durationMs)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Text(text = formatDuration(t.durationMs), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
             }

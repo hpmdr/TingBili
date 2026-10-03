@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -53,6 +54,8 @@ fun HistoryScreen(
 ) {
     val list by vm.history.collectAsStateWithLifecycle()
     val info by vm.videoInfo.collectAsStateWithLifecycle()
+    val startingResume by vm.startingResume.collectAsStateWithLifecycle()
+    val pendingKey by vm.pendingKey.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
         topBar = {
@@ -85,6 +88,7 @@ fun HistoryScreen(
                     HistoryRow(
                         entity = item,
                         track = track,
+                        isPending = startingResume && pendingKey == "${item.bvid}:${item.cid}",
                         onResume = { vm.resume(item) },
                         onDelete = { vm.delete(item.bvid, item.cid) }
                     )
@@ -98,6 +102,7 @@ fun HistoryScreen(
 private fun HistoryRow(
     entity: HistoryEntity,
     track: Track?,
+    isPending: Boolean = false,
     onResume: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -110,6 +115,7 @@ private fun HistoryRow(
 
     Card(
         onClick = onResume,
+        enabled = !isPending,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -179,12 +185,19 @@ private fun HistoryRow(
                     )
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "删除",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (isPending) {
+                // 续播要两跳网络等待，就地给反馈并禁掉重复点击
+                Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+            } else {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

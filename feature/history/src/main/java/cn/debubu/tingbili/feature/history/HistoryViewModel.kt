@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -34,6 +35,20 @@ class HistoryViewModel @Inject constructor(
 
     private val inflight = mutableSetOf<String>()
 
+    private val _startingResume = MutableStateFlow(false)
+    private val _pendingKey = MutableStateFlow<String?>(null)
+
+    /**
+     * 续播准备中。resume() 要先 getView 再由 PlayerManager 取音源，两跳网络等待更长，
+     * 必须给出行内反馈并禁止重复点击，否则用户会以为没点上。
+     */
+    val startingResume: StateFlow<Boolean> =
+        combine(_startingResume, player.state) { starting, s -> starting || s.isLoading }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** 正在等起播的那条记录，键为 "bvid:cid" */
+    val pendingKey: StateFlow<String?> = _pendingKey.asStateFlow()
+
     init {
         viewModelScope.launch {
             history.collect { list ->
@@ -51,16 +66,25 @@ class HistoryViewModel @Inject constructor(
     }
 
     fun resume(h: HistoryEntity) {
+        val key = "${h.bvid}:${h.cid}"
+        if (_startingResume.value) return
         viewModelScope.launch {
-            val result = repo.getView(h.bvid)
-            val tracks = when (result) {
-                is Result.Success -> result.data
-                is Result.Error -> return@launch
+            _pendingKey.value = key
+            _startingResume.value = true
+            try {
+                val result = repo.getView(h.bvid)
+                val tracks = when (result) {
+                    is Result.Success -> result.data
+                    is Result.Error -> return@launch
+                }
+                if (tracks.isEmpty()) return@launch
+                val idx = tracks.indexOfFirst { it.cid == h.cid }.coerceAtLeast(0)
+                player.play(tracks, idx, "播放历史")
+                player.seekTo(h.positionMs)
+            } finally {
+                _startingResume.value = false
+                _pendingKey.value = null
             }
-            if (tracks.isEmpty()) return@launch
-            val idx = tracks.indexOfFirst { it.cid == h.cid }.coerceAtLeast(0)
-            player.play(tracks, idx, "播放历史")
-            player.seekTo(h.positionMs)
         }
     }
 

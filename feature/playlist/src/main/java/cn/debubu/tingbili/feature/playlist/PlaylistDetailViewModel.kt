@@ -17,9 +17,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/** 正在播放的曲目快照，供列表行渲染「正在播放 + 当前进度」 */
+data class PlayingTrack(val key: String, val positionMs: Long)
+
+/**
+ * 列表里被重点标出的那一项。一个列表同时只会有一个。
+ * @param index 集合内下标
+ * @param isPlaying true=正在播这一项（显示实时进度）；false=历史续播点（显示上次听到的进度）
+ */
+data class TrackFocus(val index: Int, val isPlaying: Boolean)
 
 /**
  * 收藏详情 ViewModel（路由参数 playlistId）。
@@ -49,6 +60,58 @@ class PlaylistDetailViewModel @Inject constructor(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    private val _startingPlay = MutableStateFlow(false)
+    private val _pendingIndex = MutableStateFlow<Int?>(null)
+
+    /**
+     * 播放启动中。PlayerManager 取音源要发网络请求，这段时间里按钮/行必须给反馈：
+     * 否则页面纹丝不动，用户会以为没点上而反复点击。
+     * `_startingPlay` 覆盖「点击→取音源」，`PlayerManager.isLoading` 覆盖「已取到→真正起播」。
+     */
+    val startingPlay: StateFlow<Boolean> =
+        combine(_startingPlay, player.state) { starting, s -> starting || s.isLoading }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** 正在等起播的那一行索引；用于在列表项上就地显示进度 */
+    val pendingIndex: StateFlow<Int?> = _pendingIndex.asStateFlow()
+
+    /**
+     * 正在播放的那一集：键 + 实时进度。
+     * 列表里用它替代「上次听到」——正在播的条目，历史进度马上就会被冲掉，
+     * 显示旧的反而误导；直接给当前进度更有用。
+     * 位置按整秒取整：播放器每 500ms 推一次，而文案精度只有秒。
+     * 只在真正播放/缓冲时给出：暂停或播完后 currentTrack 不会清空，
+     * 否则会一直挂着「正在播放」和一个停住不动的进度。
+     */
+    val playingTrack: StateFlow<PlayingTrack?> = player.state
+        .map { s ->
+            if (s.isPlaying || s.isLoading) {
+                s.currentTrack?.let {
+                    PlayingTrack(key = "${it.bvid}:${it.cid}", positionMs = s.positionMs / 1000L * 1000L)
+                }
+            } else null
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * 列表里唯一要重点显示的那一项，同时也是「继续播放」的落点：
+     * - 正在播这一项 → isPlaying=true（正在播的时候从这里续播最合理）
+     * - 否则取播放记录里 updatedAt 最近的那一集 → 历史续播点
+     * - 都没听过 → null，按钮回到「全部播放」并从第一条开始
+     */
+    val focus: StateFlow<TrackFocus?> =
+        combine(tracks, progress, playingTrack) { list, prog, playing ->
+            fun keyOf(e: PlaylistTrackEntity) = "${e.bvid}:${e.cid}"
+            fun idxOfKey(k: String) = list.indexOfFirst { keyOf(it) == k }.takeIf { i -> i >= 0 }
+
+            playing?.key?.let { idxOfKey(it) }?.let { return@combine TrackFocus(it, isPlaying = true) }
+
+            list.filter { prog.containsKey(keyOf(it)) }
+                .maxByOrNull { prog[keyOf(it)]?.updatedAt ?: 0L }
+                ?.let { idxOfKey(keyOf(it)) }
+                ?.let { TrackFocus(it, isPlaying = false) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         viewModelScope.launch { backfillMissingTrackMeta() }
@@ -87,14 +150,23 @@ class PlaylistDetailViewModel @Inject constructor(
     fun consumeMessage() { _message.value = null }
 
     fun playAll(startIndex: Int = 0) {
+        // 本地再挡一次重复点击，给出确定的「已在处理」反馈，而不是让互斥锁静默丢弃
+        if (_startingPlay.value) return
         viewModelScope.launch {
-            val entities = dao.getTracks(playlistId)
-            if (entities.isEmpty()) {
-                _message.value = "暂无内容"
-                return@launch
+            _pendingIndex.value = startIndex
+            _startingPlay.value = true
+            try {
+                val entities = dao.getTracks(playlistId)
+                if (entities.isEmpty()) {
+                    _message.value = "暂无内容"
+                    return@launch
+                }
+                val safe = startIndex.coerceIn(0, entities.lastIndex)
+                player.play(entities.map { it.toTrack() }, safe, playlist.value?.name ?: "收藏")
+            } finally {
+                _startingPlay.value = false
+                _pendingIndex.value = null
             }
-            val safe = startIndex.coerceIn(0, entities.lastIndex)
-            player.play(entities.map { it.toTrack() }, safe, playlist.value?.name ?: "收藏")
         }
     }
 
