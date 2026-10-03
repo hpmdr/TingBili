@@ -24,16 +24,17 @@
 
 ## 快速开始
 ```bash
-# 需 Android SDK cmdline-tools + platform-tools + build-tools 37.0.0 + JDK25（构建）/ 字节码目标保持 Java 17
-# 推荐使用新 CLI： /path/to/android-sdk/cmdline-tools/latest/bin/android
-android sdk --install "platforms;android-36" "build-tools;36.1.0" "platform-tools"
-./gradlew assembleDebug --no-daemon   # 轻量门禁，约 10-20s
+# 需 JDK 25（构建；字节码目标保持 Java 17）+ Android SDK cmdline-tools
+# 推荐使用新 CLI（sdkmanager 已废弃）： $ANDROID_HOME/cmdline-tools/latest/bin/android
+# 组件与 CI 保持一致：compileSdk 37 解析到 platforms;android-37.0，AGP 9.4 默认 build-tools 36.0.0
+android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+./gradlew assembleDebug --no-daemon   # 轻量门禁，全部命中缓存时约 30s
 ./gradlew :feature:history:assembleDebug :feature:player:assembleDebug --no-daemon
 # 全量测试较重，建议 CI 跑： ./gradlew testDebugUnitTest --no-daemon
 ```
 
 ## 多电脑开发
-- 另一台电脑：装 JDK25 + SDK（`platforms;android-37.2`、`build-tools;37.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.6 自动下载）。
+- 另一台电脑：装 JDK 25 + SDK（`platforms;android-37.0`、`build-tools;36.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.8.0 由 wrapper 自动下载）。
 - debug 签名已统一为仓库内 `app/debug.keystore`，多台电脑编出的测试包签名一致，同一部测试机换电脑装包无需卸载重装。release 签名严禁入库。
 
 国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`），`gradle.properties` 限制 `Xmx2g` + `daemon.idletimeout 30s` + `stop`，避免 IDE 侧 NodeService 阻塞。
@@ -59,4 +60,4 @@ feature:settings (step/dynamicColor)
 ## 免责声明
 - 本项目仅供学习交流，禁止商用，详见 [LICENSE](./LICENSE)
 - 与哔哩哔哩（bilibili）官方无任何隶属或授权关系，内容版权归原作者及平台所有
-- 使用本软件产生的账号风险由使用者自行承担，B 站 API 需遵守官方与 `bilibili-API-collect` 约束
+- 使用本软件产生的账号风险由使用者自行承担，使用 B 站接口须遵守 B 站官方规则

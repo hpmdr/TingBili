@@ -9,7 +9,7 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * WBI 签名实现，对照 bilibili-API-collect `docs/misc/sign/wbi.md`。
+ * WBI 签名实现。
  *
  * 流程：nav 接口取 img_key/sub_key（匿名可用）→ 重排得 mixin_key（缓存 30 分钟，
  * 官方口径每日更替）→ 参数过滤 + 加 wts + 键名升序 + 百分号编码 → MD5 得 w_rid。

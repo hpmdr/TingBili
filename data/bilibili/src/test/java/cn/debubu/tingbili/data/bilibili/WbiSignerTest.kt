@@ -4,8 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * 用 bilibili-API-collect `docs/misc/sign/wbi.md` 的官方示例值做断言，
- * 保证签名算法与文档一致。
+ * 用 WBI 签名算法的标准示例值做断言，
+ * 保证算法实现没有跑偏。
  */
 class WbiSignerTest {
 
