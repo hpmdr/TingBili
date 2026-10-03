@@ -2,16 +2,27 @@ package cn.debubu.tingbili.data.bilibili
 
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.data.bilibili.dto.SubtitleFile
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import javax.inject.Inject
 
 class BiliRepository @Inject constructor(
-    private val api: BiliApi
+    private val api: BiliApi,
+    // 复用 AppDataModule 里那个带 UA/Referer/buvid 的客户端：
+    // WbiInterceptor 只对 /search/ 与 /wbi/ 路径签名，拉 CDN 字幕文件不受影响。
+    // 默认值只为手写构造的单元测试兜底，Hilt 注入时仍走 AppDataModule 的单例。
+    private val httpClient: OkHttpClient = OkHttpClient(),
+    private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
 
     suspend fun search(keyword: String): Result<List<Track>> = try {
@@ -82,14 +93,32 @@ class BiliRepository @Inject constructor(
         Result.Error(e.message ?: "playurl failed", e)
     }
 
+    /**
+     * 取字幕要两跳：`/x/player/wbi/v2` 只给出字幕轨列表，
+     * 选中一条后再去它的 `subtitle_url` 下载正文 `{"body":[...]}`。
+     *
+     * 视频压根没有字幕时返回空列表，不算错误。
+     */
     suspend fun getSubtitle(bvid: String, cid: Long): Result<List<LyricLine>> = try {
         val dto = api.subtitle(bvid, cid)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "subtitle failed: code ${dto.code}" })
         } else {
-            Result.Success(dto.toLyricLines())
+            val track = dto.toTracks().firstOrNull()
+            Result.Success(if (track == null) emptyList() else fetchLyricLines(track.url))
         }
     } catch (e: Exception) {
         Result.Error(e.message ?: "subtitle failed", e)
+    }
+
+    /** 下载并解析字幕正文；CDN 返回 404 / 空体 / 非预期格式都按「没字幕」处理 */
+    private suspend fun fetchLyricLines(url: String): List<LyricLine> = withContext(Dispatchers.IO) {
+        runCatching {
+            httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyList()
+                val text = response.body?.string().orEmpty()
+                if (text.isBlank()) emptyList() else json.decodeFromString<SubtitleFile>(text).toLyricLines()
+            }
+        }.getOrDefault(emptyList())
     }
 }
