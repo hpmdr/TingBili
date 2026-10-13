@@ -33,6 +33,11 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val customThemeColor: Flow<Int> = ds.data.map { it[CUSTOM_THEME_COLOR] ?: DEFAULT_THEME_COLOR }
     val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
+    /** 首页发现流策展关键词，设置页可增减；空时回落默认 */
+    val homeKeywords: Flow<List<String>> = ds.data.map { prefs ->
+        prefs[HOME_KEYWORDS]?.split(",")?.map { it.trim() }
+            ?.filter { it.isNotBlank() }?.ifEmpty { null } ?: DEFAULT_HOME_KEYWORDS
+    }
     val cacheMaxMb: Flow<Int> = ds.data.map { (it[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB).coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
 
     // 上次播放恢复：队列（JSON）+ 下标 + 进度
@@ -88,6 +93,13 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[IMAGE_FORMAT] = v.name }
     }
 
+    suspend fun setHomeKeywords(keywords: List<String>) {
+        val cleaned = keywords.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        ds.edit {
+            if (cleaned.isEmpty()) it.remove(HOME_KEYWORDS) else it[HOME_KEYWORDS] = cleaned.joinToString(",")
+        }
+    }
+
     suspend fun setCacheMaxMb(v: Int) {
         ds.edit { it[CACHE_MAX_MB] = v.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
     }
@@ -137,8 +149,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val DARK_MODE = stringPreferencesKey("dark_mode")
         val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
+        val HOME_KEYWORDS = stringPreferencesKey("home_keywords")
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
         const val DEFAULT_CACHE_MAX_MB = 500
+        val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "有声书", "悬疑小说", "多人有声")
         const val MIN_CACHE_MAX_MB = 100
         const val MAX_CACHE_MAX_MB = 2048
         val LAST_QUEUE_JSON = stringPreferencesKey("last_queue_json")

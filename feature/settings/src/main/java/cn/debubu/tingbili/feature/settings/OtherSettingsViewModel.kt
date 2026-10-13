@@ -30,6 +30,28 @@ class OtherSettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
 
+    /** 首页推荐词（设置页可增减，至少保留一个） */
+    val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_HOME_KEYWORDS
+    )
+
+    fun addHomeKeyword(keyword: String) {
+        val k = keyword.trim()
+        if (k.isEmpty()) return
+        viewModelScope.launch {
+            val cur = homeKeywords.value
+            if (k !in cur) prefs.setHomeKeywords(cur + k)
+        }
+    }
+
+    fun removeHomeKeyword(keyword: String) {
+        viewModelScope.launch {
+            val cur = homeKeywords.value
+            if (cur.size <= 1) return@launch // 至少保留一个
+            prefs.setHomeKeywords(cur - keyword)
+        }
+    }
+
     private val _cacheSizeBytes = MutableStateFlow(0L)
     val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()
 

@@ -30,6 +30,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
@@ -55,6 +57,7 @@ fun HomeScreen(
     vm: HomeViewModel = hiltViewModel()
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
+    val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -63,6 +66,7 @@ fun HomeScreen(
     ) {
         HomeSearchEntry(
             onClick = onSearchClick,
+            keywords = homeKeywords,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         )
         if (paging.loadState.refresh is LoadState.Loading && paging.itemCount > 0) {
@@ -78,6 +82,7 @@ fun HomeScreen(
 @Composable
 private fun HomeSearchEntry(
     onClick: () -> Unit,
+    keywords: List<String>,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -107,7 +112,8 @@ private fun HomeSearchEntry(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "搜索 B站视频 / 关键词",
+                text = if (keywords.isEmpty()) "搜索 B站视频 / 关键词"
+                else "搜索 B站视频 · 推荐：${keywords.joinToString("/")}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,

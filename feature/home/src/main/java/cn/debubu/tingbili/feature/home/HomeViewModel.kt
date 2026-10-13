@@ -8,6 +8,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.db.PlaylistDao
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
@@ -20,12 +21,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: BiliRepository,
+    private val prefs: PreferencesRepository,
     private val player: PlayerManager,
     private val playlistDao: PlaylistDao
 ) : ViewModel() {
@@ -33,12 +37,19 @@ class HomeViewModel @Inject constructor(
     // 热流：cachedIn 保证翻页复用，stateIn 保证切 Tab 回来时新收集器首帧即拿到上一份 PagingData，
     // 避免每次 collectAsLazyPagingItems() 重建收集器就重走网络。WhileSubscribed(5000) 仅在无人收集 5s 后才上游停掉，
     // 符合“常驻、仅内存紧张时释放”的预期。
-    val pagingFlow: Flow<PagingData<Track>> =
-        Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-            HomePagingSource(repo)
-        }.flow
-            .cachedIn(viewModelScope)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
+    /** 首页策展关键词（设置页可增减），供搜索框展示 */
+    val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5_000), HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val pagingFlow: Flow<PagingData<Track>> = prefs.homeKeywords
+        .flatMapLatest { kws ->
+            Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
+                HomePagingSource(repo, kws)
+            }.flow.cachedIn(viewModelScope)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
 
     // BV multi-P bottomSheet state
     private val _selectedBvid = MutableStateFlow<String?>(null)

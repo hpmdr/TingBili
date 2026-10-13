@@ -103,6 +103,7 @@ class HomeViewModelTest {
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = null
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override suspend fun delete(bvid: String, cid: Long) {}
         override suspend fun clearAll() {}
     }
@@ -160,6 +161,7 @@ class HomeViewModelTest {
     private lateinit var repo: BiliRepository
     private lateinit var player: PlayerManager
     private lateinit var playlistDao: FakePlaylistDao
+    private lateinit var prefs: PreferencesRepository
 
     @Before
     fun setUp() {
@@ -167,7 +169,7 @@ class HomeViewModelTest {
         fakeApi = FakeBiliApi()
         repo = BiliRepository(fakeApi)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
+        prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
         player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo, context)
         playlistDao = FakePlaylistDao()
     }
@@ -179,7 +181,7 @@ class HomeViewModelTest {
 
     @Test
     fun `home exposes recommended paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao)
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
     }
@@ -202,7 +204,7 @@ class HomeViewModelTest {
         val source = HomePagingSource(repo)
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
-        assertEquals(HomePagingSource.DEFAULT_RECOMMEND_KEYWORD, fakeApi.lastSearchKeyword)
+        assertTrue(HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS.contains(fakeApi.lastSearchKeyword))
     }
 
     @Test
@@ -221,7 +223,7 @@ class HomeViewModelTest {
 
     @Test
     fun `showBottomSheet expands BV via view`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao)
         vm.showBottomSheetForBv("BV1xx")
         advanceUntilIdle()
         assertTrue(vm.showBottomSheet.first())
@@ -233,7 +235,7 @@ class HomeViewModelTest {
 
     @Test
     fun `addToPlaylist single and all`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao)
         val track = Track(bvid = "BV1xx", cid = 1001, title = "T1", author = "a", cover = "", durationMs = 60000, subtitleUrl = null)
         vm.addToPlaylist(track)
         advanceUntilIdle()
