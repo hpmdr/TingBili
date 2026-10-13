@@ -127,7 +127,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         it.hasRoute(cn.debubu.tingbili.navigation.HomeRoute::class) ||
         it.hasRoute(cn.debubu.tingbili.navigation.PlaylistRoute::class) ||
         it.hasRoute(cn.debubu.tingbili.navigation.HistoryRoute::class) ||
-        it.hasRoute(cn.debubu.tingbili.navigation.SettingsRoute::class) ||
+        it.hasRoute(cn.debubu.tingbili.navigation.MeRoute::class) ||
         it.hasRoute(MainTabsRoute::class)
     } ?: true
 

@@ -66,22 +66,6 @@ class SettingsViewModelTest {
         assertEquals(30, prefs.stepSec.first())
     }
 
-    @Test fun `set theme mode persists`() = runTest(dispatcher) {
-        val vm = SettingsViewModel(prefs, audioCache)
-        vm.setThemeMode(ThemeMode.CUSTOM)
-        advanceUntilIdle()
-        assertEquals(ThemeMode.CUSTOM, prefs.themeMode.first())
-    }
-
-    @Test fun `set custom theme color persists and selects custom mode`() = runTest(dispatcher) {
-        val vm = SettingsViewModel(prefs, audioCache)
-        val customColor = 0xFF00AEEC.toInt()
-        vm.setCustomThemeColor(customColor)
-        advanceUntilIdle()
-        assertEquals(customColor, prefs.customThemeColor.first())
-        assertEquals(ThemeMode.CUSTOM, prefs.themeMode.first())
-    }
-
     @Test fun `set cache max persists`() = runTest(dispatcher) {
         val vm = SettingsViewModel(prefs, audioCache)
         vm.setCacheMaxMb(1024)

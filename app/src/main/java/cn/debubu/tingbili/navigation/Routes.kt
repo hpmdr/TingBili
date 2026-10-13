@@ -15,6 +15,15 @@ object PlaylistRoute
 @Serializable
 object HistoryRoute
 
+/** 「我的」Tab：用户信息 + 外观/设置入口 */
+@Serializable
+object MeRoute
+
+/** 二级页：外观设置（主题色 / UI 选项） */
+@Serializable
+object AppearanceRoute
+
+/** 二级页：常用设置（播放 / 缓存等） */
 @Serializable
 object SettingsRoute
 
@@ -35,6 +44,6 @@ data class PlaylistDetailRoute(val playlistId: Long)
 
 /** 主页 4 Tab 的集合，用于判断是否显示底栏 */
 fun isMainTabRoute(route: Any?): Boolean = when (route) {
-    is HomeRoute, is PlaylistRoute, is HistoryRoute, is SettingsRoute, is MainTabsRoute -> true
+    is HomeRoute, is PlaylistRoute, is HistoryRoute, is MeRoute, is MainTabsRoute -> true
     else -> false
 }

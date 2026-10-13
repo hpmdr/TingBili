@@ -15,6 +15,8 @@ import cn.debubu.tingbili.feature.player.PlayerScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistDetailScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.search.SearchScreen
+import cn.debubu.tingbili.feature.settings.AppearanceScreen
+import cn.debubu.tingbili.feature.settings.MeScreen
 import cn.debubu.tingbili.feature.settings.SettingsScreen
 
 @Composable
@@ -39,9 +41,20 @@ fun AppRootNavHost(
                 PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
             }
             composable<HistoryRoute> { HistoryScreen() }
-            composable<SettingsRoute> { SettingsScreen() }
+            composable<MeRoute> {
+                MeScreen(
+                    onOpenAppearance = { navController.navigate(AppearanceRoute) },
+                    onOpenSettings = { navController.navigate(SettingsRoute) }
+                )
+            }
         }
-        // 独立全屏页：无底栏
+        // 独立全屏页：无底栏（「我的」的二级页）
+        composable<AppearanceRoute> {
+            AppearanceScreen(onBack = { navController.popBackStack() })
+        }
+        composable<SettingsRoute> {
+            SettingsScreen(onBack = { navController.popBackStack() })
+        }
         composable<SearchRoute> {
             SearchScreen(
                 onBack = { navController.popBackStack() },

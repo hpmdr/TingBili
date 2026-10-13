@@ -1,11 +1,6 @@
 package cn.debubu.tingbili.feature.settings
 
-import android.os.Build
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,40 +9,34 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
-import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
+/** 二级页：常用设置（播放 / 缓存 / 关于）。主题相关在「外观」页。 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
@@ -56,26 +45,27 @@ fun SettingsScreen(
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { vm.refreshCacheSize() }
-    val themeMode by vm.themeMode.collectAsStateWithLifecycle()
-    val customThemeColor by vm.customThemeColor.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
-        topBar = { TingBiliTopAppBar(title = "设置") }
+        topBar = {
+            TingBiliTopAppBar(
+                title = "设置",
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                }
+            )
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ThemeColorSettings(
-                themeMode = themeMode,
-                customThemeColor = customThemeColor,
-                onThemeModeChange = vm::setThemeMode,
-                onCustomColorChange = vm::setCustomThemeColor
-            )
-
             // 步进
             Column {
                 Text("前进 / 后退步长: $step 秒", style = MaterialTheme.typography.bodyLarge)
@@ -165,197 +155,23 @@ fun SettingsScreen(
                     Button(onClick = { vm.clearCache() }) { Text("清空缓存") }
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun ThemeColorSettings(
-    themeMode: ThemeMode,
-    customThemeColor: Int,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    onCustomColorChange: (Int) -> Unit
-) {
-    val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
-    val themePrimary = MaterialTheme.colorScheme.primary
-    val systemColor = remember(context, darkTheme, themePrimary) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val scheme = if (darkTheme) {
-                dynamicDarkColorScheme(context)
-            } else {
-                dynamicLightColorScheme(context)
-            }
-            scheme.primary
-        } else {
-            themePrimary
-        }
-    }
-    var showCustomDialog by remember { mutableStateOf(false) }
-
-    Column {
-        Text("主题色", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeMode.entries.forEach { mode ->
-                val swatch = when (mode) {
-                    ThemeMode.DEFAULT -> Color(PreferencesRepository.DEFAULT_THEME_COLOR)
-                    ThemeMode.SYSTEM -> systemColor
-                    ThemeMode.CUSTOM -> Color(customThemeColor)
-                }
-                ThemeModeChip(
-                    mode = mode,
-                    swatch = swatch,
-                    selected = themeMode == mode,
-                    onClick = {
-                        when (mode) {
-                            ThemeMode.CUSTOM -> showCustomDialog = true
-                            else -> onThemeModeChange(mode)
-                        }
-                    }
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        when (themeMode) {
-            ThemeMode.DEFAULT -> {
+            // 关于
+            Column {
+                Text("关于", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    "默认听视频粉 #FF6699",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ThemeMode.SYSTEM -> {
-                Text(
-                    "跟随系统动态取色，当前系统主色 ${systemColor.toHex()}。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ThemeMode.CUSTOM -> {
-                Text(
-                    "当前自定义色 ${Color(customThemeColor).toHex()}，点击“自定义”可重新调整。",
+                    "TingBili · B 站专用音频播放器（非官方，仅供学习交流）",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
-
-    if (showCustomDialog) {
-        CustomColorDialog(
-            initialColor = customThemeColor,
-            onConfirm = {
-                onCustomColorChange(it)
-                showCustomDialog = false
-            },
-            onDismiss = { showCustomDialog = false }
-        )
-    }
 }
-
-@Composable
-private fun ThemeModeChip(
-    mode: ThemeMode,
-    swatch: Color,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        leadingIcon = { ColorSwatch(swatch) },
-        label = { Text(mode.label()) },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = swatch.copy(alpha = 0.10f),
-            selectedContainerColor = swatch.copy(alpha = 0.24f)
-        )
-    )
-}
-
-@Composable
-private fun ColorSwatch(color: Color) {
-    Box(
-        modifier = Modifier
-            .size(16.dp)
-            .clip(CircleShape)
-            .background(color)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-    )
-}
-
-@Composable
-private fun CustomColorDialog(
-    initialColor: Int,
-    onConfirm: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var previewColor by remember(initialColor) { mutableStateOf(Color(initialColor)) }
-    val hsv = remember(previewColor) {
-        FloatArray(3).also { android.graphics.Color.colorToHSV(previewColor.toArgb(), it) }
-    }
-    val updateColor: (Int, Float) -> Unit = { index, value ->
-        val next = hsv.copyOf()
-        next[index] = value
-        previewColor = Color(android.graphics.Color.HSVToColor(next))
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("自定义主题色") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ColorSwatch(previewColor)
-                    Spacer(Modifier.size(10.dp))
-                    Text(
-                        text = previewColor.toHex(),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                Text("色相", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Slider(
-                    value = hsv[0],
-                    onValueChange = { updateColor(0, it) },
-                    valueRange = 0f..360f
-                )
-
-                Text("饱和度", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Slider(
-                    value = hsv[1],
-                    onValueChange = { updateColor(1, it) },
-                    valueRange = 0f..1f
-                )
-
-                Text("亮度", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Slider(
-                    value = hsv[2],
-                    onValueChange = { updateColor(2, it) },
-                    valueRange = 0.15f..1f
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(previewColor.toArgb()) }) { Text("应用") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
-
-private fun Color.toHex(): String = String.format("#%06X", toArgb() and 0xFFFFFF)
 
 private fun formatCacheSize(bytes: Long): String = when {
     bytes <= 0L -> "0MB"
     bytes < 1024L * 1024L -> "${bytes / 1024L}KB"
     else -> String.format("%.1fMB", bytes / (1024.0 * 1024.0))
-}
-
-private fun ThemeMode.label(): String = when (this) {
-    ThemeMode.DEFAULT -> "默认"
-    ThemeMode.SYSTEM -> "跟随系统"
-    ThemeMode.CUSTOM -> "自定义"
 }

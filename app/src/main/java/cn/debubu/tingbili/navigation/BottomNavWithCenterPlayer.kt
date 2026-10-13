@@ -7,10 +7,10 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -81,7 +81,7 @@ fun BottomNavWithCenterPlayer(
     val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
     val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
     val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
-    val isSettingsSelected = destination?.hierarchy?.any { it.hasRoute<SettingsRoute>() } == true
+    val isMeSelected = destination?.hierarchy?.any { it.hasRoute<MeRoute>() } == true
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationBarItemDefaults.colors()
     val track = state.currentTrack
@@ -161,9 +161,9 @@ fun BottomNavWithCenterPlayer(
             label = { Text("历史") }
         )
         NavigationBarItem(
-            selected = isSettingsSelected,
+            selected = isMeSelected,
             onClick = {
-                navController.navigate(SettingsRoute) {
+                navController.navigate(MeRoute) {
                     launchSingleTop = true
                     restoreState = true
                     popUpTo(navController.graph.startDestinationId) {
@@ -173,12 +173,12 @@ fun BottomNavWithCenterPlayer(
             },
             icon = {
                 Icon(
-                    imageVector = if (isSettingsSelected) Icons.Filled.Settings else Icons.Outlined.Settings,
+                    imageVector = if (isMeSelected) Icons.Filled.Person else Icons.Outlined.Person,
                     contentDescription = null
                 )
             },
             colors = itemColors,
-            label = { Text("设置") }
+            label = { Text("我的") }
         )
         }
     }
