@@ -24,6 +24,7 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 
 - 先跑 `java -version` 确认；字节码目标是 17，构建一律用 `./gradlew` 并加 `--no-daemon`。如报工具链错误，以报错信息和 `gradle/wrapper/gradle-wrapper.properties` 为准对齐 JDK，不要跟本文件较劲。
 - SDK 通过 `ANDROID_HOME` / `local.properties` 解析（`local.properties` 各机器不同，不入库）。缺组件看 `README.md` 快速开始。
+- **SDK 组件管理一律用新版 `android` CLI**（`$ANDROID_HOME/cmdline-tools/latest/bin/android`，如 `android sdk list` / `android sdk update` / `android sdk install`；可加 `--sdk=<路径>` 指定 SDK）。**`sdkmanager` 已废弃**：会打印弃用警告且首次执行易卡死，禁止再用。网络操作加 `timeout`。
 - `settings.gradle.kts` 已自动切换镜像（本地 vs `CI=true`），不要为了修网络去改它。先重试一次，再读报错。
 - 缺开发环境（JDK / SDK / 构建组件）时先停下问用户，不要自己下载安装或改系统配置。把缺什么、去哪装、装哪版一次性问清，等用户确认再动。
 
