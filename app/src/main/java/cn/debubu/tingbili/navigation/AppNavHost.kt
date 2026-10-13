@@ -44,7 +44,19 @@ fun AppRootNavHost(
             composable<MeRoute> {
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
-                    onOpenSettings = { navController.navigate(SettingsRoute) }
+                    onOpenSettings = { navController.navigate(SettingsRoute) },
+                    onOpenPlaylists = {
+                        navController.navigate(PlaylistRoute) {
+                            launchSingleTop = true; restoreState = true
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        }
+                    },
+                    onOpenHistory = {
+                        navController.navigate(HistoryRoute) {
+                            launchSingleTop = true; restoreState = true
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        }
+                    }
                 )
             }
         }
