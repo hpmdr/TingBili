@@ -2,69 +2,27 @@ package cn.debubu.tingbili.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.datasource.cache.SimpleCache
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
-import cn.debubu.tingbili.core.data.model.ImageFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** 「播放与音频设置」：步长 / 定时预设。图片格式与缓存在 OtherSettingsViewModel。 */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val prefs: PreferencesRepository,
-    private val audioCache: SimpleCache
+    private val prefs: PreferencesRepository
 ) : ViewModel() {
 
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
-    val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF)
-    val cacheMaxMb: StateFlow<Int> = prefs.cacheMaxMb.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        PreferencesRepository.DEFAULT_CACHE_MAX_MB
+    val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90)
     )
-    val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90))
-
-    private val _cacheSizeBytes = MutableStateFlow(0L)
-    val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()
-
-    init {
-        refreshCacheSize()
-    }
-
-    fun refreshCacheSize() {
-        viewModelScope.launch {
-            _cacheSizeBytes.value = try {
-                audioCache.cacheSpace
-            } catch (_: Exception) { 0L }
-        }
-    }
-
-    fun clearCache() {
-        viewModelScope.launch {
-            try {
-                audioCache.keys.forEach { audioCache.removeResource(it) }
-            } catch (_: Exception) { }
-            refreshCacheSize()
-        }
-    }
 
     fun setStep(v: Int) {
         viewModelScope.launch { prefs.setStep(v.coerceIn(5, 60)) }
-    }
-
-    fun setImageFormat(v: ImageFormat) {
-        viewModelScope.launch { prefs.setImageFormat(v) }
-    }
-
-    fun setCacheMaxMb(v: Int) {
-        viewModelScope.launch {
-            prefs.setCacheMaxMb(v.coerceIn(PreferencesRepository.MIN_CACHE_MAX_MB, PreferencesRepository.MAX_CACHE_MAX_MB))
-        }
     }
 
     fun setTimerPresets(presets: Set<Int>) {

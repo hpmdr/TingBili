@@ -3,7 +3,6 @@ package cn.debubu.tingbili.feature.settings
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +47,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.ThemeMode
+import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
@@ -60,6 +61,7 @@ fun AppearanceScreen(
     vm: AppearanceViewModel = hiltViewModel()
 ) {
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
+    val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val customThemeColor by vm.customThemeColor.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
@@ -82,6 +84,11 @@ fun AppearanceScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            DarkModeSettings(
+                darkMode = darkMode,
+                onDarkModeChange = vm::setDarkMode
+            )
+
             ThemeColorSettings(
                 themeMode = themeMode,
                 customThemeColor = customThemeColor,
@@ -111,6 +118,44 @@ fun AppearanceScreen(
 }
 
 @Composable
+private fun DarkModeSettings(
+    darkMode: DarkMode,
+    onDarkModeChange: (DarkMode) -> Unit
+) {
+    Column {
+        Text("深色模式", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DarkMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = darkMode == mode,
+                    onClick = { onDarkModeChange(mode) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                DarkMode.LIGHT -> "☀️ 浅色"
+                                DarkMode.DARK -> "🌙 深色"
+                                DarkMode.FOLLOW_SYSTEM -> "📱 跟随系统"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            when (darkMode) {
+                DarkMode.LIGHT -> "始终使用浅色界面"
+                DarkMode.DARK -> "始终使用深色界面"
+                DarkMode.FOLLOW_SYSTEM -> "跟随系统明暗自动切换"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun ThemeColorSettings(
     themeMode: ThemeMode,
     customThemeColor: Int,
@@ -118,7 +163,7 @@ private fun ThemeColorSettings(
     onCustomColorChange: (Int) -> Unit
 ) {
     val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = LocalDarkTheme.current
     val themePrimary = MaterialTheme.colorScheme.primary
     val systemColor = remember(context, darkTheme, themePrimary) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

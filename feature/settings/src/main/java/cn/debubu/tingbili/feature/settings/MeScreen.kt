@@ -3,7 +3,6 @@ package cn.debubu.tingbili.feature.settings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,15 +23,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
 private val BiliPink = Color(0xFFFB7299)
@@ -73,15 +75,17 @@ private val BiliBlue = Color(0xFF00A1D6)
 fun MeScreen(
     onOpenAppearance: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenOtherSettings: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenHistory: () -> Unit,
     vm: MeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = LocalDarkTheme.current
     val playlistCount by vm.playlistCount.collectAsStateWithLifecycle()
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
+    val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     var showAbout by remember { mutableStateOf(false) }
 
     val placeholder: (String) -> Unit = { msg ->
@@ -98,7 +102,7 @@ fun MeScreen(
         MeHeader(
             darkTheme = darkTheme,
             onBadgeClick = { placeholder("听书专属版：敬请期待") },
-            onBellClick = { placeholder("消息通知：暂未开放") }
+            onToggleDark = { vm.toggleDarkMode(darkTheme) }
         )
 
         // ── 2. 悬浮四宫格数据卡（叠在头部下缘） ──────────────
@@ -132,8 +136,8 @@ fun MeScreen(
                     icon = Icons.Filled.Settings,
                     iconTint = Color(0xFF10B981),
                     iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
-                    title = "播放与缓存设置",
-                    subtitle = "步长、图片格式、缓存清理",
+                    title = "播放与音频设置",
+                    subtitle = "步长、定时关闭",
                     onClick = onOpenSettings
                 )
             }
@@ -141,6 +145,15 @@ fun MeScreen(
             Spacer(Modifier.height(16.dp))
             SectionLabel("系统与账户")
             SettingsGroup {
+                SettingsRow(
+                    icon = Icons.Filled.Tune,
+                    iconTint = Color(0xFF8B5CF6),
+                    iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
+                    title = "其他设置",
+                    subtitle = "图片格式、缓存清理",
+                    onClick = onOpenOtherSettings
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                 SettingsRow(
                     icon = Icons.Filled.Info,
                     iconTint = Color(0xFF06B6D4),
@@ -186,7 +199,7 @@ fun MeScreen(
 private fun MeHeader(
     darkTheme: Boolean,
     onBadgeClick: () -> Unit,
-    onBellClick: () -> Unit
+    onToggleDark: () -> Unit
 ) {
     val gradient = if (darkTheme) {
         Brush.verticalGradient(listOf(Color(0xFF251A20), Color(0xFF1E1E1E), Color(0xFF1A1A1A)))
@@ -226,7 +239,12 @@ private fun MeHeader(
                 Text("听书专属版", color = onHeaderColor, fontSize = 12.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                HeaderIconButton(Icons.Filled.Notifications, darkTheme, onBellClick)
+                // 明暗快捷切换：亮色显示月亮（点击切深色），深色显示太阳（点击切浅色）
+                HeaderIconButton(
+                    icon = if (darkTheme) Icons.Filled.WbSunny else Icons.Filled.DarkMode,
+                    darkTheme = darkTheme,
+                    onClick = onToggleDark
+                )
             }
         }
 
@@ -315,7 +333,7 @@ private fun DashboardGrid(
     onLaterListen: () -> Unit,
     onCache: () -> Unit
 ) {
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = LocalDarkTheme.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -400,7 +418,7 @@ private fun SectionLabel(text: String) {
 
 @Composable
 private fun SettingsGroup(content: @Composable () -> Unit) {
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = LocalDarkTheme.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),

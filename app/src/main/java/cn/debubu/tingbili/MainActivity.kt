@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -94,7 +95,15 @@ class MainActivity : ComponentActivity() {
             val mainViewModel: MainViewModel = hiltViewModel()
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val customThemeColor by mainViewModel.customThemeColor.collectAsStateWithLifecycle()
+            val darkMode by mainViewModel.darkMode.collectAsStateWithLifecycle()
+            val systemDark = isSystemInDarkTheme()
+            val darkTheme = when (darkMode) {
+                cn.debubu.tingbili.core.data.model.DarkMode.DARK -> true
+                cn.debubu.tingbili.core.data.model.DarkMode.LIGHT -> false
+                else -> systemDark
+            }
             TingBiliTheme(
+                darkTheme = darkTheme,
                 themeMode = themeMode,
                 customThemeColorArgb = customThemeColor
             ) {

@@ -23,9 +23,13 @@ object MeRoute
 @Serializable
 object AppearanceRoute
 
-/** 二级页：常用设置（播放 / 缓存等） */
+/** 二级页：常用设置（播放 / 音频） */
 @Serializable
 object SettingsRoute
+
+/** 二级页：其他设置（图片格式 / 音频缓存） */
+@Serializable
+object OtherSettingsRoute
 
 /** 独立全屏页：搜索 */
 @Serializable

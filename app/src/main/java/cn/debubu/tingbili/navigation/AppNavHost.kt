@@ -17,6 +17,7 @@ import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.search.SearchScreen
 import cn.debubu.tingbili.feature.settings.AppearanceScreen
 import cn.debubu.tingbili.feature.settings.MeScreen
+import cn.debubu.tingbili.feature.settings.OtherSettingsScreen
 import cn.debubu.tingbili.feature.settings.SettingsScreen
 
 @Composable
@@ -45,6 +46,7 @@ fun AppRootNavHost(
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
+                    onOpenOtherSettings = { navController.navigate(OtherSettingsRoute) },
                     onOpenPlaylists = {
                         navController.navigate(PlaylistRoute) {
                             launchSingleTop = true; restoreState = true
@@ -66,6 +68,9 @@ fun AppRootNavHost(
         }
         composable<SettingsRoute> {
             SettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable<OtherSettingsRoute> {
+            OtherSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable<SearchRoute> {
             SearchScreen(

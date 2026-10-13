@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.DarkMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
@@ -25,8 +27,20 @@ import kotlinx.coroutines.launch
 class MeViewModel @Inject constructor(
     playlistDao: PlaylistDao,
     historyDao: HistoryDao,
+    private val prefs: PreferencesRepository,
     private val audioCache: SimpleCache
 ) : ViewModel() {
+
+    val darkMode: StateFlow<DarkMode> = prefs.darkMode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM
+    )
+
+    /** 头部明暗快捷切换：当前为暗（含跟随系统且系统暗）则切浅色，否则切深色 */
+    fun toggleDarkMode(currentEffectiveDark: Boolean) {
+        viewModelScope.launch {
+            prefs.setDarkMode(if (currentEffectiveDark) DarkMode.LIGHT else DarkMode.DARK)
+        }
+    }
 
     val playlistCount: StateFlow<Int> = playlistDao.observePlaylists()
         .map { it.size }
