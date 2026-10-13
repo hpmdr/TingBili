@@ -38,7 +38,8 @@ object AppDataModule {
                 TingBiliDatabase.MIGRATION_1_2,
                 TingBiliDatabase.MIGRATION_2_3,
                 TingBiliDatabase.MIGRATION_3_4,
-                TingBiliDatabase.MIGRATION_4_5
+                TingBiliDatabase.MIGRATION_4_5,
+                TingBiliDatabase.MIGRATION_5_6
             )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()

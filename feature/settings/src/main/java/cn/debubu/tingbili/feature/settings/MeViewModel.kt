@@ -46,6 +46,9 @@ class MeViewModel @Inject constructor(
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    /** 本地累计收听时长（ms），无需登录 */
+    val totalListenMs: StateFlow<Long> = historyDao.observeTotalListenMs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
     val historyTodayCount: StateFlow<Int> = historyDao.observeAll()
         .map { list ->
             val cal = Calendar.getInstance().apply {

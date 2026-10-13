@@ -85,6 +85,7 @@ fun MeScreen(
     val playlistCount by vm.playlistCount.collectAsStateWithLifecycle()
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
+    val totalListenMs by vm.totalListenMs.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     var showAbout by remember { mutableStateOf(false) }
 
@@ -101,6 +102,7 @@ fun MeScreen(
         // ── 1. 沉浸式渐变头部 ─────────────────────────────
         MeHeader(
             darkTheme = darkTheme,
+            totalListenMs = totalListenMs,
             onBadgeClick = { placeholder("听书专属版：敬请期待") },
             onToggleDark = { vm.toggleDarkMode(darkTheme) }
         )
@@ -114,7 +116,7 @@ fun MeScreen(
                 onPlaylists = onOpenPlaylists,
                 onHistory = onOpenHistory,
                 onLaterListen = { placeholder("稍后听：暂未开放") },
-                onCache = onOpenSettings
+                onCache = onOpenOtherSettings
             )
         }
 
@@ -198,6 +200,7 @@ fun MeScreen(
 @Composable
 private fun MeHeader(
     darkTheme: Boolean,
+    totalListenMs: Long,
     onBadgeClick: () -> Unit,
     onToggleDark: () -> Unit
 ) {
@@ -297,7 +300,13 @@ private fun MeHeader(
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        text = "收听时长将随登录同步",
+                        text = if (totalListenMs > 0L) {
+                            val hours = totalListenMs / 3600000.0
+                            if (hours >= 1.0) "已累计听视频 %.1f 小时".format(hours)
+                            else "已累计听视频 ${totalListenMs / 60000} 分钟"
+                        } else {
+                            "开始收听，积累你的收听时长"
+                        },
                         color = onHeaderColor.copy(alpha = 0.9f),
                         fontSize = 11.sp
                     )

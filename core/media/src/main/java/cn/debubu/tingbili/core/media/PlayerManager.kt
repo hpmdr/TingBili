@@ -58,6 +58,11 @@ class PlayerManager @Inject constructor(
 
     private var historyJob: Job? = null
     private var positionPollJob: Job? = null
+
+    // 本地累计收听时长统计：当前条目累计值 + 上次 tick 位置（排除 seek 跳变）
+    private var listenAccumMs = 0L
+    private var lastTickPos = -1L
+    private var lastListenKey: Pair<String, Long>? = null
     private val playMutex = Mutex()
 
     init {
@@ -362,12 +367,24 @@ class PlayerManager @Inject constructor(
                 val track = _state.value.currentTrack ?: continue
                 if (!transport.isPlaying) continue
                 val pos = transport.currentPosition
+                // 换集后重载该条目已有的累计收听时长
+                val key = track.bvid to track.cid
+                if (key != lastListenKey) {
+                    listenAccumMs = historyDao.get(track.bvid, track.cid)?.listenDurationMs ?: 0L
+                    lastListenKey = key
+                    lastTickPos = pos
+                }
+                // 累计收听：仅统计正常播放推进（排除 seek 跳变/换集），粒度 ~1s
+                val delta = pos - lastTickPos
+                if (delta in 1..2000L) listenAccumMs += delta
+                lastTickPos = pos
                 historyDao.save(
                     HistoryEntity(
                         bvid = track.bvid,
                         cid = track.cid,
                         positionMs = pos,
-                        updatedAt = System.currentTimeMillis()
+                        updatedAt = System.currentTimeMillis(),
+                        listenDurationMs = listenAccumMs
                     )
                 )
                 // 同步更新 DataStore 里的 lastPosition，供 UI 恢复进度环使用

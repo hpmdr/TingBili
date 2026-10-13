@@ -85,6 +85,7 @@ class PlayerManagerTest {
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = map[bvid to cid]
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(map.values.toList())
+        override fun observeTotalListenMs(): Flow<Long> = flowOf(map.values.sumOf { it.listenDurationMs })
         override suspend fun delete(bvid: String, cid: Long) { map.remove(bvid to cid) }
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
