@@ -70,6 +70,7 @@ fun SearchScreen(
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
     val kw by vm.keyword.collectAsStateWithLifecycle()
+    val defaultKw by vm.defaultKeyword.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf(kw) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -87,7 +88,12 @@ fun SearchScreen(
         keyboard?.hide()
         val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
-        vm.onSearch(input)
+        // 空输入时按首页推荐默认词搜，并回填输入框，结果与所见一致
+        val query = input.ifBlank { defaultKw }
+        if (query.isNotBlank()) {
+            input = query
+            vm.onSearch(query)
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(12.dp)) {
@@ -98,7 +104,7 @@ fun SearchScreen(
             TextField(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = { Text("搜索 B站视频 / 关键词") },
+                placeholder = { Text(if (defaultKw.isBlank()) "搜索 B站视频 / 关键词" else "搜：${defaultKw}…") },
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 singleLine = true,
                 trailingIcon = {
