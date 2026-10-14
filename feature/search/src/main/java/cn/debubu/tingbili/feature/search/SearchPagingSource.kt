@@ -7,7 +7,8 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
 
 class SearchPagingSource(
     private val repo: BiliRepository,
-    private val keyword: String
+    private val keyword: String,
+    private val onTotalLoaded: (Int) -> Unit = {}
 ) : PagingSource<Int, Track>() {
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Track> {
@@ -16,7 +17,8 @@ class SearchPagingSource(
             if (keyword.isBlank()) {
                 return LoadResult.Page(data = emptyList(), prevKey = null, nextKey = null)
             }
-            val tracks = repo.searchPage(keyword, page)
+            val (tracks, total) = repo.searchPageWithTotal(keyword, page)
+            onTotalLoaded(total)
             val nextKey = if (tracks.isEmpty()) null else page + 1
             val prevKey = if (page == 1) null else page - 1
             LoadResult.Page(data = tracks, prevKey = prevKey, nextKey = nextKey)

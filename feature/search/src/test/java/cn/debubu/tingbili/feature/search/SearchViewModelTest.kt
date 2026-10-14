@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -39,10 +40,14 @@ class SearchViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        prefs = newPrefs("test_search_prefs")
+    }
+
+    private fun newPrefs(name: String): PreferencesRepository {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        prefs = PreferencesRepository(
+        return PreferencesRepository(
             androidx.datastore.preferences.core.PreferenceDataStoreFactory.create {
-                context.preferencesDataStoreFile("test_search_prefs")
+                context.preferencesDataStoreFile(name)
             }
         )
     }
@@ -66,6 +71,34 @@ class SearchViewModelTest {
         val vm = SearchViewModel(SavedStateHandle(), BiliRepository(FakeBiliApi()), prefs)
 
         assertEquals("有声小说", vm.defaultKeyword.first { it.isNotBlank() })
+    }
+
+    // 搜索历史逻辑在 prefs 层确定性覆盖（纯 suspend，无 ViewModel 时序依赖）；
+    // onSearch→落盘的异步连线用真机验证
+    @Test
+    fun `search history add dedup cap remove clear`() {
+        runBlocking {
+            val p = newPrefs("test_search_hist_c")
+            withTimeout(20_000) {
+                assertEquals(emptyList<String>(), p.searchHistory.first())
+
+                p.addSearchHistory("音乐")
+                p.addSearchHistory("小说")
+                p.addSearchHistory("音乐")
+                assertEquals(listOf("音乐", "小说"), p.searchHistory.first())
+
+                p.removeSearchHistory("音乐")
+                assertEquals(listOf("小说"), p.searchHistory.first())
+
+                repeat(20) { p.addSearchHistory("k$it") }
+                val capped = p.searchHistory.first()
+                assertEquals(15, capped.size)
+                assertEquals("k19", capped.first())
+
+                p.clearSearchHistory()
+                assertEquals(emptyList<String>(), p.searchHistory.first())
+            }
+        }
     }
 
     @Test
@@ -142,3 +175,4 @@ class SearchViewModelTest {
 // helper extension for preferencesDataStoreFile in test
 private fun android.content.Context.preferencesDataStoreFile(name: String): java.io.File =
     java.io.File(cacheDir, "$name.preferences_pb")
+

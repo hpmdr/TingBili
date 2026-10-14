@@ -14,6 +14,7 @@ import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 class PreferencesRepository(private val ds: DataStore<Preferences>) {
@@ -37,6 +38,16 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val homeKeywords: Flow<List<String>> = ds.data.map { prefs ->
         prefs[HOME_KEYWORDS]?.split(",")?.map { it.trim() }
             ?.filter { it.isNotBlank() }?.ifEmpty { null } ?: DEFAULT_HOME_KEYWORDS
+    }
+    /** 搜索历史（本地，最近在前、去重、上限），搜索页空态展示 */
+    val searchHistory: Flow<List<String>> = ds.data.map { prefs ->
+        prefs[SEARCH_HISTORY_JSON]?.let { json ->
+            try {
+                Json.decodeFromString(ListSerializer(String.serializer()), json)
+            } catch (_: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
     }
     val cacheMaxMb: Flow<Int> = ds.data.map { (it[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB).coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
 
@@ -138,6 +149,41 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         }
     }
 
+    suspend fun addSearchHistory(query: String) {
+        val q = query.trim()
+        if (q.isBlank()) return
+        ds.edit {
+            val cur = it[SEARCH_HISTORY_JSON]?.let { json ->
+                try {
+                    Json.decodeFromString(ListSerializer(String.serializer()), json)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } ?: emptyList()
+            val next = (listOf(q) + cur.filter { h -> h != q }).take(MAX_SEARCH_HISTORY)
+            it[SEARCH_HISTORY_JSON] = Json.encodeToString(ListSerializer(String.serializer()), next)
+        }
+    }
+
+    suspend fun removeSearchHistory(query: String) {
+        ds.edit {
+            val cur = it[SEARCH_HISTORY_JSON]?.let { json ->
+                try {
+                    Json.decodeFromString(ListSerializer(String.serializer()), json)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } ?: emptyList()
+            val next = cur.filter { h -> h != query }
+            if (next.isEmpty()) it.remove(SEARCH_HISTORY_JSON)
+            else it[SEARCH_HISTORY_JSON] = Json.encodeToString(ListSerializer(String.serializer()), next)
+        }
+    }
+
+    suspend fun clearSearchHistory() {
+        ds.edit { it.remove(SEARCH_HISTORY_JSON) }
+    }
+
     companion object {
         val STEP_SEC = intPreferencesKey("step_sec")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
@@ -150,6 +196,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
         val HOME_KEYWORDS = stringPreferencesKey("home_keywords")
+        val SEARCH_HISTORY_JSON = stringPreferencesKey("search_history_json")
+        const val MAX_SEARCH_HISTORY = 15
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
         const val DEFAULT_CACHE_MAX_MB = 500
         val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "有声书", "悬疑小说", "多人有声")

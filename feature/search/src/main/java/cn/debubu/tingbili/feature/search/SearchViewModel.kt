@@ -21,12 +21,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repo: BiliRepository,
-    prefs: PreferencesRepository
+    private val prefs: PreferencesRepository
 ) : ViewModel() {
 
     private val _keyword = MutableStateFlow(savedStateHandle.get<String>("keyword").orEmpty())
@@ -40,14 +41,38 @@ class SearchViewModel @Inject constructor(
         .map { it.firstOrNull().orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
+    /** 推荐搜索 chips（全部首页策展关键词），搜索页空态展示 */
+    val suggestKeywords: StateFlow<List<String>> = prefs.homeKeywords
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 搜索历史（本地，最近在前），搜索页空态展示 */
+    val searchHistory: StateFlow<List<String>> = prefs.searchHistory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 当前搜索词的结果总数（接口返回的全量命中数），结果计数条用 */
+    private val _totalCount = MutableStateFlow<Int?>(null)
+    val totalCount: StateFlow<Int?> = _totalCount.asStateFlow()
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: Flow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
         Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-            SearchPagingSource(repo, kw)
+            SearchPagingSource(repo, kw, onTotalLoaded = { _totalCount.value = it })
         }.flow.cachedIn(viewModelScope)
     }
 
     fun onSearch(kw: String) {
-        _keyword.value = kw.trim()
+        val q = kw.trim()
+        if (q.isEmpty()) return
+        _keyword.value = q
+        _totalCount.value = null
+        viewModelScope.launch { prefs.addSearchHistory(q) }
+    }
+
+    fun removeHistory(query: String) {
+        viewModelScope.launch { prefs.removeSearchHistory(query) }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch { prefs.clearSearchHistory() }
     }
 }

@@ -47,6 +47,14 @@ class BiliRepository @Inject constructor(
         return dto.toTracks()
     }
 
+    /** 搜索分页 + 结果总数（搜索页结果计数条用；总数为接口返回的全量命中数） */
+    suspend fun searchPageWithTotal(keyword: String, page: Int = 1): Pair<List<Track>, Int> {
+        if (keyword.isBlank()) return emptyList<Track>() to 0
+        val dto = api.search(keyword, page = page)
+        if (dto.code != 0) throw IllegalStateException(dto.message.ifBlank { "search failed: code ${dto.code}" })
+        return dto.toTracks() to (dto.data?.numResults ?: 0)
+    }
+
     suspend fun getView(bvid: String): Result<List<Track>> = try {
         val dto = api.view(bvid)
         if (dto.code != 0) {
