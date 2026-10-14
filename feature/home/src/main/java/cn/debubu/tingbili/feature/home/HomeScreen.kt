@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,8 +31,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +52,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
@@ -58,6 +67,15 @@ fun HomeScreen(
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    // 下拉指示器只跟随用户主动刷新；初始加载走全屏转圈，不抢戏
+    val refreshState = paging.loadState.refresh
+    LaunchedEffect(refreshState) {
+        if (refreshState !is LoadState.Loading) isRefreshing = false
+    }
 
     Column(
         modifier = Modifier
@@ -72,10 +90,23 @@ fun HomeScreen(
         if (paging.loadState.refresh is LoadState.Loading && paging.itemCount > 0) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-        TrackPagingGrid(
-            paging = paging,
-            onTrackClick = { track -> onTrackToDetail(track.bvid) }
-        )
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                vm.shuffleKeywords()
+                scope.launch { gridState.scrollToItem(0) }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            TrackPagingGrid(
+                paging = paging,
+                gridState = gridState,
+                onTrackClick = { track -> onTrackToDetail(track.bvid) }
+            )
+        }
     }
 }
 
@@ -126,10 +157,12 @@ private fun HomeSearchEntry(
 @Composable
 private fun TrackPagingGrid(
     paging: LazyPagingItems<Track>,
+    gridState: LazyGridState,
     onTrackClick: (Track) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 156.dp),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

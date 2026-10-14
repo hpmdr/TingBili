@@ -13,7 +13,6 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,26 +38,28 @@ class SearchViewModel @Inject constructor(
      */
     val defaultKeyword: StateFlow<String> = prefs.homeKeywords
         .map { it.firstOrNull().orEmpty() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     /** 推荐搜索 chips（全部首页策展关键词），搜索页空态展示 */
     val suggestKeywords: StateFlow<List<String>> = prefs.homeKeywords
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** 搜索历史（本地，最近在前），搜索页空态展示 */
     val searchHistory: StateFlow<List<String>> = prefs.searchHistory
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** 当前搜索词的结果总数（接口返回的全量命中数），结果计数条用 */
     private val _totalCount = MutableStateFlow<Int?>(null)
     val totalCount: StateFlow<Int?> = _totalCount.asStateFlow()
 
+    // 数据层常驻：与 HomeViewModel 同理，进详情再回来秒回、无重载
     @OptIn(ExperimentalCoroutinesApi::class)
-    val pagingFlow: Flow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
+    val pagingFlow: StateFlow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
         Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
             SearchPagingSource(repo, kw, onTotalLoaded = { _totalCount.value = it })
         }.flow.cachedIn(viewModelScope)
     }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PagingData.empty())
 
     fun onSearch(kw: String) {
         val q = kw.trim()

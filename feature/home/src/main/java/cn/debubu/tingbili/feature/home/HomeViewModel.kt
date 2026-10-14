@@ -16,12 +16,12 @@ import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,22 +34,38 @@ class HomeViewModel @Inject constructor(
     private val playlistDao: PlaylistDao
 ) : ViewModel() {
 
-    // 热流：cachedIn 保证翻页复用，stateIn 保证切 Tab 回来时新收集器首帧即拿到上一份 PagingData，
-    // 避免每次 collectAsLazyPagingItems() 重建收集器就重走网络。WhileSubscribed(5000) 仅在无人收集 5s 后才上游停掉，
-    // 符合“常驻、仅内存紧张时释放”的预期。
+    // 数据层常驻：流的生命周期与 ViewModel 对齐（Eagerly 启动，VM 释放才停），
+    // 与有没有收集器无关。进搜索/详情/切 Tab 再回来都是秒回、无网络、无转圈；
+    // 只有关键词变更、下拉刷新、进程重建才会重建推荐流。
     /** 首页策展关键词（设置页可增减），供搜索框展示 */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5_000), HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
+        viewModelScope, SharingStarted.Eagerly, HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
     )
 
+    /** 下拉刷新计数：每次 +1 即随机重排关键词并重建推荐流 */
+    private val _refreshTick = MutableStateFlow(0)
+    private var lastKeywordOrder: List<String> = emptyList()
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val pagingFlow: Flow<PagingData<Track>> = prefs.homeKeywords
-        .flatMapLatest { kws ->
-            Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-                HomePagingSource(repo, kws)
-            }.flow.cachedIn(viewModelScope)
+    val pagingFlow: StateFlow<PagingData<Track>> =
+        combine(prefs.homeKeywords, _refreshTick) { kws, _ ->
+            // 随机重排，多词时尽量与上次不同，避免“刷了个寂寞”
+            var shuffled = kws.shuffled()
+            if (shuffled.size > 1 && shuffled == lastKeywordOrder) shuffled = kws.shuffled()
+            lastKeywordOrder = shuffled
+            shuffled
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
+            .flatMapLatest { ordered ->
+                Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
+                    HomePagingSource(repo, ordered)
+                }.flow.cachedIn(viewModelScope)
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, PagingData.empty())
+
+    /** 下拉刷新：随机重排关键词，推荐流自动重建 */
+    fun shuffleKeywords() {
+        _refreshTick.value += 1
+    }
 
     // BV multi-P bottomSheet state
     private val _selectedBvid = MutableStateFlow<String?>(null)

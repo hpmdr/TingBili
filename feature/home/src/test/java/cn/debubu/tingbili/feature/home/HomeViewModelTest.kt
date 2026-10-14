@@ -29,6 +29,7 @@ import androidx.media3.common.Player
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -184,6 +185,15 @@ class HomeViewModelTest {
         val vm = HomeViewModel(repo, prefs, player, playlistDao)
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
+    }
+
+    @Test
+    fun `shuffle emits new paging data`() = runTest(dispatcher) {
+        val vm = HomeViewModel(repo, prefs, player, playlistDao)
+        vm.pagingFlow.first()
+        vm.shuffleKeywords()
+        // 常驻流：刷新后必有新一份 PagingData（只断言换新，不断言随机顺序本身）
+        assertNotNull(vm.pagingFlow.drop(1).first())
     }
 
     @Test
