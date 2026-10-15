@@ -342,6 +342,8 @@ open class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             return Result.failure(e)
         }
+        println("BiliAuth: login/sms code=${dto.code} msg=${dto.message} status=${dto.data?.status} " +
+            "hasUrl=${!dto.data?.url.isNullOrBlank()} hasRt=${!dto.data?.refreshToken.isNullOrBlank()}")
         if (dto.code != 0) return Result.failure(IllegalStateException(dto.message.ifBlank { "login failed: ${dto.code}" }))
         val d = dto.data ?: return Result.failure(IllegalStateException("login empty data"))
         if ((d.status ?: 0) == 2) {
