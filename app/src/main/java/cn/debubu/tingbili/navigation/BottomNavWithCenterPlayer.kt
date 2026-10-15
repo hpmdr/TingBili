@@ -28,6 +28,8 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
+import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -40,7 +42,13 @@ import kotlinx.coroutines.flow.stateIn
 class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
     prefs: PreferencesRepository,
+    auth: AuthRepository,
 ) : ViewModel() {
+
+    init {
+        // 登录态保活：进程启动时检查一次，需要续期则静默续期；失败忽略，下次启动再试
+        viewModelScope.launch { auth.maintainSession() }
+    }
     val imageFormat = prefs.imageFormat.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

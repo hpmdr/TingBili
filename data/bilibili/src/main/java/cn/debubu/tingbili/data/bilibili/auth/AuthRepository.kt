@@ -40,6 +40,7 @@ open class AuthRepository @Inject constructor(
 ) {
     internal var passportBase: String = "https://passport.bilibili.com"
     internal var apiBase: String = "https://api.bilibili.com"
+    internal var correspondBase: String = "https://www.bilibili.com"
 
     private val client = OkHttpClient.Builder()
         .followRedirects(false)
@@ -118,8 +119,8 @@ open class AuthRepository @Inject constructor(
         }
     }
 
-    /** 扫码成功后调用：换 Cookie → nav 验证 → 落盘并发布 */
-    open suspend fun finishQrLogin(redirectUrl: String): Result<BiliSession> {
+    /** 扫码成功后调用：换 Cookie → nav 验证 → 落盘并发布（含 refresh_token，续期用） */
+    open suspend fun finishQrLogin(redirectUrl: String, refreshToken: String = ""): Result<BiliSession> {
         val cookies = try {
             exchangeCookies(redirectUrl)
         } catch (e: Exception) {
@@ -137,6 +138,7 @@ open class AuthRepository @Inject constructor(
             uid = uid,
             userName = nav.userName,
             face = nav.face,
+            refreshToken = refreshToken,
             extras = cookies.filterKeys { it == "DedeUserID__ckMd5" || it == "sid" },
         )
         save(session)
@@ -158,6 +160,79 @@ open class AuthRepository @Inject constructor(
         )
         save(session)
         return Result.success(session)
+    }
+
+    /**
+     * 会话保活（PiliPlus 稳定的内核，Web 侧对等协议）：
+     * cookie/info 问是否需要续期 → correspond 拿 refresh_csrf → cookie/refresh
+     * 换新 Cookie → confirm 退役旧 token → nav 验证 → 落盘。
+     * 无会话 / 无 refresh_token（老会话）/ 网络失败一律返回 false，调用方忽略即可。
+     * 进程启动时调一次（MainViewModel），每天自然触发，不额外建定时任务。
+     */
+    suspend fun maintainSession(): Boolean {
+        val current = _sessionFlow.value ?: return false
+        if (current.refreshToken.isBlank()) return false
+        return try {
+            refreshSession(current)?.let { save(it); true } ?: false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun refreshSession(current: BiliSession): BiliSession? = withContext(Dispatchers.IO) {
+        if (!needsRefresh(current)) return@withContext current
+        val csrf = current.biliJct
+        if (csrf.isBlank()) return@withContext null
+        val refreshCsrf = fetchRefreshCsrf(csrf) ?: return@withContext null
+        val form = "csrf=$csrf&refresh_csrf=$refreshCsrf&source=main_web&refresh_token=${current.refreshToken}"
+        val resp = postResponse("$passportBase/x/passport-login/web/cookie/refresh", form, current.toCookieHeader())
+        resp.use {
+            if (!it.isSuccessful) return@withContext null
+            val body = it.body.string()
+            val dto = json.decodeFromString(CookieRefreshDto.serializer(), body)
+            if (dto.code != 0) return@withContext null
+            val cookies = mutableMapOf<String, String>()
+            it.headers("Set-Cookie").forEach { header ->
+                val name = header.substringBefore(";").substringBefore("=").trim()
+                val value = header.substringAfter("=", "").substringBefore(";").trim()
+                if (name.isNotEmpty() && value.isNotEmpty()) cookies[name] = value
+            }
+            val sessdata = cookies["SESSDATA"].orEmpty()
+            val uid = cookies["DedeUserID"]?.toLongOrNull() ?: 0L
+            if (sessdata.isBlank() || uid <= 0L) return@withContext null
+            // 新凭证必须验过才落盘
+            val header = provisionalHeader(cookies)
+            val nav = fetchNav(header).getOrNull()?.takeIf { n -> n.isLogin } ?: return@withContext null
+            confirmRefresh(csrf, current.refreshToken, current.toCookieHeader())
+            BiliSession(
+                sessdata = sessdata,
+                biliJct = cookies["bili_jct"].orEmpty(),
+                uid = uid,
+                userName = nav.userName.ifBlank { current.userName },
+                face = nav.face.ifBlank { current.face },
+                refreshToken = dto.data?.refreshToken.orEmpty().ifBlank { current.refreshToken },
+                extras = cookies.filterKeys { k -> k == "DedeUserID__ckMd5" || k == "sid" },
+            )
+        }
+    }
+
+    private fun needsRefresh(current: BiliSession): Boolean {
+        val body = get("$passportBase/x/passport-login/web/cookie/info", current.toCookieHeader())
+        val dto = json.decodeFromString(CookieInfoDto.serializer(), body)
+        return dto.code == 0 && (dto.data?.refresh == true)
+    }
+
+    private fun fetchRefreshCsrf(csrf: String): String? {
+        val html = get("$correspondBase/correspond/1/$csrf", null)
+        return REFRESH_CSRF_RE.find(html)?.groupValues?.getOrNull(1)
+    }
+
+    private fun confirmRefresh(csrf: String, oldToken: String, cookieHeader: String) {
+        try {
+            post("$passportBase/x/passport-login/web/confirm/refresh", "csrf=$csrf&refresh_token=$oldToken", cookieHeader)
+        } catch (_: Exception) {
+            // 旧 token 退役尽力而为
+        }
     }
 
     suspend fun logout() {
@@ -206,17 +281,20 @@ open class AuthRepository @Inject constructor(
     private fun getResponse(url: String, cookieHeader: String? = null) =
         client.newCall(baseHeaders(cookieHeader).url(url).get().build()).execute()
 
-    private fun post(url: String, formBody: String, cookieHeader: String? = null): String {
-        val body = okhttp3.FormBody.Builder().apply {
-            formBody.split("&").forEach {
-                val k = it.substringBefore("=")
-                val v = it.substringAfter("=", "")
-                add(k, v)
+    private fun postResponse(url: String, formBody: String, cookieHeader: String? = null) =
+        client.newCall(
+            baseHeaders(cookieHeader).url(url).post(formBody.toFormBody()).build()
+        ).execute()
+
+    private fun String.toFormBody(): okhttp3.RequestBody =
+        okhttp3.FormBody.Builder().apply {
+            split("&").forEach {
+                add(it.substringBefore("="), it.substringAfter("=", ""))
             }
         }.build()
-        client.newCall(baseHeaders(cookieHeader).url(url).post(body).build()).execute().use {
-            return it.body.string()
-        }
+
+    private fun post(url: String, formBody: String, cookieHeader: String? = null): String {
+        postResponse(url, formBody, cookieHeader).use { return it.body.string() }
     }
 
     @Serializable
@@ -235,6 +313,18 @@ open class AuthRepository @Inject constructor(
     private data class NavDto(val code: Int = -1, val message: String = "", val data: NavData? = null)
 
     @Serializable
+    private data class CookieInfoDto(val code: Int = -1, val data: CookieInfoData? = null)
+
+    @Serializable
+    private data class CookieInfoData(val refresh: Boolean = false, val timestamp: Long = 0L)
+
+    @Serializable
+    private data class CookieRefreshDto(val code: Int = -1, val message: String = "", val data: CookieRefreshData? = null)
+
+    @Serializable
+    private data class CookieRefreshData(@SerialName("refresh_token") val refreshToken: String = "")
+
+    @Serializable
     private data class NavData(
         val isLogin: Boolean = false,
         val mid: Long = 0L,
@@ -243,6 +333,7 @@ open class AuthRepository @Inject constructor(
     )
 
     companion object {
+        val REFRESH_CSRF_RE = Regex(""""refresh_token"\s*:\s*"([^"]+)"""")
         const val MAX_REDIRECT_HOPS = 5
         const val BROWSER_UA =
             "Mozilla/5.0 (Linux; Android 14; 2311DRK48C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"

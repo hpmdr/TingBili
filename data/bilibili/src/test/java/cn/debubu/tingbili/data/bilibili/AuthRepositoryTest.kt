@@ -111,4 +111,60 @@ class AuthRepositoryTest {
         assertTrue(ok?.toCookieHeader()?.contains("buvid3") == false)
         assertTrue(ok?.toCookieHeader()?.contains("DedeUserID__ckMd5=C") == true)
     }
+
+    @Test
+    fun `maintainSession without session does nothing`() = runTest {
+        assertTrue(!repo.maintainSession())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `maintainSession skips when refresh not needed`() = runTest {
+        repo.save(BiliSession("S", "J", 9L, refreshToken = "RT0"))
+        server.enqueue(MockResponse().setBody(
+            """{"code":0,"data":{"refresh":false,"timestamp":123}}"""
+        ))
+        assertTrue(repo.maintainSession())
+        assertEquals(1, server.requestCount)
+        // 会话原样保留
+        assertEquals("RT0", repo.sessionFlow.value?.refreshToken)
+    }
+
+    @Test
+    fun `maintainSession refreshes full chain`() = runTest {
+        repo.save(BiliSession("OLD_S", "OLD_J", 9L, "老名字", "", "RT0"))
+        repo.correspondBase = server.url("/").toString().trimEnd('/')
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(req: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val path = req.path.orEmpty()
+                return when {
+                    path.startsWith("/x/passport-login/web/cookie/info") ->
+                        MockResponse().setBody("""{"code":0,"data":{"refresh":true}}""")
+                    path.startsWith("/correspond/1/") ->
+                        MockResponse().setBody("""<html>"refresh_token":"CSRF123"</html>""")
+                    path.startsWith("/x/passport-login/web/cookie/refresh") ->
+                        MockResponse()
+                            .addHeader("Set-Cookie", "SESSDATA=NEW_S; Path=/")
+                            .addHeader("Set-Cookie", "bili_jct=NEW_J; Path=/")
+                            .addHeader("Set-Cookie", "DedeUserID=9; Path=/")
+                            .setBody("""{"code":0,"data":{"refresh_token":"RT1"}}""")
+                    path.startsWith("/x/passport-login/web/confirm/refresh") ->
+                        MockResponse().setBody("""{"code":0}""")
+                    path.startsWith("/x/web-interface/nav") ->
+                        MockResponse().setBody(
+                            """{"code":0,"data":{"isLogin":true,"mid":9,"uname":"新名字","face":"https://f/n.jpg"}}"""
+                        )
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        assertTrue(repo.maintainSession())
+        val s = repo.sessionFlow.value
+        assertEquals("NEW_S", s?.sessdata)
+        assertEquals("NEW_J", s?.biliJct)
+        assertEquals("RT1", s?.refreshToken)
+        assertEquals("新名字", s?.userName)
+        // info + correspond + refresh + confirm + nav = 5 次请求
+        assertEquals(5, server.requestCount)
+    }
 }

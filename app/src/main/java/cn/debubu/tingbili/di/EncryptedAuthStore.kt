@@ -41,6 +41,7 @@ class EncryptedAuthStore @Inject constructor(
             uid = uid,
             userName = prefs.getString(KEY_UNAME, "").orEmpty(),
             face = prefs.getString(KEY_FACE, "").orEmpty(),
+            refreshToken = prefs.getString(KEY_REFRESH, "").orEmpty(),
             extras = prefs.getString(KEY_EXTRAS, null)?.let {
                 Json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), it)
             } ?: emptyMap(),
@@ -59,6 +60,7 @@ class EncryptedAuthStore @Inject constructor(
             e.putLong(KEY_UID, session.uid)
             e.putString(KEY_UNAME, session.userName)
             e.putString(KEY_FACE, session.face)
+            e.putString(KEY_REFRESH, session.refreshToken)
             e.putString(
                 KEY_EXTRAS,
                 Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), session.extras),
@@ -74,6 +76,7 @@ class EncryptedAuthStore @Inject constructor(
         private const val KEY_UID = "uid"
         private const val KEY_UNAME = "uname"
         private const val KEY_FACE = "face"
+        private const val KEY_REFRESH = "refresh_token"
         private const val KEY_EXTRAS = "extras"
     }
 }

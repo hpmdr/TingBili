@@ -65,12 +65,20 @@ fun LoginScreen(
     LaunchedEffect(session) {
         if (session != null) onSuccess()
     }
+    var tab by remember { mutableIntStateOf(0) }
     DisposableEffect(autoStartQr) {
-        if (autoStartQr) vm.startQr()
+        if (autoStartQr && tab == 0) vm.startQr()
         onDispose { vm.stopQr() }
     }
 
-    var tab by remember { mutableIntStateOf(0) }
+    // 切走扫码页即停轮询（省请求、防风控）；切回且码已失效则重取
+    LaunchedEffect(tab) {
+        if (tab == 0) {
+            if (vm.qr.value.let { it !is QrUi.Ready && it !is QrUi.Success }) vm.startQr()
+        } else {
+            vm.stopQr()
+        }
+    }
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(

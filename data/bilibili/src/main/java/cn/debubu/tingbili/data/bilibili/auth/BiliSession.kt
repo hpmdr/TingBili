@@ -10,6 +10,11 @@ data class BiliSession(
     val uid: Long,
     val userName: String = "",
     val face: String = "",
+    /**
+     * 扫码成功时 B 站下发的 refresh_token，会话续期的唯一凭证。
+     * 老会话没有它（需重扫一次），[AuthRepository.maintainSession] 会跳过。
+     */
+    val refreshToken: String = "",
     /** 换链路带回的其他 Cookie（如 DedeUserID__ckMd5、sid），原样回传 */
     val extras: Map<String, String> = emptyMap(),
 ) {

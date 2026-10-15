@@ -84,7 +84,7 @@ class LoginViewModel @Inject constructor(
                         return@launch
                     }
                     is QrStatus.Success -> {
-                        val r = auth.finishQrLogin(st.redirectUrl)
+                        val r = auth.finishQrLogin(st.redirectUrl, st.refreshToken)
                         r.onSuccess { _qr.value = QrUi.Success }
                             .onFailure { _qr.value = QrUi.Failed("登录失败：${it.message}") }
                         countJob.cancel()
