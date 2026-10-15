@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -76,7 +80,7 @@ fun LoginScreen(
     // 切走扫码页即停轮询（省请求、防风控）；切回且码已失效则重取
     LaunchedEffect(tab, autoStartQr) {
         if (!autoStartQr) return@LaunchedEffect
-        if (tab == 0) {
+        if (tab == QR_TAB) {
             if (vm.qr.value.let { it !is QrUi.Ready && it !is QrUi.Success }) vm.startQr()
         } else {
             vm.stopQr()
@@ -100,15 +104,15 @@ fun LoginScreen(
                 .padding(innerPadding),
         ) {
             TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("扫码登录") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("短信登录") })
-                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("密码登录") })
-                Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Cookie 导入") })
+                Tab(selected = tab == PASSWORD_TAB, onClick = { tab = PASSWORD_TAB }, text = { Text("密码登录") })
+                Tab(selected = tab == SMS_TAB, onClick = { tab = SMS_TAB }, text = { Text("短信登录") })
+                Tab(selected = tab == QR_TAB, onClick = { tab = QR_TAB }, text = { Text("扫码登录") })
+                Tab(selected = tab == COOKIE_TAB, onClick = { tab = COOKIE_TAB }, text = { Text("Cookie 导入") })
             }
             when (tab) {
-                0 -> QrTab(vm)
-                1 -> SmsTab(vm)
-                2 -> PasswordTab(vm)
+                PASSWORD_TAB -> PasswordTab(vm)
+                SMS_TAB -> SmsTab(vm)
+                QR_TAB -> QrTab(vm)
                 else -> CookieTab(vm)
             }
             val gee by vm.gee.collectAsStateWithLifecycle()
@@ -247,6 +251,12 @@ private fun SmsTab(vm: LoginViewModel) {
     var zone by remember { mutableStateOf("86") }
     var tel by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    val codeFocus = remember { FocusRequester() }
+    // 发送成功（手机号已过校验）→ 光标自动进验证码框
+    val sentKey = (sms as? LoginViewModel.SmsUi.Sent)?.captchaKey
+    LaunchedEffect(sentKey) {
+        if (!sentKey.isNullOrBlank()) codeFocus.requestFocus()
+    }
     val sending = sms is LoginViewModel.SmsUi.Sending
     val sent = sms as? LoginViewModel.SmsUi.Sent
     Column(
@@ -270,15 +280,19 @@ private fun SmsTab(vm: LoginViewModel) {
                 modifier = Modifier.weight(1f),
                 label = { Text("手机号") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = code,
                 onValueChange = { code = it.filter(Char::isDigit).take(6) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(codeFocus),
                 label = { Text("验证码") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
             val canSend = !sending && (sent == null || sent.secondsLeft <= 0)
             Button(
@@ -328,14 +342,14 @@ private fun PasswordTab(vm: LoginViewModel) {
     ) {
         OutlinedTextField(
             value = username,
-            onValueChange = { username = it.trim() },
+            onValueChange = { username = it.filter { c -> !c.isWhitespace() } },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("手机号 / 邮箱") },
             singleLine = true,
         )
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { password = it.filter { c -> !c.isWhitespace() } },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("密码") },
             singleLine = true,
@@ -371,3 +385,8 @@ private fun PasswordTab(vm: LoginViewModel) {
         )
     }
 }
+
+private const val PASSWORD_TAB = 0
+private const val SMS_TAB = 1
+private const val QR_TAB = 2
+private const val COOKIE_TAB = 3
