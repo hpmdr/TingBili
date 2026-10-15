@@ -63,12 +63,13 @@ fun AppRootNavHost(
                     onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 )
             }
+        }
+        // 独立全屏页：无底栏（登录）
         composable<LoginRoute> {
             LoginScreen(
                 onBack = { navController.popBackStack() },
                 onSuccess = { navController.popBackStack() },
             )
-        }
         }
         // 独立全屏页：无底栏（「我的」的二级页）
         composable<AppearanceRoute> {
