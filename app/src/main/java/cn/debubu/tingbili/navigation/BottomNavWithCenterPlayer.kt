@@ -1,7 +1,6 @@
 package cn.debubu.tingbili.navigation
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -17,9 +16,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -67,7 +66,8 @@ class MainViewModel @Inject constructor(
 @Composable
 fun BottomNavWithCenterPlayer(
     navController: NavController,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    visibility: MiniPlayerVisibility = rememberMiniPlayerVisibility(),
 ) {
     val playerManager = viewModel.playerManager
     val state by playerManager.state.collectAsStateWithLifecycle()
@@ -91,8 +91,11 @@ fun BottomNavWithCenterPlayer(
     val itemColors = NavigationBarItemDefaults.colors()
     val track = state.currentTrack
 
+    val trackKey = track?.let { "${it.bvid}:${it.cid}" }
+    LaunchedEffect(trackKey) { visibility.onTrackChanged(trackKey) }
+
     Column {
-        if (track != null) {
+        if (track != null && trackKey != null) {
             MiniPlayerBar(
                 track = track,
                 isPlaying = isPlaying,
@@ -101,7 +104,9 @@ fun BottomNavWithCenterPlayer(
                 onOpen = {
                     navController.navigate(PlayerRoute) { launchSingleTop = true }
                 },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                progress = progress,
+                visible = visibility.isVisible(trackKey),
+                onDismiss = { visibility.dismiss(trackKey) },
             )
         }
         NavigationBar {

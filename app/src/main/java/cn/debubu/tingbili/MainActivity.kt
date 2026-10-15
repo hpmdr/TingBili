@@ -32,6 +32,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -58,7 +59,7 @@ import javax.inject.Inject
 
 /**
  * Main entry with TingBiliTheme + Navigation Compose 2.8 type-safe.
- * Phone: Scaffold + NavigationBar (4 tabs + floating MiniPlayerBar via BottomNavWithCenterPlayer).
+ * Phone: Scaffold + NavigationBar (4 tabs + 贴底 mini 条 via BottomNavWithCenterPlayer).
  * Tablet/wide: explicit mapping to NavigationRail (Compact -> NavigationBar).
  *         mini player remains centered floating at bottom.
  */
@@ -142,11 +143,14 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
 
     CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
-        // 手机：主页 Tab 带底栏 + 悬浮 mini 条；独立页全屏（由 MainTabsScaffold/AppRootNavHost 决定）
+        // 手机：主页 Tab 带底栏 + 贴底 mini 条（滚动联动隐藏，只收条不收栏）；独立页全屏
+        val miniPlayerVisibility = cn.debubu.tingbili.navigation.rememberMiniPlayerVisibility()
         if (inMainTabs) {
             Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                bottomBar = { BottomNavWithCenterPlayer(navController) }
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(miniPlayerVisibility.connection),
+                bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
             ) { innerPadding ->
                 // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
                 val layoutDirection = LocalLayoutDirection.current

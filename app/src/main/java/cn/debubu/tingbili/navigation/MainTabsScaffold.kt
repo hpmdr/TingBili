@@ -22,9 +22,14 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,7 +38,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 
-/** 主页 4 Tab 的壳：窄屏底栏 + 悬浮 mini 条；宽屏 Rail + 右下悬浮 mini 条 */
+/** 主页 4 Tab 的壳：窄屏底栏 + 贴底 mini 条；宽屏 Rail + 右下 mini 条 */
 @Composable
 fun MainTabsScaffold(
     navController: NavHostController,
@@ -56,9 +61,11 @@ fun MainTabsScaffold(
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationSuiteDefaults.itemColors()
 
+    val miniPlayerVisibility = rememberMiniPlayerVisibility()
     if (layoutType == NavigationSuiteType.NavigationBar) {
         Scaffold(
-            bottomBar = { BottomNavWithCenterPlayer(navController) }
+            modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
+            bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
         ) { innerPadding ->
             AppRootNavHost(navController = navController, modifier = Modifier.padding(innerPadding))
         }
@@ -141,7 +148,15 @@ fun MainTabsScaffold(
                 val playerManager = viewModel.playerManager
                 val state by playerManager.state.collectAsStateWithLifecycle()
                 val track = state.currentTrack
-                if (track != null) {
+                val trackKey = track?.let { "${it.bvid}:${it.cid}" }
+                var dismissedKey by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(trackKey) { if (trackKey != dismissedKey) dismissedKey = null }
+                val overlayProgress = if (state.durationMs > 0L) {
+                    (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+                if (track != null && trackKey != null) {
                     MiniPlayerBar(
                         track = track,
                         isPlaying = state.isPlaying,
@@ -151,7 +166,10 @@ fun MainTabsScaffold(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(16.dp)
-                            .width(320.dp)
+                            .width(320.dp),
+                        progress = overlayProgress,
+                        visible = dismissedKey != trackKey,
+                        onDismiss = { dismissedKey = trackKey },
                     )
                 }
             }
