@@ -246,8 +246,11 @@ open class AuthRepository @Inject constructor(
         runCatching {
             val body = get("$passportBase/x/passport-login/captcha?source=main_web")
             val dto = json.decodeFromString(CaptchaDto.serializer(), body)
+            println("BiliAuth: " +  "captcha code=${dto.code} hasToken=${!dto.data?.token.isNullOrBlank()} " +
+                "hasGt=${!dto.data?.geetest?.gt.isNullOrBlank()} type=${dto.data?.type}")
             require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "captcha failed: ${dto.code}" } }
             val g = dto.data.geetest ?: throw IllegalStateException("captcha missing geetest")
+            require(g.gt.isNotBlank() && g.challenge.isNotBlank()) { "captcha empty gt/challenge" }
             GeeTicket(dto.data.token, g.gt, g.challenge)
         }
     }
@@ -261,6 +264,7 @@ open class AuthRepository @Inject constructor(
                 "&validate=${result.validate}&seccode=${result.seccode}"
             val body = post("$passportBase/x/passport-login/web/sms/send", form, null)
             val dto = json.decodeFromString(SmsSendDto.serializer(), body)
+            println("BiliAuth: " +  "sms/send code=${dto.code} msg=${dto.message} hasKey=${dto.data?.captchaKey?.isNotBlank()}")
             require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "sms send failed: ${dto.code}" } }
             val key = dto.data.captchaKey
             require(key.isNotBlank()) { "sms send missing captcha_key" }

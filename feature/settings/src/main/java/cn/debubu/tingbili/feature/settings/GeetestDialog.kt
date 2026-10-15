@@ -2,6 +2,9 @@ package cn.debubu.tingbili.feature.settings
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.WebViewClient
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -78,6 +81,21 @@ fun GeetestDialog(
                             settings.useWideViewPort = true
                             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            webChromeClient = object : android.webkit.WebChromeClient() {
+                                override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                                    Log.d(TAG, "console [${msg.messageLevel()}] ${msg.message()} @${msg.lineNumber()}")
+                                    return true
+                                }
+                            }
+                            webViewClient = object : WebViewClient() {
+                                override fun onReceivedError(
+                                    view: WebView,
+                                    request: android.webkit.WebResourceRequest,
+                                    error: android.webkit.WebResourceError,
+                                ) {
+                                    Log.d(TAG, "page error url=${request.url} code=${error.errorCode}")
+                                }
+                            }
                             android.webkit.CookieManager.getInstance()
                                 .setAcceptThirdPartyCookies(this, false)
                             addJavascriptInterface(
@@ -112,12 +130,16 @@ private class GeeBridge(private val onMessage: (String) -> Unit) {
     }
 }
 
+private const val TAG = "GeeDialog"
+
 private fun handleGeeMessage(
     raw: String,
     onSuccess: (String, String, String) -> Unit,
     onCancel: () -> Unit,
     onError: (String) -> Unit,
 ) {
+    // 只打长度与类型，票据内容不落日志
+    Log.d(TAG, "bridge msg name=${raw.substringBefore(":")} len=${raw.length}")
     val name = raw.substringBefore(":")
     val payload = raw.substringAfter(":", "")
     when (name) {
