@@ -66,13 +66,14 @@ fun LoginScreen(
         if (session != null) onSuccess()
     }
     var tab by remember { mutableIntStateOf(0) }
-    DisposableEffect(autoStartQr) {
-        if (autoStartQr && tab == 0) vm.startQr()
+    DisposableEffect(Unit) {
         onDispose { vm.stopQr() }
     }
 
+    // 扫码取码统一走这里（初次进入/切回），避免重复生成浪费请求
     // 切走扫码页即停轮询（省请求、防风控）；切回且码已失效则重取
-    LaunchedEffect(tab) {
+    LaunchedEffect(tab, autoStartQr) {
+        if (!autoStartQr) return@LaunchedEffect
         if (tab == 0) {
             if (vm.qr.value.let { it !is QrUi.Ready && it !is QrUi.Success }) vm.startQr()
         } else {
