@@ -146,6 +146,52 @@ class PlayerManagerTest {
     }
 
     @Test
+    fun `sleep timer pauses at zero and clears`() = runTest {
+        playerManager.testScope = this
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.startSleepTimer(60)
+        assertEquals(60, playerManager.state.value.sleepRemainSec)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals(false, playerManager.state.value.isPlaying)
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
+        assertEquals(false, playerManager.state.value.sleepEndOfChapter)
+        playerManager.release()
+    }
+
+    @Test
+    fun `sleep timer cancel clears state`() = runTest {
+        playerManager.testScope = this
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.startSleepTimer(60)
+        playerManager.cancelSleepTimer()
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
+        advanceTimeBy(120_000)
+        runCurrent()
+        // 取消后不再触发暂停
+        assertEquals(true, playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `end of chapter timer fires on track change`() = runTest {
+        playerManager.testScope = this
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 1000, null),
+            Track("BV2", 2, "t2", "a", "", 1000, null),
+        )
+        playerManager.play(tracks, 0)
+        playerManager.startEndOfChapterTimer()
+        assertEquals(true, playerManager.state.value.sleepEndOfChapter)
+        playerManager.next()
+        advanceTimeBy(2000)
+        runCurrent()
+        assertEquals(false, playerManager.state.value.isPlaying)
+        assertEquals(false, playerManager.state.value.sleepEndOfChapter)
+        playerManager.release()
+    }
+
+    @Test
     fun `play starts foreground playback service`() = runTest {
         playerManager.testScope = this
         val appContext = ApplicationProvider.getApplicationContext<Context>()

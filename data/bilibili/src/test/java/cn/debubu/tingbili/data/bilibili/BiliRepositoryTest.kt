@@ -150,6 +150,35 @@ class BiliRepositoryTest {
     }
 
     @Test
+    fun `getSubtitle marks ai track label`() = runTest {
+        val fileUrl = server.url("/ai2.json").toString()
+        server.enqueue(
+            jsonResponse(
+                "{\"code\":0,\"data\":{\"subtitle\":{\"subtitles\":[{\"lan\":\"ai-zh\",\"lan_doc\":\"ZH\",\"type\":1,\"subtitle_url\":\"" + fileUrl + "\"}]}}}"
+            )
+        )
+        server.enqueue(jsonResponse("{\"body\":[{\"from\":0.0,\"to\":1.0,\"content\":\"AI\"}]}"))
+        val r = repo.getSubtitle("BV1xx", 1001) as Result.Success
+        assertEquals(true, r.data.isAi)
+        assertEquals("ZH（AI）", r.data.label)
+    }
+
+    @Test
+    fun `listSubtitleTracks returns sorted tracks without downloading`() = runTest {
+        val aiUrl = server.url("/ai.json").toString()
+        val manualUrl = server.url("/manual.json").toString()
+        server.enqueue(
+            jsonResponse(
+                "{\"code\":0,\"data\":{\"subtitle\":{\"subtitles\":[{\"lan\":\"ai-zh\",\"type\":1,\"subtitle_url\":\"" + aiUrl + "\"},{\"lan\":\"zh-CN\",\"type\":0,\"subtitle_url\":\"" + manualUrl + "\"}]}}}"
+            )
+        )
+        val r = repo.listSubtitleTracks("BV1xx", 1001) as Result.Success
+        assertEquals(2, r.data.size)
+        assertEquals(false, r.data[0].isAi)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun `getSubtitle prefers manual track over ai`() = runTest {
         val aiUrl = server.url("/ai.json").toString()
         val manualUrl = server.url("/manual.json").toString()

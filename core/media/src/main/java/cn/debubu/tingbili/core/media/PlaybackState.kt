@@ -24,6 +24,13 @@ data class PlaybackState(
     val errorMessage: String? = null,
     val repeatMode: Int = REPEAT_MODE_OFF,
     val speed: Float = 1f,
+    /**
+     * 睡眠定时剩余秒数，null 表示关闭。内存态：进程死即失效，不持久化。
+     * 触发时暂停并落盘进度（见 [PlayerManager]），由播放页展示倒计时。
+     */
+    val sleepRemainSec: Int? = null,
+    /** 播完本章模式：当前章结束即停，与倒计时互斥 */
+    val sleepEndOfChapter: Boolean = false,
 ) {
     companion object {
         const val REPEAT_MODE_OFF = 0

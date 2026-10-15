@@ -281,6 +281,62 @@ class PlayerManager @Inject constructor(
         persistPosition(_state.value.positionMs)
     }
 
+    // ── 睡眠定时（内存态，进程死即失效；触发=pause，自带落盘进度） ──
+    private var sleepJob: Job? = null
+
+    /** 倒计时定时：seconds 秒后暂停。60 秒起，与播完本章互斥 */
+    fun startSleepTimer(seconds: Int) {
+        sleepJob?.cancel()
+        var left = seconds.coerceAtLeast(60)
+        _state.update { it.copy(sleepRemainSec = left, sleepEndOfChapter = false) }
+        sleepJob = effectiveScope().launch {
+            while (left > 0) {
+                delay(1000)
+                left--
+                _state.update { it.copy(sleepRemainSec = left) }
+            }
+            fireSleepTimer()
+        }
+    }
+
+    /** 播完本章即停：切歌或播到尾时暂停。手动暂停不取消（章还没完） */
+    fun startEndOfChapterTimer() {
+        sleepJob?.cancel()
+        val key = currentKey()
+        if (key == null) {
+            _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+            return
+        }
+        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = true) }
+        sleepJob = effectiveScope().launch {
+            while (true) {
+                delay(1000)
+                val s = _state.value
+                val chapterOver = currentKey() != key ||
+                    (s.durationMs > 0 && s.positionMs >= s.durationMs - CHAPTER_END_MARGIN_MS)
+                if (chapterOver) {
+                    fireSleepTimer()
+                    return@launch
+                }
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+    }
+
+    private fun fireSleepTimer() {
+        // pause() 内已落盘进度，满足“定时停止必须记好进度”
+        pause()
+        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+    }
+
+    private fun currentKey(): Pair<String, Long>? =
+        _state.value.currentTrack?.let { it.bvid to it.cid }
+
     fun resume() {
         // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
         if (queue.isNotEmpty() && (transport.mediaItemCount == 0 || transport.currentMediaItemIndex !in queue.indices)) {
@@ -422,6 +478,8 @@ class PlayerManager @Inject constructor(
     private var urlRefreshRetry = 0
     private var urlRefreshJob: Job? = null
     private companion object {
+        /** 章尾判定余量：距结束不足此时长即视为播完 */
+        const val CHAPTER_END_MARGIN_MS = 1500L
         const val MAX_URL_REFRESH_RETRY = 2
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
     }

@@ -21,7 +21,18 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -82,15 +93,14 @@ fun PlayerScreen(
 ) {
     val imageFormat = LocalImageFormat.current
     val s by vm.uiState.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
     val headerTitle = playerHeaderTitle(s.track)
 
-    LaunchedEffect(s.currentLyricIndex) {
-        if (s.currentLyricIndex >= 0) {
-            listState.animateScrollToItem(s.currentLyricIndex)
-        }
-    }
+    var lyricFullscreen by rememberSaveable { mutableStateOf(false) }
+    var showTimerSheet by remember { mutableStateOf(false) }
+    var showChapterSheet by remember { mutableStateOf(false) }
+    var showSubtitleSheet by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -102,47 +112,49 @@ fun PlayerScreen(
     ) {
         PlayerTopBar(
             title = headerTitle,
-            speed = s.speed,
-            onSpeedClick = vm::cycleSpeed,
-            speedEnabled = !s.isLoading,
+            onMoreClick = { showSettingsSheet = true },
             onBack = onBack,
         )
 
         Spacer(Modifier.height(12.dp))
 
-        AsyncImage(
-            model = s.track?.cover
-                ?.takeIf { it.isNotBlank() }
-                ?.biliImage(BiliImageVariant.SquareCover, imageFormat),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth(0.76f)
-                .widthIn(max = 320.dp)
-                .aspectRatio(1f)
-                .shadow(18.dp, RoundedCornerShape(24.dp), clip = false)
-                .clip(RoundedCornerShape(24.dp)),
-        )
+        if (!lyricFullscreen) {
+            AsyncImage(
+                model = s.track?.cover
+                    ?.takeIf { it.isNotBlank() }
+                    ?.biliImage(BiliImageVariant.SquareCover, imageFormat),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth(0.76f)
+                    .widthIn(max = 320.dp)
+                    .aspectRatio(1f)
+                    .shadow(18.dp, RoundedCornerShape(24.dp), clip = false)
+                    .clip(RoundedCornerShape(24.dp)),
+            )
 
-        Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
 
-        Text(
-            text = chapterLabel(s.track?.title, s.track?.pageIndex, s.track?.pageCount ?: 1),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = s.track?.author.orEmpty(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+            Text(
+                text = chapterLabel(s.track?.title, s.track?.pageIndex, s.track?.pageCount ?: 1),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = s.track?.author.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            FullscreenLyricsHeader(onBackToCover = { lyricFullscreen = false })
+        }
 
         s.errorMessage?.let { errorMsg ->
             Spacer(Modifier.height(8.dp))
@@ -169,43 +181,24 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            itemsIndexed(s.lyrics) { idx, line ->
-                val isCurrent = idx == s.currentLyricIndex
-                Text(
-                    text = line.text,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = if (isCurrent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !s.isLoading) { vm.seekToLyric(line) }
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+        if (!lyricFullscreen) {
+            MiniLyricCard(
+                lyrics = s.lyrics,
+                currentIndex = s.currentLyricIndex,
+                onOpenFullscreen = { lyricFullscreen = true },
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                FullscreenLyricsList(
+                    state = s,
+                    onSeekLyric = vm::seekToLyric,
+                    isLoading = s.isLoading,
                 )
             }
-        }
-
-        if (s.lyrics.isNotEmpty() && s.subtitleLabel != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (s.subtitleIsAi) "字幕由 AI 生成，可能有误 · ${s.subtitleLabel}" else "字幕 · ${s.subtitleLabel}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            )
-            Spacer(Modifier.height(8.dp))
         }
 
         PlaybackProgressBar(
@@ -276,7 +269,57 @@ fun PlayerScreen(
             }
         }
 
+        Spacer(Modifier.height(4.dp))
+
+        // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 倍速
+        PlayerAuxBar(
+            sleepLabel = sleepLabel(s.sleepRemainSec, s.sleepEndOfChapter),
+            sleepActive = s.sleepRemainSec != null || s.sleepEndOfChapter,
+            showSubtitleEntry = s.subtitleTracks.size > 1,
+            speedLabel = if (s.speed == 1f) "倍速" else "${s.speed}x",
+            onTimerClick = { showTimerSheet = true },
+            onSubtitleClick = { showSubtitleSheet = true },
+            onChapterClick = { showChapterSheet = true },
+            onSpeedClick = vm::cycleSpeed,
+        )
+
         Spacer(Modifier.height(8.dp))
+    }
+
+    if (showTimerSheet) {
+        SleepTimerSheet(
+            remainSec = s.sleepRemainSec,
+            endOfChapter = s.sleepEndOfChapter,
+            onSelectMinutes = { vm.startSleepTimer(it * 60) },
+            onSelectChapter = { vm.startEndOfChapterTimer() },
+            onCancel = { vm.cancelSleepTimer() },
+            onDismiss = { showTimerSheet = false },
+        )
+    }
+    if (showChapterSheet) {
+        ChapterSheet(
+            queue = s.queue,
+            currentIndex = s.currentIndex,
+            onSelect = {
+                vm.playAt(it)
+                showChapterSheet = false
+            },
+            onDismiss = { showChapterSheet = false },
+        )
+    }
+    if (showSubtitleSheet) {
+        SubtitleSheet(
+            tracks = s.subtitleTracks,
+            selectedIndex = s.subtitleIndex,
+            onSelect = {
+                vm.selectSubtitle(it)
+                showSubtitleSheet = false
+            },
+            onDismiss = { showSubtitleSheet = false },
+        )
+    }
+    if (showSettingsSheet) {
+        PlaybackSettingsSheet(onDismiss = { showSettingsSheet = false })
     }
 }
 
@@ -307,9 +350,7 @@ private fun SkipIcon(
 @Composable
 private fun PlayerTopBar(
     title: String,
-    speed: Float,
-    onSpeedClick: () -> Unit,
-    speedEnabled: Boolean,
+    onMoreClick: () -> Unit,
     onBack: () -> Unit,
 ) {
     Box(
@@ -346,12 +387,14 @@ private fun PlayerTopBar(
                 .padding(horizontal = 64.dp, vertical = 6.dp),
         )
 
-        TextButton(
-            onClick = onSpeedClick,
-            enabled = speedEnabled,
+        IconButton(
+            onClick = onMoreClick,
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
-            Text("${speed}x", style = MaterialTheme.typography.labelLarge)
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "播放设置",
+            )
         }
     }
 }
@@ -479,4 +522,445 @@ private fun formatMs(ms: Long): String {
     } else {
         "%d:%02d".format(m, s)
     }
+}
+
+/** 睡眠定时辅助栏文案：倒计时 mm:ss / 播完本章 / 定时 */
+private fun sleepLabel(remainSec: Int?, endOfChapter: Boolean): String = when {
+    endOfChapter -> "本章止"
+    remainSec != null -> String.format("%d:%02d", remainSec / 60, remainSec % 60)
+    else -> "定时"
+}
+
+@Composable
+private fun PlayerAuxBar(
+    sleepLabel: String,
+    sleepActive: Boolean,
+    showSubtitleEntry: Boolean,
+    speedLabel: String,
+    onTimerClick: () -> Unit,
+    onSubtitleClick: () -> Unit,
+    onChapterClick: () -> Unit,
+    onSpeedClick: () -> Unit,
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val idleColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AuxItem(
+            icon = Icons.Filled.Timer,
+            label = sleepLabel,
+            tint = if (sleepActive) activeColor else idleColor,
+            contentDescription = "睡眠定时",
+            onClick = onTimerClick,
+        )
+        if (showSubtitleEntry) {
+            AuxItem(
+                icon = Icons.Filled.ClosedCaption,
+                label = "字幕",
+                tint = idleColor,
+                contentDescription = "切换字幕",
+                onClick = onSubtitleClick,
+            )
+        }
+        AuxItem(
+            icon = Icons.Filled.List,
+            label = "章节",
+            tint = idleColor,
+            contentDescription = "章节目录",
+            onClick = onChapterClick,
+        )
+        AuxItem(
+            icon = Icons.Filled.Speed,
+            label = speedLabel,
+            tint = idleColor,
+            contentDescription = "倍速",
+            onClick = onSpeedClick,
+        )
+    }
+}
+
+@Composable
+private fun AuxItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: androidx.compose.ui.graphics.Color,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Icon(imageVector = icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    }
+}
+
+/** 封面态迷你实时字幕：当前行 + 下一行，点击进全屏字幕 */
+@Composable
+private fun MiniLyricCard(
+    lyrics: List<cn.debubu.tingbili.data.bilibili.model.LyricLine>,
+    currentIndex: Int,
+    onOpenFullscreen: () -> Unit,
+) {
+    val current = lyrics.getOrNull(currentIndex)?.text
+    val next = lyrics.getOrNull(currentIndex + 1)?.text
+    Surface(
+        onClick = onOpenFullscreen,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.ClosedCaption,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "实时字幕",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "全屏字幕 ›",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (current == null) {
+                Text(
+                    text = "暂无字幕",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = current,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (!next.isNullOrBlank()) {
+                    Text(
+                        text = next,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullscreenLyricsHeader(onBackToCover: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "全屏字幕",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(onClick = onBackToCover) { Text("切回封面") }
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
+/** 全屏大字字幕：大字号 + 当前行高亮卡 + 自动跟随 + 点行跳转，末尾带 AI 标注 */
+@Composable
+private fun FullscreenLyricsList(
+    state: PlayerUiState,
+    onSeekLyric: (cn.debubu.tingbili.data.bilibili.model.LyricLine) -> Unit,
+    isLoading: Boolean,
+) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(state.currentLyricIndex) {
+        if (state.currentLyricIndex >= 0) {
+            listState.animateScrollToItem(state.currentLyricIndex)
+        }
+    }
+    androidx.compose.foundation.lazy.LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        itemsIndexed(
+            items = state.lyrics,
+            key = { _, line -> line.timeMs },
+        ) { idx, line ->
+            val isCurrent = idx == state.currentLyricIndex
+            if (isCurrent) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isLoading) { onSeekLyric(line) },
+                ) {
+                    Text(
+                        text = line.text,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            } else {
+                Text(
+                    text = line.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isLoading) { onSeekLyric(line) }
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+            }
+        }
+        if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
+            item(key = "subtitle-label") {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = if (state.subtitleIsAi) {
+                            "字幕由 AI 生成，可能有误 · ${state.subtitleLabel}"
+                        } else {
+                            "字幕 · ${state.subtitleLabel}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SleepTimerSheet(
+    remainSec: Int?,
+    endOfChapter: Boolean,
+    onSelectMinutes: (Int) -> Unit,
+    onSelectChapter: () -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(text = "睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (remainSec != null || endOfChapter) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = if (endOfChapter) "播完本章后自动停止" else "将在 ${sleepLabel(remainSec, false)} 后自动停止",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        TextButton(onClick = { onCancel(); onDismiss() }) { Text("取消定时") }
+                    }
+                }
+            }
+            SleepOptionRow(label = "播完本章", selected = endOfChapter, onClick = { onSelectChapter(); onDismiss() })
+            SleepOptionRow(label = "15 分钟", selected = false, onClick = { onSelectMinutes(15); onDismiss() })
+            SleepOptionRow(label = "30 分钟", selected = false, onClick = { onSelectMinutes(30); onDismiss() })
+            SleepOptionRow(label = "60 分钟", selected = false, onClick = { onSelectMinutes(60); onDismiss() })
+        }
+    }
+}
+
+@Composable
+private fun SleepOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            if (selected) {
+                Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChapterSheet(
+    queue: List<cn.debubu.tingbili.core.data.model.Track>,
+    currentIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Text(
+            text = "章节目录（${queue.size}）",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            itemsIndexed(items = queue) { idx, track ->
+                val selected = idx == currentIndex
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = chapterLabel(track.title, track.pageIndex, track.pageCount),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    supportingContent = { Text(text = track.author, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = {
+                        Text(
+                            text = formatChapterDuration(track.durationMs),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    modifier = Modifier.clickable { onSelect(idx) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubtitleSheet(
+    tracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(text = "切换字幕", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            tracks.forEachIndexed { idx, track ->
+                val selected = idx == selectedIndex
+                Surface(
+                    onClick = { onSelect(idx) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = track.displayLabel,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                        if (selected) {
+                            Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaybackSettingsSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(text = "播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = "设置内容整理中，敬请期待",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+private fun formatChapterDuration(durationMs: Long): String {
+    if (durationMs <= 0L) return "--:--"
+    val totalSec = durationMs / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
 }

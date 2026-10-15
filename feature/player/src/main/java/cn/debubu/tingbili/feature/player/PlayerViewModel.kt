@@ -6,7 +6,6 @@ import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
-import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -18,6 +17,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -40,7 +41,13 @@ data class PlayerUiState(
     val currentLyricIndex: Int = -1,
     /** 当前字幕轨标注（AI 轨会写明），无字幕时为 null */
     val subtitleLabel: String? = null,
-    val subtitleIsAi: Boolean = false
+    val subtitleIsAi: Boolean = false,
+    /** 可用字幕轨（已排序），单轨/无轨时切换入口隐藏 */
+    val subtitleTracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack> = emptyList(),
+    val subtitleIndex: Int = 0,
+    /** 睡眠定时剩余秒数，null=关闭 */
+    val sleepRemainSec: Int? = null,
+    val sleepEndOfChapter: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -51,21 +58,44 @@ class PlayerViewModel @Inject constructor(
     prefs: PreferencesRepository,
 ) : ViewModel() {
 
-    private val subtitleFlow: Flow<cn.debubu.tingbili.data.bilibili.dto.SubtitleResult> = player.state
+    private val trackFlow = player.state
         .map { it.currentTrack }
         .distinctUntilChanged()
-        .flatMapLatest { track ->
-            if (track == null) flow { emit(cn.debubu.tingbili.data.bilibili.dto.SubtitleResult()) }
-            else flow {
-                val result = repo.getSubtitle(track.bvid, track.cid)
-                emit(
-                    when (result) {
-                        is Result.Success -> result.data
-                        is Result.Error -> cn.debubu.tingbili.data.bilibili.dto.SubtitleResult()
+
+    private val selectedSubtitleIndex = MutableStateFlow(0)
+
+    private data class SubState(
+        val tracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack> = emptyList(),
+        val index: Int = 0,
+        val lines: List<LyricLine> = emptyList(),
+        val label: String? = null,
+        val isAi: Boolean = false,
+    )
+
+    private val subtitleFlow: Flow<SubState> =
+        combine(trackFlow, selectedSubtitleIndex) { track, idx -> track to idx }
+            .flatMapLatest { (track, idx) ->
+                if (track == null) {
+                    flowOf(SubState())
+                } else {
+                    flow {
+                        val tracks = (repo.listSubtitleTracks(track.bvid, track.cid) as? Result.Success)
+                            ?.data ?: emptyList()
+                        val safeIdx = idx.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
+                        val chosen = tracks.getOrNull(safeIdx)
+                        val lines = chosen?.let { repo.loadSubtitleLines(it.url) } ?: emptyList()
+                        // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
+                        if (lines.isEmpty()) emit(SubState(tracks, safeIdx))
+                        else emit(SubState(tracks, safeIdx, lines, chosen!!.displayLabel, chosen.isAi))
                     }
-                )
+                }
             }
+
+    init {
+        viewModelScope.launch {
+            trackFlow.collect { selectedSubtitleIndex.value = 0 }
         }
+    }
 
     val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, sub, stepSec ->
         val lyrics = sub.lines
@@ -87,7 +117,11 @@ class PlayerViewModel @Inject constructor(
             lyrics = lyrics,
             currentLyricIndex = idx,
             subtitleLabel = sub.label,
-            subtitleIsAi = sub.isAi
+            subtitleIsAi = sub.isAi,
+            subtitleTracks = sub.tracks,
+            subtitleIndex = sub.index,
+            sleepRemainSec = p.sleepRemainSec,
+            sleepEndOfChapter = p.sleepEndOfChapter
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerUiState())
 
@@ -111,6 +145,23 @@ class PlayerViewModel @Inject constructor(
 
     /** 点击歌词行跳转到该行时间 */
     fun seekToLyric(line: LyricLine) = player.seekTo(line.timeMs)
+
+    /** 字幕轨切换：越界由管线钳制 */
+    fun selectSubtitle(index: Int) {
+        selectedSubtitleIndex.value = index
+    }
+
+    /** 章节点播 */
+    fun playAt(index: Int) {
+        val q = uiState.value.queue
+        if (index !in q.indices) return
+        viewModelScope.launch { player.play(q, index, uiState.value.sourceTitle) }
+    }
+
+    /** 睡眠定时透传（Manager 内内存态，触发自带落盘） */
+    fun startSleepTimer(seconds: Int) = player.startSleepTimer(seconds)
+    fun startEndOfChapterTimer() = player.startEndOfChapterTimer()
+    fun cancelSleepTimer() = player.cancelSleepTimer()
 
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
     fun cycleSpeed() {
