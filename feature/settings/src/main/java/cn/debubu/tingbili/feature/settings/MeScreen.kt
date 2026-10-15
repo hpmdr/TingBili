@@ -107,7 +107,8 @@ fun MeScreen(
             totalListenMs = totalListenMs,
             session = session,
             onBadgeClick = { placeholder("听书专属版：敬请期待") },
-            onToggleDark = { vm.toggleDarkMode(darkTheme) }
+            onToggleDark = { vm.toggleDarkMode(darkTheme) },
+            onUserClick = { if (session == null) onOpenLogin() },
         )
 
         // ── 2. 悬浮四宫格数据卡（叠在头部下缘） ──────────────
@@ -208,7 +209,8 @@ private fun MeHeader(
     totalListenMs: Long,
     session: cn.debubu.tingbili.data.bilibili.auth.BiliSession?,
     onBadgeClick: () -> Unit,
-    onToggleDark: () -> Unit
+    onToggleDark: () -> Unit,
+    onUserClick: () -> Unit,
 ) {
     val gradient = if (darkTheme) {
         Brush.verticalGradient(listOf(Color(0xFF251A20), Color(0xFF1E1E1E), Color(0xFF1A1A1A)))
@@ -259,8 +261,14 @@ private fun MeHeader(
 
         Spacer(Modifier.height(20.dp))
 
-        // 用户信息（已登录显示头像昵称，未登录显示引导）
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 用户信息（已登录显示头像昵称，未登录显示引导；未登录时点击进登录页）
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable(
+                enabled = session == null,
+                onClick = onUserClick,
+            ),
+        ) {
             if (session != null && session.face.isNotBlank()) {
                 coil3.compose.AsyncImage(
                     model = session.face,
