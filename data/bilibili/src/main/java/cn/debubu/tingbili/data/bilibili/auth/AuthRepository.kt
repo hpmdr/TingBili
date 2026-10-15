@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.data.bilibili.auth
 
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,8 @@ data class NavProfile(val uid: Long, val userName: String, val face: String, val
  * B 站 Web 登录仓储：扫码二维码生成/轮询、跳转换 Cookie、nav 验态、Cookie 粘贴、退出。
  * 自带独立 OkHttp（不走共享 WbiInterceptor，避免递归与陈旧 Cookie 干扰）。
  */
+// 单例：登录态靠内存 StateFlow 跨页面/拦截器共享，多实例会导致登录页成功了别处还显示未登录
+@Singleton
 open class AuthRepository @Inject constructor(
     private val json: Json,
     private val store: AuthStore,
