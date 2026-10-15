@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 sealed interface QrUi {
     data object Idle : QrUi
     data object Generating : QrUi
-    data class Ready(val url: String, val secondsLeft: Int) : QrUi
+    data class Ready(val url: String, val secondsLeft: Int, val notice: String? = null) : QrUi
     data object Success : QrUi
     data class Failed(val message: String) : QrUi
 }
@@ -66,10 +66,18 @@ class LoginViewModel @Inject constructor(
                     _qr.value = cur.copy(secondsLeft = cur.secondsLeft - 1)
                 }
             }
+            // 单次轮询失败（超时/412/空回包）只记一次，连续失败才判死刑：
+            // 风控 IP 下偶发空回包很常见，直接吃掉二维码会闪一下就没
+            var failures = 0
             while (true) {
                 delay(POLL_INTERVAL_MS)
                 when (val st = auth.pollQr(data.qrcodeKey)) {
-                    is QrStatus.Waiting, is QrStatus.Scanned -> Unit
+                    is QrStatus.Waiting, is QrStatus.Scanned -> {
+                        failures = 0
+                        (_qr.value as? QrUi.Ready)?.let {
+                            if (it.notice != null) _qr.value = it.copy(notice = null)
+                        }
+                    }
                     is QrStatus.Expired -> {
                         _qr.value = QrUi.Failed("二维码已过期，请刷新")
                         countJob.cancel()
@@ -83,9 +91,15 @@ class LoginViewModel @Inject constructor(
                         return@launch
                     }
                     is QrStatus.Failed -> {
-                        _qr.value = QrUi.Failed(st.message)
-                        countJob.cancel()
-                        return@launch
+                        failures++
+                        if (failures >= MAX_POLL_FAILURES) {
+                            _qr.value = QrUi.Failed("网络不稳定（已重试${MAX_POLL_FAILURES}次），请刷新或换网再试")
+                            countJob.cancel()
+                            return@launch
+                        }
+                        (_qr.value as? QrUi.Ready)?.let {
+                            _qr.value = it.copy(notice = "网络波动，自动重试中…")
+                        }
                     }
                 }
             }
@@ -120,5 +134,7 @@ class LoginViewModel @Inject constructor(
     companion object {
         const val QR_TTL_SEC = 180
         const val POLL_INTERVAL_MS = 2000L
+        /** 连续轮询失败阈值，超过才判死刑（单次失败只提示不断码） */
+        const val MAX_POLL_FAILURES = 5
     }
 }

@@ -34,7 +34,7 @@ data class NavProfile(val uid: Long, val userName: String, val face: String, val
  * B 站 Web 登录仓储：扫码二维码生成/轮询、跳转换 Cookie、nav 验态、Cookie 粘贴、退出。
  * 自带独立 OkHttp（不走共享 WbiInterceptor，避免递归与陈旧 Cookie 干扰）。
  */
-class AuthRepository @Inject constructor(
+open class AuthRepository @Inject constructor(
     private val json: Json,
     private val store: AuthStore,
 ) {
@@ -53,7 +53,7 @@ class AuthRepository @Inject constructor(
 
     // ── 扫码 ─────────────────────────────────────────────
 
-    suspend fun generateQr(): Result<QrData> = withContext(Dispatchers.IO) {
+    open suspend fun generateQr(): Result<QrData> = withContext(Dispatchers.IO) {
         runCatching {
             val body = get("$passportBase/x/passport-login/web/qrcode/generate")
             val dto = json.decodeFromString(QrGenerateDto.serializer(), body)
@@ -62,7 +62,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun pollQr(qrcodeKey: String): QrStatus = withContext(Dispatchers.IO) {
+    open suspend fun pollQr(qrcodeKey: String): QrStatus = withContext(Dispatchers.IO) {
         try {
             val body = get("$passportBase/x/passport-login/web/qrcode/poll?qrcode_key=$qrcodeKey")
             val dto = json.decodeFromString(QrPollDto.serializer(), body)
@@ -119,7 +119,7 @@ class AuthRepository @Inject constructor(
     }
 
     /** 扫码成功后调用：换 Cookie → nav 验证 → 落盘并发布 */
-    suspend fun finishQrLogin(redirectUrl: String): Result<BiliSession> {
+    open suspend fun finishQrLogin(redirectUrl: String): Result<BiliSession> {
         val cookies = try {
             exchangeCookies(redirectUrl)
         } catch (e: Exception) {
@@ -144,7 +144,7 @@ class AuthRepository @Inject constructor(
     }
 
     /** Cookie 粘贴登录：解析 → nav 验证 → 落盘 */
-    suspend fun loginWithCookies(raw: String): Result<BiliSession> {
+    open suspend fun loginWithCookies(raw: String): Result<BiliSession> {
         val parsed = BiliSession.parseCookieHeader(raw)
             ?: return Result.failure(IllegalArgumentException("没找到 SESSDATA / DedeUserID，请粘贴完整 Cookie"))
         val nav = fetchNav(parsed.toCookieHeader()).getOrElse { return Result.failure(it) }

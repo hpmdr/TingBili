@@ -50,6 +50,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
     testImplementation(libs.datastore.preferences)
 }
 

@@ -130,11 +130,21 @@ private fun QrTab(vm: LoginViewModel) {
         }
         Spacer(Modifier.height(16.dp))
         when (val s = qr) {
-            is QrUi.Ready -> Text(
-                "用哔哩哔哩 App 扫码 · ${s.secondsLeft} 秒后过期",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            is QrUi.Ready -> {
+                Text(
+                    "用哔哩哔哩 App 扫码 · ${s.secondsLeft} 秒后过期",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (s.notice != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        s.notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
             is QrUi.Generating, is QrUi.Idle -> Text("正在生成二维码…")
             is QrUi.Success -> Text("登录成功")
             is QrUi.Failed -> {
