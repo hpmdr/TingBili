@@ -52,7 +52,7 @@ class LoginViewModelTest {
             override suspend fun pollQr(qrcodeKey: String): QrStatus =
                 polls.getOrElse(pollIndex++) { polls.last() }
 
-            override suspend fun finishQrLogin(redirectUrl: String): Result<BiliSession> =
+            override suspend fun finishQrLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
                 Result.success(BiliSession("S", "J", 7L))
         }
 
@@ -81,16 +81,16 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `persistent poll failures terminate after threshold`() = runTest(dispatcher) {
+    fun `persistent poll failures never kill qr before ttl`() = runTest(dispatcher) {
         val vm = LoginViewModel(fakeAuth(listOf(QrStatus.Failed("boom"))))
         vm.startQr()
         advanceTimeBy(5_000)
-        // 阈值内：Ready + 提示
+        // 一直失败：码还在，只带提示
         val retrying = vm.qr.value
         assertTrue(retrying is QrUi.Ready)
         assertTrue((retrying as QrUi.Ready).notice != null)
-        // 连续失败达阈值：判死刑
-        advanceTimeBy(8_000)
+        // 撑满 180 秒：倒计时走完才判过期
+        advanceTimeBy(180_000)
         val terminal = vm.qr.value
         assertTrue(terminal is QrUi.Failed)
     }
