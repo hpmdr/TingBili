@@ -123,10 +123,12 @@ fun GeetestDialog(
     )
 }
 
-private class GeeBridge(private val onMessage: (String) -> Unit) {
+// 注意：构造参数绝不能与方法同名——Kotlin 里 onMessage(msg) 会优先解析成
+// 方法自身的递归调用（而不是参数 lambda），之前因此 StackOverflow，桥直接死亡。
+private class GeeBridge(private val onJsMessage: (String) -> Unit) {
     @JavascriptInterface
     fun onMessage(msg: String) {
-        onMessage(msg)
+        onJsMessage(msg)
     }
 }
 
