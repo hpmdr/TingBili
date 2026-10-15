@@ -249,8 +249,6 @@ open class AuthRepository @Inject constructor(
         runCatching {
             val body = get("$passportBase/x/passport-login/captcha?source=main_web")
             val dto = json.decodeFromString(CaptchaDto.serializer(), body)
-            println("BiliAuth: " +  "captcha code=${dto.code} hasToken=${!dto.data?.token.isNullOrBlank()} " +
-                "hasGt=${!dto.data?.geetest?.gt.isNullOrBlank()} type=${dto.data?.type}")
             require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "captcha failed: ${dto.code}" } }
             val g = dto.data.geetest ?: throw IllegalStateException("captcha missing geetest")
             require(g.gt.isNotBlank() && g.challenge.isNotBlank()) { "captcha empty gt/challenge" }
@@ -267,7 +265,6 @@ open class AuthRepository @Inject constructor(
                 "&validate=${result.validate}&seccode=${result.seccode}"
             val body = post("$passportBase/x/passport-login/web/sms/send", form, null)
             val dto = json.decodeFromString(SmsSendDto.serializer(), body)
-            println("BiliAuth: " +  "sms/send code=${dto.code} msg=${dto.message} hasKey=${dto.data?.captchaKey?.isNotBlank()}")
             require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "sms send failed: ${dto.code}" } }
             val key = dto.data.captchaKey
             require(key.isNotBlank()) { "sms send missing captcha_key" }
@@ -284,7 +281,6 @@ open class AuthRepository @Inject constructor(
             val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
             post("$passportBase/x/passport-login/web/login/sms", form, null)
         } catch (e: Exception) {
-            println("BiliAuth: login/sms request failed: ${e.javaClass.simpleName} ${e.message}")
             return@withContext Result.failure(e)
         }
         return@withContext completePasswordLikeLogin(body)
@@ -344,7 +340,6 @@ open class AuthRepository @Inject constructor(
         // 非 JSON 回包（比如风控 412 的空页面）直接报长度，避免把解析异常原文甩给用户
         val trimmed = body.trim()
         if (!trimmed.startsWith("{")) {
-            println("BiliAuth: login non-JSON body len=${body.length}")
             return Result.failure(IllegalStateException("登录接口被拦截（HTTP 风控），请换网络再试"))
         }
         val dto = try {
@@ -352,8 +347,6 @@ open class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             return Result.failure(e)
         }
-        println("BiliAuth: login/sms code=${dto.code} msg=${dto.message} status=${dto.data?.status} " +
-            "hasUrl=${!dto.data?.url.isNullOrBlank()} hasRt=${!dto.data?.refreshToken.isNullOrBlank()}")
         if (dto.code != 0) return Result.failure(IllegalStateException(dto.message.ifBlank { "login failed: ${dto.code}" }))
         val d = dto.data ?: return Result.failure(IllegalStateException("login empty data"))
         if ((d.status ?: 0) == 2) {

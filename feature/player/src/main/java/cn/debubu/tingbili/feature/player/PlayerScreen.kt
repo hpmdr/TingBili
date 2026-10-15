@@ -169,19 +169,6 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        if (s.lyrics.isNotEmpty() && s.subtitleLabel != null) {
-            Text(
-                text = if (s.subtitleIsAi) "字幕由 AI 生成，可能有误 · ${s.subtitleLabel}" else "字幕 · ${s.subtitleLabel}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            )
-            Spacer(Modifier.height(4.dp))
-        }
-
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -205,6 +192,20 @@ fun PlayerScreen(
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
+        }
+
+        if (s.lyrics.isNotEmpty() && s.subtitleLabel != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (s.subtitleIsAi) "字幕由 AI 生成，可能有误 · ${s.subtitleLabel}" else "字幕 · ${s.subtitleLabel}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(8.dp))
         }
 
         PlaybackProgressBar(
