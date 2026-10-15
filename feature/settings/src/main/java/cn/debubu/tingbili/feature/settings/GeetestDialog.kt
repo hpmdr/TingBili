@@ -136,20 +136,31 @@ private fun handleGeeMessage(
     }
 }
 
+/**
+ * 极验初始化改用 gt.js + initGeetest（对标 biu，同 web 接口已验证可行）。
+ * 之前照抄 PiliPlus 的 fullpage.js 方案，在 B 站当前下发的 challenge 上报“配置错误”；
+ * fullpage 与 gt.js 是两代 SDK，challenge 只能配对能解析它的那一代。
+ */
 internal fun buildGeetestHtml(gt: String, challenge: String): String {
-    val ts = System.currentTimeMillis()
-    val js = "var C,S,T,t;" +
-        "T=()=>{if(C&&S&&!t){t=Geetest(C).onSuccess(()=>R(\"success\",t.getValidate())).onError(o=>R(\"error\",o)).onClose(o=>R(\"close\",o));t.onReady(()=>t.verify())}};" +
-        "geetest_" + ts + "=(d)=>{" +
-        "if(!d||d.status!=\"success\"){R(\"error\",JSON.stringify(d));return};" +
-        "C=Object.assign({gt:\"$gt\",challenge:\"$challenge\",offline:false,new_captcha:true,product:\"bind\",width:\"100%\",https:true,protocol:\"https://\"},d.data);T()};" +
-        "G=()=>{S=1;T()};" +
-        "E=()=>{document.getElementById(\"E\").textContent=\"验证码加载失败\";R(\"error\",\"geetest script load failed\")}"
-    return "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width\"></head>" +
-        "<style>#E{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:red}</style>" +
-        "<body><div id=\"E\"></div>" +
-        "<script>R=(n,o)=>window.Android.onMessage(n+':'+JSON.stringify(o));$js</script>" +
-        "<script src=\"https://static.geetest.com/static/js/fullpage.0.0.0.js\" onload=\"G()\" onerror=\"E()\"></script>" +
-        "<script src=\"https://api.geetest.com/gettype.php?gt=$gt&callback=geetest_$ts\" onerror=\"E()\"></script>" +
-        "</body></html>"
+    // 注意：三引号内 $gt/$challenge 是 Kotlin 插值，其余 $ 一律转义成 ${'$'}
+    return """
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width"></head>
+<style>#E{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:red}</style>
+<body><div id="E"></div>
+<script>
+R=(n,o)=>window.Android.onMessage(n+':'+JSON.stringify(o));
+W=()=>{
+if(typeof initGeetest!=="function"){E();return;}
+initGeetest({gt:"$gt",challenge:"$challenge",offline:false,new_captcha:true,product:"bind",https:true},
+function(c){
+c.onReady(function(){c.verify();});
+c.onSuccess(function(){var r=c.getValidate();
+if(r&&typeof r!=="boolean"){R("success",r)}else{R("error","empty validate")}});
+c.onError(function(e){R("error",JSON.stringify(e||"geetest error"));});
+if(c.onClose){c.onClose(function(){R("close","")})}});};
+E=()=>{document.getElementById("E").textContent="VERIFY_LOAD_FAIL";R("error","gt.js load failed")}
+</script>
+<script src="https://static.geetest.com/static/tools/gt.js" onload="W()" onerror="E()"></script>
+</body></html>
+""".trimIndent()
 }
