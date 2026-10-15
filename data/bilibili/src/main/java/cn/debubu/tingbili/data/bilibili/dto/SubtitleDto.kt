@@ -100,6 +100,13 @@ fun SubtitleDto.toTracks(): List<SubtitleTrack> =
                 .thenBy { it.isAi }
         )
 
+/** 选中的字幕轨 + 正文：label 给 UI 展示（AI 轨会标出来，避免被当成 App 的锅） */
+data class SubtitleResult(
+    val lines: List<cn.debubu.tingbili.data.bilibili.model.LyricLine> = emptyList(),
+    val label: String? = null,
+    val isAi: Boolean = false,
+)
+
 /** 字幕正文 → 逐行歌词；空行丢掉，按开始时间升序 */
 fun SubtitleFile.toLyricLines(): List<LyricLine> =
     body.asSequence()

@@ -141,7 +141,7 @@ class BiliRepositoryTest {
         )
         val r = repo.getSubtitle("BV1xx", 1001)
         assertTrue(r is Result.Success)
-        val lines = (r as Result.Success).data
+        val lines = (r as Result.Success).data.lines
         assertEquals(2, lines.size)
         assertEquals(0L, lines[0].timeMs)
         assertEquals("你好", lines[0].text)
@@ -163,7 +163,8 @@ class BiliRepositoryTest {
         )
         server.enqueue(jsonResponse("""{"body":[{"from":0.0,"to":1.0,"content":"人工字幕"}]}"""))
         val r = repo.getSubtitle("BV1xx", 1001) as Result.Success
-        assertEquals("人工字幕", r.data[0].text)
+        assertEquals("人工字幕", r.data.lines[0].text)
+        assertEquals(false, r.data.isAi)
         // 第一跳取列表，第二跳只下载人工那条，AI 那条不该被请求
         assertEquals(2, server.requestCount)
         assertEquals("/x/player/wbi/v2", server.takeRequest().requestUrl?.encodedPath)
@@ -175,7 +176,8 @@ class BiliRepositoryTest {
         server.enqueue(jsonResponse("""{"code":0,"data":{"subtitle":{"subtitles":[]}}}"""))
         val r = repo.getSubtitle("BV1xx", 1001)
         assertTrue(r is Result.Success)
-        assertEquals(0, (r as Result.Success).data.size)
+        assertEquals(0, (r as Result.Success).data.lines.size)
+        assertEquals(null, (r as Result.Success).data.label)
         assertEquals(1, server.requestCount)
     }
 
@@ -189,7 +191,8 @@ class BiliRepositoryTest {
         server.enqueue(MockResponse().setResponseCode(404))
         val r = repo.getSubtitle("BV1xx", 1001)
         assertTrue(r is Result.Success)
-        assertEquals(0, (r as Result.Success).data.size)
+        assertEquals(0, (r as Result.Success).data.lines.size)
+        assertEquals(null, (r as Result.Success).data.label)
     }
 
     @Test

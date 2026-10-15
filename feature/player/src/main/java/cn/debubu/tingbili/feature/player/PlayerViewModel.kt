@@ -37,7 +37,10 @@ data class PlayerUiState(
     val queue: List<cn.debubu.tingbili.core.data.model.Track> = emptyList(),
     val currentIndex: Int = -1,
     val lyrics: List<LyricLine> = emptyList(),
-    val currentLyricIndex: Int = -1
+    val currentLyricIndex: Int = -1,
+    /** 当前字幕轨标注（AI 轨会写明），无字幕时为 null */
+    val subtitleLabel: String? = null,
+    val subtitleIsAi: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -48,22 +51,24 @@ class PlayerViewModel @Inject constructor(
     prefs: PreferencesRepository,
 ) : ViewModel() {
 
-    private val subtitleFlow: Flow<List<LyricLine>> = player.state
+    private val subtitleFlow: Flow<cn.debubu.tingbili.data.bilibili.dto.SubtitleResult> = player.state
         .map { it.currentTrack }
         .distinctUntilChanged()
         .flatMapLatest { track ->
-            if (track == null) flow { emit(emptyList()) }
+            if (track == null) flow { emit(cn.debubu.tingbili.data.bilibili.dto.SubtitleResult()) }
             else flow {
                 val result = repo.getSubtitle(track.bvid, track.cid)
-                val lines = when (result) {
-                    is Result.Success -> result.data
-                    is Result.Error -> emptyList()
-                }
-                emit(lines)
+                emit(
+                    when (result) {
+                        is Result.Success -> result.data
+                        is Result.Error -> cn.debubu.tingbili.data.bilibili.dto.SubtitleResult()
+                    }
+                )
             }
         }
 
-    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, lyrics, stepSec ->
+    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, sub, stepSec ->
+        val lyrics = sub.lines
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
         PlayerUiState(
             isPlaying = p.isPlaying,
@@ -80,7 +85,9 @@ class PlayerViewModel @Inject constructor(
             queue = p.queue,
             currentIndex = p.currentIndex,
             lyrics = lyrics,
-            currentLyricIndex = idx
+            currentLyricIndex = idx,
+            subtitleLabel = sub.label,
+            subtitleIsAi = sub.isAi
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerUiState())
 

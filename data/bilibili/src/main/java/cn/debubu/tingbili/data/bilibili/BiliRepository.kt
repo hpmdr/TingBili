@@ -3,6 +3,7 @@ package cn.debubu.tingbili.data.bilibili
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleFile
+import cn.debubu.tingbili.data.bilibili.dto.SubtitleResult
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
@@ -107,13 +108,20 @@ class BiliRepository @Inject constructor(
      *
      * 视频压根没有字幕时返回空列表，不算错误。
      */
-    suspend fun getSubtitle(bvid: String, cid: Long): Result<List<LyricLine>> = try {
+    suspend fun getSubtitle(bvid: String, cid: Long): Result<SubtitleResult> = try {
         val dto = api.subtitle(bvid, cid)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "subtitle failed: code ${dto.code}" })
         } else {
             val track = dto.toTracks().firstOrNull()
-            Result.Success(if (track == null) emptyList() else fetchLyricLines(track.url))
+            if (track == null) {
+                Result.Success(SubtitleResult())
+            } else {
+                // 正文为空（404/被清理）按没字幕处理，label 也不带
+                val lines = fetchLyricLines(track.url)
+                if (lines.isEmpty()) Result.Success(SubtitleResult())
+                else Result.Success(SubtitleResult(lines, track.displayLabel, track.isAi))
+            }
         }
     } catch (e: Exception) {
         Result.Error(e.message ?: "subtitle failed", e)
