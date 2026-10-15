@@ -276,15 +276,15 @@ open class AuthRepository @Inject constructor(
      * 短信登录：成功返回 despite code==0；data.status==2 表示撞风控（需二次验证，
      * 该链路最后一步 oauth 要 app 签名，Web 路径走不通，直接报 message 让用户换扫码/Cookie）。
      */
-    suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> {
+    suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> = withContext(Dispatchers.IO) {
         val body = try {
             val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
             post("$passportBase/x/passport-login/web/login/sms", form, null)
         } catch (e: Exception) {
             println("BiliAuth: login/sms request failed: ${e.javaClass.simpleName} ${e.message}")
-            return Result.failure(e)
+            return@withContext Result.failure(e)
         }
-        return completePasswordLikeLogin(body)
+        return@withContext completePasswordLikeLogin(body)
     }
 
     // ── 密码登录（Web：web/key 取 RSA 公钥加密 hash+密码，极验票据必填，同 biu） ──
@@ -318,12 +318,12 @@ open class AuthRepository @Inject constructor(
         return java.util.Base64.getEncoder().encodeToString(encrypted)
     }
 
-    suspend fun passwordLogin(username: String, password: String, ticket: GeeTicket, result: GeeResult): Result<BiliSession> {
-        val (hash, key) = fetchWebKey().getOrElse { return Result.failure(it) }
+    suspend fun passwordLogin(username: String, password: String, ticket: GeeTicket, result: GeeResult): Result<BiliSession> = withContext(Dispatchers.IO) {
+        val (hash, key) = fetchWebKey().getOrElse { return@withContext Result.failure(it) }
         val encrypted = try {
             rsaEncrypt(key, hash + password)
         } catch (e: Exception) {
-            return Result.failure(IllegalStateException("密码加密失败，请重试"))
+            return@withContext Result.failure(IllegalStateException("密码加密失败，请重试"))
         }
         val body = try {
             val form = "username=$username&password=$encrypted" +
@@ -331,9 +331,9 @@ open class AuthRepository @Inject constructor(
                 "&validate=${result.validate}&seccode=${result.seccode}&source=main_web"
             post("$passportBase/x/passport-login/web/login", form, null)
         } catch (e: Exception) {
-            return Result.failure(e)
+            return@withContext Result.failure(e)
         }
-        return completePasswordLikeLogin(body)
+        return@withContext completePasswordLikeLogin(body)
     }
 
     /** 短信/密码登录共用收尾：code==0 且 status==0/缺省 → url 换 Cookie；status==2 风控直接报错 */
