@@ -281,6 +281,7 @@ open class AuthRepository @Inject constructor(
             val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
             post("$passportBase/x/passport-login/web/login/sms", form, null)
         } catch (e: Exception) {
+            println("BiliAuth: login/sms request failed: ${e.javaClass.simpleName} ${e.message}")
             return Result.failure(e)
         }
         return completePasswordLikeLogin(body)
@@ -337,6 +338,12 @@ open class AuthRepository @Inject constructor(
 
     /** 短信/密码登录共用收尾：code==0 且 status==0/缺省 → url 换 Cookie；status==2 风控直接报错 */
     private suspend fun completePasswordLikeLogin(body: String): Result<BiliSession> {
+        // 非 JSON 回包（比如风控 412 的空页面）直接报长度，避免把解析异常原文甩给用户
+        val trimmed = body.trim()
+        if (!trimmed.startsWith("{")) {
+            println("BiliAuth: login non-JSON body len=${body.length}")
+            return Result.failure(IllegalStateException("登录接口被拦截（HTTP 风控），请换网络再试"))
+        }
         val dto = try {
             json.decodeFromString(PasswordLoginDto.serializer(), body)
         } catch (e: Exception) {
