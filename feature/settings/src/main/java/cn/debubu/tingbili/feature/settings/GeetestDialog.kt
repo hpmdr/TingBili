@@ -67,11 +67,19 @@ fun GeetestDialog(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
+                            // 照抄 PiliPlus：伪装成纯手机 Chrome（无 wv 标记），且与取票据时的 UA
+                            // 保持完全一致，否则极验风控直接报“安全参数错误”
+                            settings.userAgentString =
+                                cn.debubu.tingbili.data.bilibili.auth.AuthRepository.BROWSER_UA
                             settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
+                            settings.domStorageEnabled = false
+                            settings.databaseEnabled = false
                             settings.loadWithOverviewMode = true
                             settings.useWideViewPort = true
                             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            android.webkit.CookieManager.getInstance()
+                                .setAcceptThirdPartyCookies(this, false)
                             addJavascriptInterface(
                                 GeeBridge { raw ->
                                     mainHandler.post { handleGeeMessage(raw, onSuccess, onCancel) { error = it } }
