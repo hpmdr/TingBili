@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import cn.debubu.tingbili.feature.detail.DetailScreen
+import cn.debubu.tingbili.feature.settings.LoginScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
@@ -58,9 +59,16 @@ fun AppRootNavHost(
                             launchSingleTop = true; restoreState = true
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
                         }
-                    }
+                    },
+                    onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 )
             }
+        composable<LoginRoute> {
+            LoginScreen(
+                onBack = { navController.popBackStack() },
+                onSuccess = { navController.popBackStack() },
+            )
+        }
         }
         // 独立全屏页：无底栏（「我的」的二级页）
         composable<AppearanceRoute> {

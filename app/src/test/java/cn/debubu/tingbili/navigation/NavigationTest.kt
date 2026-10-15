@@ -7,6 +7,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.testing.TestNavHostController
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeDown
@@ -193,5 +199,20 @@ class NavigationTest {
         composeTestRule.mainClock.advanceTimeBy(2000)
         assert(dismissed == 0)
         composeTestRule.onNodeWithTag("miniPlayerBar").assertIsDisplayed()
+    }
+
+    @Test
+    fun `loginRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = MeRoute) {
+                composable<MeRoute> { Text("me") }
+                composable<LoginRoute> { Text("登录哔哩哔哩") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(LoginRoute) }
+        composeTestRule.onNodeWithText("登录哔哩哔哩").assertIsDisplayed()
     }
 }

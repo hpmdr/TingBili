@@ -11,6 +11,8 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.data.bilibili.BiliApi
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
+import cn.debubu.tingbili.data.bilibili.auth.AuthStore
 import cn.debubu.tingbili.data.bilibili.BuvidProvider
 import cn.debubu.tingbili.data.bilibili.WbiInterceptor
 import cn.debubu.tingbili.data.bilibili.WbiSigner
@@ -72,11 +74,27 @@ object AppDataModule {
 
     @Provides
     @Singleton
-    fun provideOkHttp(wbiSigner: WbiSigner, buvidProvider: BuvidProvider): OkHttpClient =
+    fun provideAuthStore(store: EncryptedAuthStore): AuthStore = store
+
+    @Provides
+    @Singleton
+    fun provideOkHttp(
+        wbiSigner: WbiSigner,
+        buvidProvider: BuvidProvider,
+        authRepository: AuthRepository,
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor(
-                // 注入 buvid3/buvid4 Cookie，避免搜索等 WBI 接口被风控拦截（HTTP 412）
-                WbiInterceptor(wbiSigner, cookieProvider = { buvidProvider.cookie() })
+                // 登录态 Cookie 优先（配额更高、风控更松），游客模式回落 buvid3/4
+                WbiInterceptor(wbiSigner, cookieProvider = {
+                    val session = authRepository.sessionFlow.value?.toCookieHeader()
+                    val buvid = buvidProvider.cookie()
+                    listOfNotNull(session, buvid)
+                        .map { it.trim().trim(';') }
+                        .filter { it.isNotBlank() }
+                        .joinToString("; ")
+                        .ifBlank { null }
+                })
             )
             .build()
 

@@ -7,6 +7,8 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
+import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
@@ -28,8 +30,15 @@ class MeViewModel @Inject constructor(
     playlistDao: PlaylistDao,
     historyDao: HistoryDao,
     private val prefs: PreferencesRepository,
-    private val audioCache: SimpleCache
+    private val audioCache: SimpleCache,
+    private val auth: AuthRepository
 ) : ViewModel() {
+
+    val session = auth.sessionFlow
+
+    fun logout() {
+        viewModelScope.launch { auth.logout() }
+    }
 
     val darkMode: StateFlow<DarkMode> = prefs.darkMode.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM

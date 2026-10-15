@@ -35,6 +35,10 @@ object OtherSettingsRoute
 @Serializable
 object SearchRoute
 
+/** 二级页：B 站 Web 扫码登录 + Cookie 导入 */
+@Serializable
+object LoginRoute
+
 @Serializable
 object PlayerRoute
 

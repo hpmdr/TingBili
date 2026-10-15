@@ -78,6 +78,7 @@ fun MeScreen(
     onOpenOtherSettings: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenLogin: () -> Unit = {},
     vm: MeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -87,6 +88,7 @@ fun MeScreen(
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
     val totalListenMs by vm.totalListenMs.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+    val session by vm.session.collectAsStateWithLifecycle()
     var showAbout by remember { mutableStateOf(false) }
 
     val placeholder: (String) -> Unit = { msg ->
@@ -103,6 +105,7 @@ fun MeScreen(
         MeHeader(
             darkTheme = darkTheme,
             totalListenMs = totalListenMs,
+            session = session,
             onBadgeClick = { placeholder("听书专属版：敬请期待") },
             onToggleDark = { vm.toggleDarkMode(darkTheme) }
         )
@@ -166,19 +169,21 @@ fun MeScreen(
                 )
             }
 
-            // 登录入口（未登录态）
+            // 登录入口 / 退出
             Spacer(Modifier.height(16.dp))
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { placeholder("登录功能暂未开放，敬请期待") },
+                    .clickable {
+                        if (session != null) vm.logout() else onOpenLogin()
+                    },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (darkTheme) Color(0xFF2A1218) else Color(0xFFFFF1F4)
                 )
             ) {
                 Text(
-                    text = "登录哔哩哔哩账号",
+                    text = if (session != null) "退出登录（${session?.userName?.ifBlank { "UID " + session?.uid }})" else "登录哔哩哔哩账号",
                     color = BiliPink,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
@@ -201,6 +206,7 @@ fun MeScreen(
 private fun MeHeader(
     darkTheme: Boolean,
     totalListenMs: Long,
+    session: cn.debubu.tingbili.data.bilibili.auth.BiliSession?,
     onBadgeClick: () -> Unit,
     onToggleDark: () -> Unit
 ) {
@@ -253,34 +259,44 @@ private fun MeHeader(
 
         Spacer(Modifier.height(20.dp))
 
-        // 用户信息（未登录态）
+        // 用户信息（已登录显示头像昵称，未登录显示引导）
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // 默认头像：白圈 + 人形
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(if (darkTheme) BiliPink.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.85f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = "未登录头像",
-                    tint = if (darkTheme) BiliPink else BiliPink,
-                    modifier = Modifier.size(36.dp)
+            if (session != null && session.face.isNotBlank()) {
+                coil3.compose.AsyncImage(
+                    model = session.face,
+                    contentDescription = "用户头像",
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
                 )
+            } else {
+                // 默认头像：白圈 + 人形
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(if (darkTheme) BiliPink.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.85f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = "未登录头像",
+                        tint = BiliPink,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
             }
             Spacer(Modifier.width(16.dp))
             Column {
                 Text(
-                    text = "未登录",
+                    text = session?.userName?.ifBlank { null } ?: "未登录",
                     color = onHeaderColor,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "登录后同步你的收藏与历史",
+                    text = if (session != null) "UID ${session.uid}" else "登录后同步你的收藏与历史",
                     color = onHeaderColor.copy(alpha = 0.75f),
                     fontSize = 12.sp
                 )

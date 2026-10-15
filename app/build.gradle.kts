@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.hilt.android)
+    implementation(libs.security.crypto)
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
