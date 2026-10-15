@@ -90,6 +90,7 @@ fun MeScreen(
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     var showAbout by remember { mutableStateOf(false) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     val placeholder: (String) -> Unit = { msg ->
         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -176,7 +177,7 @@ fun MeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        if (session != null) vm.logout() else onOpenLogin()
+                        if (session != null) showLogoutConfirm = true else onOpenLogin()
                     },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
@@ -198,6 +199,25 @@ fun MeScreen(
 
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+
+    if (showLogoutConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text("退出登录") },
+            text = { Text("将清除本机保存的登录凭证，需要重新登录。") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showLogoutConfirm = false
+                        vm.logout()
+                    }
+                ) { Text("退出") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showLogoutConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }
 
