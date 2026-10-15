@@ -82,7 +82,7 @@ class LoginViewModel @Inject constructor(
                         return@launch
                     }
                     is QrStatus.Success -> {
-                        val r = auth.finishQrLogin(st.redirectUrl, st.refreshToken)
+                        val r = auth.finishWebLogin(st.redirectUrl, st.refreshToken)
                         r.onSuccess { _qr.value = QrUi.Success }
                             .onFailure { _qr.value = QrUi.Failed("登录失败：${it.message}") }
                         countJob.cancel()
@@ -115,6 +115,144 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    // ── 短信 / 密码 / 极验（照抄 PiliPlus 规则 + biu 的 web 参数） ──
+
+    sealed interface SmsUi {
+        data object Idle : SmsUi
+        data object Sending : SmsUi
+        /** 已发送：secondsLeft 重发倒计时，captchaKey 登录用，sentAtMs 算 5 分钟过期 */
+        data class Sent(val secondsLeft: Int, val captchaKey: String, val sentAtMs: Long) : SmsUi
+        data class Failed(val message: String) : SmsUi
+    }
+
+    sealed interface PasswordUi {
+        data object Idle : PasswordUi
+        data object Working : PasswordUi
+        data class Failed(val message: String) : PasswordUi
+    }
+
+    /** 极验弹窗：Showing 时 UI 弹 WebView，滑完调 onGeeResult，关掉调 onGeeCancel */
+    sealed interface GeeUi {
+        data object Hidden : GeeUi
+        data class Showing(val gt: String, val challenge: String) : GeeUi
+    }
+
+    private val _sms = MutableStateFlow<SmsUi>(SmsUi.Idle)
+    val sms: StateFlow<SmsUi> = _sms.asStateFlow()
+
+    private val _password = MutableStateFlow<PasswordUi>(PasswordUi.Idle)
+    val password: StateFlow<PasswordUi> = _password.asStateFlow()
+
+    private val _gee = MutableStateFlow<GeeUi>(GeeUi.Hidden)
+    val gee: StateFlow<GeeUi> = _gee.asStateFlow()
+
+    private var geeTicket: AuthRepository.GeeTicket? = null
+    private var pendingGeeAction: ((AuthRepository.GeeResult) -> Unit)? = null
+    private var smsCooldownJob: Job? = null
+
+    /** 短信：先拿极验票据 → 弹滑块 → 滑完自动发短信 */
+    fun sendSms(cid: Int, tel: String) {
+        if (tel.isBlank()) {
+            _sms.value = SmsUi.Failed("手机号不能为空")
+            return
+        }
+        viewModelScope.launch {
+            _sms.value = SmsUi.Sending
+            val ticket = auth.fetchGeeTicket().getOrElse {
+                _sms.value = SmsUi.Failed(it.message ?: "获取验证信息失败")
+                return@launch
+            }
+            geeTicket = ticket
+            pendingGeeAction = { result -> doSendSms(cid, tel.trim(), ticket, result) }
+            _gee.value = GeeUi.Showing(ticket.gt, ticket.challenge)
+        }
+    }
+
+    private fun doSendSms(cid: Int, tel: String, ticket: AuthRepository.GeeTicket, result: AuthRepository.GeeResult) {
+        viewModelScope.launch {
+            _sms.value = SmsUi.Sending
+            auth.sendSms(cid, tel, ticket, result)
+                .onSuccess { key ->
+                    startSmsCooldown(SmsUi.Sent(60, key, System.currentTimeMillis()))
+                }
+                .onFailure { _sms.value = SmsUi.Failed(it.message ?: "发送失败") }
+        }
+    }
+
+    private fun startSmsCooldown(sent: SmsUi.Sent) {
+        smsCooldownJob?.cancel()
+        _sms.value = sent
+        smsCooldownJob = viewModelScope.launch {
+            var left = sent.secondsLeft
+            while (left > 0) {
+                delay(1000)
+                left--
+                val cur = _sms.value
+                if (cur is SmsUi.Sent) _sms.value = cur.copy(secondsLeft = left) else return@launch
+            }
+        }
+    }
+
+    /** 短信登录：照抄 PiliPlus 三道校验（取过码 / 填过码 / 5 分钟有效期） */
+    fun submitSms(cid: Int, tel: String, code: String) {
+        val sent = _sms.value as? SmsUi.Sent
+        if (sent == null || sent.captchaKey.isBlank()) {
+            _sms.value = SmsUi.Failed("请先点击获取验证码")
+            return
+        }
+        if (code.isBlank()) {
+            _sms.value = SmsUi.Failed("验证码不能为空")
+            return
+        }
+        if (System.currentTimeMillis() - sent.sentAtMs > SMS_CODE_TTL_MS) {
+            _sms.value = SmsUi.Failed("验证码已过期，请重新获取")
+            return
+        }
+        viewModelScope.launch {
+            auth.smsLogin(cid, tel.trim(), code.trim(), sent.captchaKey)
+                .onSuccess { _sms.value = SmsUi.Idle }
+                .onFailure { _sms.value = SmsUi.Failed(it.message ?: "登录失败") }
+        }
+    }
+
+    /** 密码登录：先拿极验票据 → 弹滑块 → 滑完自动登录（RSA 加密在仓储层） */
+    fun submitPassword(username: String, password: String) {
+        if (username.isBlank() || password.isBlank()) {
+            _password.value = PasswordUi.Failed("用户名或密码不能为空")
+            return
+        }
+        viewModelScope.launch {
+            _password.value = PasswordUi.Working
+            val ticket = auth.fetchGeeTicket().getOrElse {
+                _password.value = PasswordUi.Failed(it.message ?: "获取验证信息失败")
+                return@launch
+            }
+            geeTicket = ticket
+            pendingGeeAction = { result ->
+                viewModelScope.launch {
+                    auth.passwordLogin(username.trim(), password, ticket, result)
+                        .onSuccess { _password.value = PasswordUi.Idle }
+                        .onFailure { _password.value = PasswordUi.Failed(it.message ?: "登录失败") }
+                }
+            }
+            _password.value = PasswordUi.Idle
+            _gee.value = GeeUi.Showing(ticket.gt, ticket.challenge)
+        }
+    }
+
+    fun onGeeResult(validate: String, seccode: String, challenge: String) {
+        _gee.value = GeeUi.Hidden
+        pendingGeeAction?.invoke(AuthRepository.GeeResult(validate, seccode, challenge))
+        pendingGeeAction = null
+    }
+
+    fun onGeeCancel() {
+        _gee.value = GeeUi.Hidden
+        pendingGeeAction = null
+        if (_sms.value is SmsUi.Sending) _sms.value = SmsUi.Idle
+        if (_password.value is PasswordUi.Working) _password.value = PasswordUi.Idle
+    }
+
     fun logout() {
         viewModelScope.launch { auth.logout() }
     }
@@ -126,5 +264,7 @@ class LoginViewModel @Inject constructor(
     companion object {
         const val QR_TTL_SEC = 180
         const val POLL_INTERVAL_MS = 2000L
+        /** 短信验证码有效期：照抄 PiliPlus 的 5 分钟 */
+        const val SMS_CODE_TTL_MS = 5 * 60 * 1000L
     }
 }

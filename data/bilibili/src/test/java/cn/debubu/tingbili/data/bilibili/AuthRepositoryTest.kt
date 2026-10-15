@@ -63,7 +63,7 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `finishQrLogin walks redirects and saves session`() = runTest {
+    fun `finishWebLogin walks redirects and saves session`() = runTest {
         // 跳转链：/go -> /landing，沿途各下一颗 Cookie
         server.enqueue(
             MockResponse().setResponseCode(302)
@@ -79,7 +79,7 @@ class AuthRepositoryTest {
         server.enqueue(MockResponse().setBody(
             """{"code":0,"message":"ok","data":{"isLogin":true,"mid":42,"uname":"测试用户","face":"https://f/x.jpg"}}"""
         ))
-        val res = repo.finishQrLogin(server.url("/go").toString())
+        val res = repo.finishWebLogin(server.url("/go").toString())
         assertTrue(res.isSuccess)
         val s = res.getOrThrow()
         assertEquals("SESS123", s.sessdata)
@@ -166,5 +166,77 @@ class AuthRepositoryTest {
         assertEquals("新名字", s?.userName)
         // info + correspond + refresh + confirm + nav = 5 次请求
         assertEquals(5, server.requestCount)
+    }
+
+    @Test
+    fun `sendSms returns captcha key`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"code":0,"data":{"captcha_key":"CK1"}}"""))
+        val ticket = cn.debubu.tingbili.data.bilibili.auth.AuthRepository.GeeTicket("T", "G", "C")
+        val result = AuthRepository.GeeResult("V", "S", "C")
+        val res = repo.sendSms(86, "13800000000", ticket, result)
+        assertTrue(res.isSuccess)
+        assertEquals("CK1", res.getOrThrow())
+        val req = server.takeRequest()
+        val body = req.body.readUtf8()
+        assertTrue(body.contains("captcha_key") || body.contains("tel=13800000000"))
+    }
+
+    @Test
+    fun `smsLogin completes cookie exchange and saves`() = runTest {
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(req: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val path = req.path.orEmpty()
+                return when {
+                    path.startsWith("/x/passport-login/web/login/sms") ->
+                        MockResponse().setBody(
+                            """{"code":0,"data":{"url":"${server.url("/go")}","refresh_token":"RTS","timestamp":1}}"""
+                        )
+                    path.startsWith("/go") ->
+                        MockResponse().setResponseCode(302)
+                            .addHeader("Location", server.url("/land").toString())
+                            .addHeader("Set-Cookie", "SESSDATA=SS; Path=/")
+                    path.startsWith("/land") ->
+                        MockResponse().setResponseCode(200)
+                            .addHeader("Set-Cookie", "DedeUserID=11; Path=/")
+                            .addHeader("Set-Cookie", "bili_jct=JJ; Path=/")
+                    path.startsWith("/x/web-interface/nav") ->
+                        MockResponse().setBody(
+                            """{"code":0,"data":{"isLogin":true,"mid":11,"uname":"短信用户","face":""}}"""
+                        )
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        val res = repo.smsLogin(86, "13800000000", "123456", "CK1")
+        assertTrue(res.isSuccess)
+        val s = res.getOrThrow()
+        assertEquals("SS", s.sessdata)
+        assertEquals(11L, s.uid)
+        assertEquals("短信用户", s.userName)
+        assertEquals("RTS", s.refreshToken)
+    }
+
+    @Test
+    fun `smsLogin risk status fails with guidance`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"code":0,"data":{"status":2,"message":"环境存在风险","url":"https://risk/x","refresh_token":""}}"""
+        ))
+        val res = repo.smsLogin(86, "13800000000", "123456", "CK1")
+        assertTrue(res.isFailure)
+        assertTrue((res.exceptionOrNull()?.message ?: "").contains("扫码"))
+    }
+
+    @Test
+    fun `rsaEncrypt round trips with generated keypair`() {
+        val kpg = java.security.KeyPairGenerator.getInstance("RSA")
+        kpg.initialize(1024)
+        val pair = kpg.generateKeyPair()
+        val der64 = java.util.Base64.getEncoder().encodeToString(pair.public.encoded)
+        val pem = "-----BEGIN PUBLIC KEY-----\n$der64\n-----END PUBLIC KEY-----"
+        val cipher = repo.rsaEncrypt(pem, "HASH123secret")
+        val dec = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding")
+        dec.init(javax.crypto.Cipher.DECRYPT_MODE, pair.private)
+        val plain = String(dec.doFinal(java.util.Base64.getDecoder().decode(cipher)), Charsets.UTF_8)
+        assertEquals("HASH123secret", plain)
     }
 }

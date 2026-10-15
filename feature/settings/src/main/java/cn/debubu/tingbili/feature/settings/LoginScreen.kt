@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -99,9 +101,27 @@ fun LoginScreen(
         ) {
             TabRow(selectedTabIndex = tab) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("扫码登录") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Cookie 导入") })
+                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("短信登录") })
+                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("密码登录") })
+                Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Cookie 导入") })
             }
-            if (tab == 0) QrTab(vm) else CookieTab(vm)
+            when (tab) {
+                0 -> QrTab(vm)
+                1 -> SmsTab(vm)
+                2 -> PasswordTab(vm)
+                else -> CookieTab(vm)
+            }
+            val gee by vm.gee.collectAsStateWithLifecycle()
+            (gee as? LoginViewModel.GeeUi.Showing)?.let { showing ->
+                GeetestDialog(
+                    gt = showing.gt,
+                    challenge = showing.challenge,
+                    onSuccess = { validate, seccode, challenge ->
+                        vm.onGeeResult(validate, seccode, challenge)
+                    },
+                    onCancel = { vm.onGeeCancel() },
+                )
+            }
         }
     }
 }
@@ -219,4 +239,135 @@ private fun qrBitmap(url: String, sizePx: Int): ImageBitmap? = try {
     Bitmap.createBitmap(pixels, sizePx, sizePx, Bitmap.Config.ARGB_8888).asImageBitmap()
 } catch (_: Exception) {
     null
+}
+
+@Composable
+private fun SmsTab(vm: LoginViewModel) {
+    val sms by vm.sms.collectAsStateWithLifecycle()
+    var zone by remember { mutableStateOf("86") }
+    var tel by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    val sending = sms is LoginViewModel.SmsUi.Sending
+    val sent = sms as? LoginViewModel.SmsUi.Sent
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = zone,
+                onValueChange = { zone = it.filter(Char::isDigit).take(4) },
+                modifier = Modifier.width(88.dp),
+                label = { Text("区号") },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = tel,
+                onValueChange = { tel = it.filter(Char::isDigit).take(15) },
+                modifier = Modifier.weight(1f),
+                label = { Text("手机号") },
+                singleLine = true,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = code,
+                onValueChange = { code = it.filter(Char::isDigit).take(6) },
+                modifier = Modifier.weight(1f),
+                label = { Text("验证码") },
+                singleLine = true,
+            )
+            val canSend = !sending && (sent == null || sent.secondsLeft <= 0)
+            Button(
+                onClick = { vm.sendSms(zone.toIntOrNull() ?: 86, tel) },
+                enabled = canSend,
+            ) {
+                Text(
+                    when {
+                        sending -> "发送中"
+                        sent != null && sent.secondsLeft > 0 -> "${sent.secondsLeft}秒后重发"
+                        else -> "获取验证码"
+                    }
+                )
+            }
+        }
+        if (sms is LoginViewModel.SmsUi.Failed) {
+            Text((sms as LoginViewModel.SmsUi.Failed).message, color = MaterialTheme.colorScheme.error)
+        }
+        Button(
+            onClick = { vm.submitSms(zone.toIntOrNull() ?: 86, tel, code) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !sending,
+        ) {
+            Text("登录")
+        }
+        Text(
+            "先过滑块再发短信（B 站要求）；验证码 5 分钟内有效。风控期可能收不到短信，可换扫码/Cookie。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PasswordTab(vm: LoginViewModel) {
+    val passwordUi by vm.password.collectAsStateWithLifecycle()
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var visible by remember { mutableStateOf(false) }
+    val working = passwordUi is LoginViewModel.PasswordUi.Working
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it.trim() },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("手机号 / 邮箱") },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("密码") },
+            singleLine = true,
+            visualTransformation = if (visible) androidx.compose.ui.text.input.VisualTransformation.None
+            else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { visible = !visible }) {
+                    Icon(
+                        imageVector = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (visible) "隐藏密码" else "显示密码",
+                    )
+                }
+            },
+        )
+        if (passwordUi is LoginViewModel.PasswordUi.Failed) {
+            Text((passwordUi as LoginViewModel.PasswordUi.Failed).message, color = MaterialTheme.colorScheme.error)
+        }
+        Button(
+            onClick = { vm.submitPassword(username, password) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !working,
+        ) {
+            if (working) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text("登录")
+        }
+        Text(
+            "密码经 RSA 加密后传输（明文不出本机）；先过滑块再提交。撞风控需二次验证时请改用扫码/Cookie。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

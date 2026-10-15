@@ -120,7 +120,7 @@ open class AuthRepository @Inject constructor(
     }
 
     /** 扫码成功后调用：换 Cookie → nav 验证 → 落盘并发布（含 refresh_token，续期用） */
-    open suspend fun finishQrLogin(redirectUrl: String, refreshToken: String = ""): Result<BiliSession> {
+    open suspend fun finishWebLogin(redirectUrl: String, refreshToken: String = ""): Result<BiliSession> {
         val cookies = try {
             exchangeCookies(redirectUrl)
         } catch (e: Exception) {
@@ -235,6 +235,121 @@ open class AuthRepository @Inject constructor(
         }
     }
 
+    // ── 短信登录（Web，参数形态对标 biu，同 PiliPlus 规则：60s 冷却、验证码 5 分钟有效） ──
+
+    /** 极验票据：先拿 token/gt/challenge，滑完得 validate/seccode，再发短信/密码 */
+    data class GeeTicket(val token: String, val gt: String, val challenge: String)
+
+    data class GeeResult(val validate: String, val seccode: String, val challenge: String)
+
+    suspend fun fetchGeeTicket(): Result<GeeTicket> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = get("$passportBase/x/passport-login/captcha?source=main_web")
+            val dto = json.decodeFromString(CaptchaDto.serializer(), body)
+            require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "captcha failed: ${dto.code}" } }
+            val g = dto.data.geetest ?: throw IllegalStateException("captcha missing geetest")
+            GeeTicket(dto.data.token, g.gt, g.challenge)
+        }
+    }
+
+    suspend fun sendSms(
+        cid: Int, tel: String, ticket: GeeTicket, result: GeeResult,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val form = "cid=$cid&tel=$tel&source=main_web" +
+                "&token=${ticket.token}&challenge=${result.challenge}" +
+                "&validate=${result.validate}&seccode=${result.seccode}"
+            val body = post("$passportBase/x/passport-login/web/sms/send", form, null)
+            val dto = json.decodeFromString(SmsSendDto.serializer(), body)
+            require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "sms send failed: ${dto.code}" } }
+            val key = dto.data.captchaKey
+            require(key.isNotBlank()) { "sms send missing captcha_key" }
+            key
+        }
+    }
+
+    /**
+     * 短信登录：成功返回 despite code==0；data.status==2 表示撞风控（需二次验证，
+     * 该链路最后一步 oauth 要 app 签名，Web 路径走不通，直接报 message 让用户换扫码/Cookie）。
+     */
+    suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> {
+        val body = try {
+            val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
+            post("$passportBase/x/passport-login/web/login/sms", form, null)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        return completePasswordLikeLogin(body)
+    }
+
+    // ── 密码登录（Web：web/key 取 RSA 公钥加密 hash+密码，极验票据必填，同 biu） ──
+
+    suspend fun fetchWebKey(): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = get("$passportBase/x/passport-login/web/key")
+            val dto = json.decodeFromString(WebKeyDto.serializer(), body)
+            require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "web key failed: ${dto.code}" } }
+            val hash = dto.data.hash
+            val key = dto.data.key
+            require(hash.isNotBlank() && key.isNotBlank()) { "web key empty" }
+            hash to key
+        }
+    }
+
+    /** RSA/ECB/PKCS1Padding 加密（对标 JSEncrypt 默认配置），明文 = hash + 密码 */
+    fun rsaEncrypt(pemPublicKey: String, plain: String): String {
+        val pem = pemPublicKey
+            .replace("-----BEGIN PUBLIC KEY-----", "")
+            .replace("-----END PUBLIC KEY-----", "")
+            .replace("\n", "")
+            .replace("\r", "")
+            .trim()
+        val der = java.util.Base64.getMimeDecoder().decode(pem)
+        val keySpec = java.security.spec.X509EncodedKeySpec(der)
+        val key = java.security.KeyFactory.getInstance("RSA").generatePublic(keySpec)
+        val cipher = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key)
+        val encrypted = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+        return java.util.Base64.getEncoder().encodeToString(encrypted)
+    }
+
+    suspend fun passwordLogin(username: String, password: String, ticket: GeeTicket, result: GeeResult): Result<BiliSession> {
+        val (hash, key) = fetchWebKey().getOrElse { return Result.failure(it) }
+        val encrypted = try {
+            rsaEncrypt(key, hash + password)
+        } catch (e: Exception) {
+            return Result.failure(IllegalStateException("密码加密失败，请重试"))
+        }
+        val body = try {
+            val form = "username=$username&password=$encrypted" +
+                "&keep=0&token=${ticket.token}&challenge=${result.challenge}" +
+                "&validate=${result.validate}&seccode=${result.seccode}&source=main_web"
+            post("$passportBase/x/passport-login/web/login", form, null)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        return completePasswordLikeLogin(body)
+    }
+
+    /** 短信/密码登录共用收尾：code==0 且 status==0/缺省 → url 换 Cookie；status==2 风控直接报错 */
+    private suspend fun completePasswordLikeLogin(body: String): Result<BiliSession> {
+        val dto = try {
+            json.decodeFromString(PasswordLoginDto.serializer(), body)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        if (dto.code != 0) return Result.failure(IllegalStateException(dto.message.ifBlank { "login failed: ${dto.code}" }))
+        val d = dto.data ?: return Result.failure(IllegalStateException("login empty data"))
+        if ((d.status ?: 0) == 2) {
+            return Result.failure(
+                IllegalStateException(d.message.orEmpty().ifBlank { "本次登录环境存在风险，需验证手机号" } + "，请改用扫码或 Cookie 登录")
+            )
+        }
+        val url = d.url.orEmpty()
+        if (url.isBlank()) return Result.failure(IllegalStateException("login missing redirect url"))
+        return finishWebLogin(url, d.refreshToken.orEmpty())
+    }
+
     suspend fun logout() {
         val csrf = _sessionFlow.value?.biliJct.orEmpty()
         try {
@@ -323,6 +438,42 @@ open class AuthRepository @Inject constructor(
 
     @Serializable
     private data class CookieRefreshData(@SerialName("refresh_token") val refreshToken: String = "")
+
+    @Serializable
+    private data class CaptchaDto(val code: Int = -1, val message: String = "", val data: CaptchaData? = null)
+
+    @Serializable
+    private data class CaptchaData(
+        val type: String = "",
+        val token: String = "",
+        val geetest: GeeTestInfo? = null,
+    )
+
+    @Serializable
+    private data class GeeTestInfo(val gt: String = "", val challenge: String = "")
+
+    @Serializable
+    private data class SmsSendDto(val code: Int = -1, val message: String = "", val data: SmsSendData? = null)
+
+    @Serializable
+    private data class SmsSendData(@SerialName("captcha_key") val captchaKey: String = "")
+
+    @Serializable
+    private data class PasswordLoginDto(val code: Int = -1, val message: String = "", val data: PasswordLoginData? = null)
+
+    @Serializable
+    private data class PasswordLoginData(
+        val status: Int? = null,
+        val url: String? = null,
+        @SerialName("refresh_token") val refreshToken: String? = null,
+        val message: String? = null,
+    )
+
+    @Serializable
+    private data class WebKeyDto(val code: Int = -1, val message: String = "", val data: WebKeyData? = null)
+
+    @Serializable
+    private data class WebKeyData(val hash: String = "", val key: String = "")
 
     @Serializable
     private data class NavData(

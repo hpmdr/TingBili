@@ -52,7 +52,7 @@ class LoginViewModelTest {
             override suspend fun pollQr(qrcodeKey: String): QrStatus =
                 polls.getOrElse(pollIndex++) { polls.last() }
 
-            override suspend fun finishQrLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
+            override suspend fun finishWebLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
                 Result.success(BiliSession("S", "J", 7L))
         }
 
