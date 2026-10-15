@@ -32,6 +32,7 @@ dependencies {
     testImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.robolectric)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.turbine)
     testImplementation(libs.arch.core.testing)
 }
 

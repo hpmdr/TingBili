@@ -12,6 +12,7 @@ import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -35,10 +36,12 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
     /** 首页发现流策展关键词，设置页可增减；空时回落默认 */
+    // 注意：ds.data 任何 key 写入都会发射（播放时进度每 500ms 写一次），
+    // 必须去重，否则下游 combine 会反复重建推荐 Pager（首页无限刷新）。
     val homeKeywords: Flow<List<String>> = ds.data.map { prefs ->
         prefs[HOME_KEYWORDS]?.split(",")?.map { it.trim() }
             ?.filter { it.isNotBlank() }?.ifEmpty { null } ?: DEFAULT_HOME_KEYWORDS
-    }
+    }.distinctUntilChanged()
     /** 搜索历史（本地，最近在前、去重、上限），搜索页空态展示 */
     val searchHistory: Flow<List<String>> = ds.data.map { prefs ->
         prefs[SEARCH_HISTORY_JSON]?.let { json ->
