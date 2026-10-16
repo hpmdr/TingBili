@@ -182,11 +182,18 @@ fun PlayerScreen(
         Spacer(Modifier.height(14.dp))
 
         if (!lyricFullscreen) {
-            MiniLyricCard(
-                lyrics = s.lyrics,
-                currentIndex = s.currentLyricIndex,
-                onOpenFullscreen = { lyricFullscreen = true },
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                MiniLyricCard(
+                    lyrics = s.lyrics,
+                    currentIndex = s.currentLyricIndex,
+                    onOpenFullscreen = { lyricFullscreen = true },
+                )
+            }
         } else {
             Column(
                 modifier = Modifier
@@ -603,15 +610,17 @@ private fun AuxItem(
     }
 }
 
-/** 封面态迷你实时字幕：当前行 + 下一行，点击进全屏字幕 */
+/** 封面态迷你实时字幕：上一行 + 当前行 + 下两行，点击进全屏字幕 */
 @Composable
 private fun MiniLyricCard(
     lyrics: List<cn.debubu.tingbili.data.bilibili.model.LyricLine>,
     currentIndex: Int,
     onOpenFullscreen: () -> Unit,
 ) {
+    val prev = lyrics.getOrNull(currentIndex - 1)?.text
     val current = lyrics.getOrNull(currentIndex)?.text
-    val next = lyrics.getOrNull(currentIndex + 1)?.text
+    val next1 = lyrics.getOrNull(currentIndex + 1)?.text
+    val next2 = lyrics.getOrNull(currentIndex + 2)?.text
     Surface(
         onClick = onOpenFullscreen,
         shape = RoundedCornerShape(12.dp),
@@ -619,9 +628,9 @@ private fun MiniLyricCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -650,21 +659,43 @@ private fun MiniLyricCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                if (!prev.isNullOrBlank()) {
+                    Text(
+                        text = prev,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Text(
                     text = current,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (!next.isNullOrBlank()) {
+                if (!next1.isNullOrBlank()) {
                     Text(
-                        text = next,
+                        text = next1,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (!next2.isNullOrBlank()) {
+                    Text(
+                        text = next2,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
