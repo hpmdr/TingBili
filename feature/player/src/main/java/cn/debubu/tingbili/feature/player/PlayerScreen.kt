@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -724,7 +725,7 @@ private fun FullscreenLyricsHeader(onBackToCover: () -> Unit) {
     Spacer(Modifier.height(8.dp))
 }
 
-/** 全屏大字字幕：大字号 + 当前行高亮卡 + 自动跟随 + 点行跳转，末尾带 AI 标注 */
+/** 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随 + 点行跳转，末尾带 AI 标注 */
 @Composable
 private fun FullscreenLyricsList(
     state: PlayerUiState,
@@ -734,50 +735,41 @@ private fun FullscreenLyricsList(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(state.currentLyricIndex) {
         if (state.currentLyricIndex >= 0) {
-            listState.animateScrollToItem(state.currentLyricIndex)
+            // 负偏移半个视口：当前行停中间，已读历史自然留在上面
+            val halfViewport = (listState.layoutInfo.viewportSize.height / 2).coerceAtLeast(0)
+            listState.animateScrollToItem(state.currentLyricIndex, scrollOffset = -halfViewport)
         }
     }
-    androidx.compose.foundation.lazy.LazyColumn(
-        state = listState,
+    BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        itemsIndexed(
-            items = state.lyrics,
-            key = { _, line -> line.timeMs },
-        ) { idx, line ->
-            val isCurrent = idx == state.currentLyricIndex
-            if (isCurrent) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !isLoading) { onSeekLyric(line) },
-                ) {
-                    Text(
-                        text = line.text,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    )
-                }
-            } else {
+        // 上下各留半屏内边距，首尾行也能居中
+        val centerPadding = maxHeight / 2
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = centerPadding),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            itemsIndexed(
+                items = state.lyrics,
+                key = { _, line -> line.timeMs },
+            ) { idx, line ->
+                val isCurrent = idx == state.currentLyricIndex
                 Text(
                     text = line.text,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = if (isCurrent) MaterialTheme.typography.titleMedium
+                        else MaterialTheme.typography.bodySmall,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = !isLoading) { onSeekLyric(line) }
-                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                        .padding(horizontal = 16.dp, vertical = if (isCurrent) 6.dp else 2.dp),
                 )
-            }
         }
         if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
             item(key = "subtitle-label") {
@@ -795,6 +787,7 @@ private fun FullscreenLyricsList(
                     )
                 }
             }
+        }
         }
     }
 }
