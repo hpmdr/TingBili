@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +6,15 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// Release 签名取值顺序：项目根目录 keystore.properties（本地 AS 惯例，不入库）
+// → 环境变量（CI Secrets 解码后传入）；两边都没有则保持未签名，CI 缺 Secrets 直接失败。
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use(::load)
+}
+fun signingProp(name: String, envName: String): String? =
+    keystoreProps.getProperty(name) ?: System.getenv(envName)
 
 android {
     namespace = "cn.debubu.tingbili"
@@ -19,14 +29,12 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
-        // Release 签名只认环境变量（CI Secrets 解码后传入），keystore 永不入库。
-        // 本地没有 keystore 文件时保持未签名：CI 侧缺 Secrets 会直接失败，见 release.yml。
         create("release") {
-            System.getenv("RELEASE_STORE_FILE")?.let { storePath ->
+            signingProp("storeFile", "RELEASE_STORE_FILE")?.let { storePath ->
                 storeFile = file(storePath)
-                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+                storePassword = signingProp("storePassword", "RELEASE_STORE_PASSWORD") ?: ""
+                keyAlias = signingProp("keyAlias", "RELEASE_KEY_ALIAS") ?: ""
+                keyPassword = signingProp("keyPassword", "RELEASE_KEY_PASSWORD") ?: ""
             }
         }
     }
@@ -35,7 +43,7 @@ android {
         getByName("release") {
             // 有 keystore 才挂签名：本地直接 assembleRelease 不会炸，CI 一定带签名出包。
             // （minify 暂不开：先保证发版链路跑通，瘦身另起一事。）
-            System.getenv("RELEASE_STORE_FILE")?.let { storePath ->
+            signingProp("storeFile", "RELEASE_STORE_FILE")?.let { storePath ->
                 if (file(storePath).exists()) signingConfig = signingConfigs.getByName("release")
             }
         }
