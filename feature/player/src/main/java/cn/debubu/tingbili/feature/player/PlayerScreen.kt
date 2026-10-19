@@ -74,6 +74,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -733,18 +734,31 @@ private fun FullscreenLyricsList(
     isLoading: Boolean,
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(state.currentLyricIndex) {
-        if (state.currentLyricIndex >= 0) {
-            // 负偏移半个视口：当前行停中间，已读历史自然留在上面
-            val halfViewport = (listState.layoutInfo.viewportSize.height / 2).coerceAtLeast(0)
-            listState.animateScrollToItem(state.currentLyricIndex, scrollOffset = -halfViewport)
-        }
-    }
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
     ) {
         // 上下各留半屏内边距，首尾行也能居中
         val centerPadding = maxHeight / 2
+        // 视口半高合成时即可知：偏移这里算好，不读 layoutInfo。
+        // layoutInfo 首帧还没布局（viewport=0），拿它算偏移进全屏第一眼必错位。
+        // 真机实测：scrollToItem 的正偏移是把目标行顶到视口上方（滚过头），
+        // 要居中必须传负偏移（目标行顶 = 视口顶 - off，即行下沉半屏居中）。
+        // 当前行 titleMedium+6dp 约 52dp 高，减半行即居中，估算差半行内肉眼不可见。
+        val density = LocalDensity.current
+        val centerScrollOffset = with(density) {
+            -(centerPadding.roundToPx() - 26.dp.roundToPx())
+        }
+        // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态，只滚一次会定错位置
+        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerScrollOffset) {
+            val idx = state.currentLyricIndex
+            if (idx < 0 || idx >= state.lyrics.size) return@LaunchedEffect
+            // 瞬时跟随不用动画：动画会被下一句打断，越跟越偏
+            try {
+                listState.scrollToItem(idx, scrollOffset = centerScrollOffset)
+            } catch (_: Exception) {
+                // 切歌/切字幕轨时列表并发变化，忽略本次跟随
+            }
+        }
         androidx.compose.foundation.lazy.LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
