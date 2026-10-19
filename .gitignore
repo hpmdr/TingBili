@@ -13,6 +13,12 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# Release 签名密钥严禁入库（丢了=换签名=全员卸载重装）：只放仓库外面，妥善备份
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.keypass
 # 例外：app/debug.keystore 为多电脑共用的 debug 测试签名（维护者已明确批准入库，release 签名严禁入库）
 !app/debug.keystore
 
