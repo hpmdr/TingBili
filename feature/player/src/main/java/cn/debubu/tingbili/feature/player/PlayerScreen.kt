@@ -76,6 +76,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -946,10 +947,18 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
         }
     }
     // 停稳后把中心项回传（滚动中不写，避免抖动）
+    // 停稳后的选择下标：滚动中冻结在上一次的值，高亮不动只有停稳才结算一次
+    // （centerIndex 滚动中每帧都变只做计算不做高亮避免闪烁）
+    var settled by remember(value) {
+        mutableIntStateOf((value / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1))
+    }
     LaunchedEffect(centerIndex, listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
-            val m = ((centerIndex ?: (value / SLEEP_STEP_MIN - 1)) + 1) * SLEEP_STEP_MIN
-            if (m != value) onValueChange(m)
+            centerIndex?.let {
+                settled = it
+                val m = (it + 1) * SLEEP_STEP_MIN
+                if (m != value) onValueChange(m)
+            }
         }
     }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -965,16 +974,31 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
             ) {
                 items(SLEEP_GRID_COUNT, key = { it }) { i ->
                     val m = (i + 1) * SLEEP_STEP_MIN
-                    val selected = m == (centerIndex?.let { (it + 1) * SLEEP_STEP_MIN } ?: value)
-                    Text(
-                        text = if (selected) "$m 分钟" else "$m",
-                        modifier = Modifier.height(itemH).wrapContentHeight(Alignment.CenterVertically),
-                        style = if (selected) MaterialTheme.typography.titleMedium
-                        else MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 所有行同字号同字重同布局：数字固定宽度居中“分钟”永远占位
+                    // 只用 alpha 显隐（不触发布局）；选中只变颜色彻底杜绝跳动
+                    val selected = i == settled
+                    Row(
+                        modifier = Modifier.height(itemH),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = "$m",
+                            modifier = Modifier.width(72.dp),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "分钟",
+                            modifier = Modifier.alpha(if (selected) 1f else 0f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
             // 中线刻度：只画上下两条细线，不给内容铺背景
