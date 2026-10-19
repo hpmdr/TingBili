@@ -76,7 +76,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -838,8 +837,13 @@ private fun SleepTimerSheet(
     val running = remainSec != null || endOfChapter
     // 滚轮初值：运行中沿用本次设定，否则 30（不在预设里也没关系，滚轮 1～360 全覆盖）
     // 滚轮初值：运行中沿用本次设定，否则上次所选（都贴到 30 分钟格）
-    var wheelMin by remember { mutableIntStateOf(snapSleepMin(totalMin ?: lastMin)) }
-    var finish by remember { mutableStateOf(if (remainSec != null) finishChapter else finishDefault) }
+    // 带 key：冷启动时 flow 初值尚未落盘重组后要用最新值重算（无 key 会钉死初值 30/false）
+    var wheelMin by remember(totalMin, lastMin) {
+        mutableIntStateOf(snapSleepMin(totalMin ?: lastMin))
+    }
+    var finish by remember(remainSec != null, endOfChapter, finishDefault) {
+        mutableStateOf(if (remainSec != null) finishChapter else finishDefault)
+    }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -924,7 +928,7 @@ private fun snapSleepMin(min: Int): Int =
     ((min.coerceIn(1, SLEEP_MAX_MIN) + SLEEP_STEP_MIN / 2) / SLEEP_STEP_MIN)
         .coerceIn(1, SLEEP_GRID_COUNT) * SLEEP_STEP_MIN
 
-/** 分钟滚轮：30 分钟一格，居中项为主色大字强调（只用字体颜色不铺内容背景） */
+/** 分钟滚轮：30 分钟一格，行内纯数字选中只变颜色；“分钟”钉死框外不跟滚 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
@@ -933,7 +937,7 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
         initialFirstVisibleItemIndex = (value / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1),
     )
     val fling = rememberSnapFlingBehavior(lazyListState = listState)
-    // 视口中心项即当前选择
+    // 视口中心项：滚动中每帧都变，只做计算不做高亮避免闪烁
     val centerIndex by remember {
         derivedStateOf {
             val info = listState.layoutInfo
@@ -946,11 +950,13 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
             }
         }
     }
-    // 停稳后把中心项回传（滚动中不写，避免抖动）
-    // 停稳后的选择下标：滚动中冻结在上一次的值，高亮不动只有停稳才结算一次
-    // （centerIndex 滚动中每帧都变只做计算不做高亮避免闪烁）
+    // 停稳后的选择下标：滚动中冻结在上一次的值高亮不动只有停稳才结算一次
     var settled by remember(value) {
         mutableIntStateOf((value / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1))
+    }
+    // 外部值变化（冷启动落盘/记忆恢复）滚到对应格；自己结算时与列表一致为空操作
+    LaunchedEffect(value) {
+        listState.scrollToItem((value / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1))
     }
     LaunchedEffect(centerIndex, listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
@@ -961,55 +967,46 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
             }
         }
     }
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            LazyColumn(
-                state = listState,
-                flingBehavior = fling,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(itemH * 3),
-                contentPadding = PaddingValues(vertical = itemH),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                items(SLEEP_GRID_COUNT, key = { it }) { i ->
-                    val m = (i + 1) * SLEEP_STEP_MIN
-                    // 所有行同字号同字重同布局：数字固定宽度居中“分钟”永远占位
-                    // 只用 alpha 显隐（不触发布局）；选中只变颜色彻底杜绝跳动
-                    val selected = i == settled
-                    Row(
-                        modifier = Modifier.height(itemH),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            text = "$m",
-                            modifier = Modifier.width(72.dp),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "分钟",
-                            modifier = Modifier.alpha(if (selected) 1f else 0f),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-            // 中线刻度：只画上下两条细线，不给内容铺背景
-            Column(modifier = Modifier.fillMaxWidth().height(itemH * 3)) {
-                Spacer(modifier = Modifier.height(itemH))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.weight(1f))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(itemH))
+    Box(modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            flingBehavior = fling,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(itemH * 3),
+            contentPadding = PaddingValues(vertical = itemH),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            items(SLEEP_GRID_COUNT, key = { it }) { i ->
+                val selected = i == settled
+                Text(
+                    text = "${(i + 1) * SLEEP_STEP_MIN}",
+                    modifier = Modifier.fillMaxWidth().height(itemH)
+                        .wrapContentHeight(Alignment.CenterVertically),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+        // 中线刻度：只画上下两条细线不给内容铺背景
+        Column(modifier = Modifier.fillMaxWidth().height(itemH * 3)) {
+            Spacer(modifier = Modifier.height(itemH))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.weight(1f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(itemH))
+        }
+        // 单位钉死在中间行右侧：彻底移出滚动列表怎么划都不动（对标 iOS 倒计时滚轮）
+        Text(
+            text = "分钟",
+            modifier = Modifier.align(Alignment.Center).offset(x = 34.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
