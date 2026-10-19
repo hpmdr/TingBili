@@ -169,9 +169,16 @@ class PlayerViewModel @Inject constructor(
     val sleepFinishDefault: StateFlow<Boolean> = prefs.sleepFinishChapter
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    /** 睡眠定时透传（Manager 内内存态，触发自带落盘） */
+    /** 上次所选定时分钟（滚轮初值，下次打开沿用） */
+    val sleepLastMin: StateFlow<Int> = prefs.sleepLastMinutes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+
+    /** 睡眠定时透传（Manager 内内存态，触发自带落盘）；启动即记住分钟+开关偏好 */
     fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
-        viewModelScope.launch { prefs.setSleepFinishChapter(finishChapter) }
+        viewModelScope.launch {
+            prefs.setSleepFinishChapter(finishChapter)
+            prefs.setSleepLastMinutes(seconds / 60)
+        }
         player.startSleepTimer(seconds, finishChapter)
     }
 

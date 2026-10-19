@@ -311,6 +311,7 @@ fun PlayerScreen(
             totalMin = s.sleepTotalSec?.div(60),
             finishChapter = s.sleepFinishChapter,
             finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
+            lastMin = vm.sleepLastMin.collectAsStateWithLifecycle().value,
             endOfChapter = s.sleepEndOfChapter,
             onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
             onToggleFinish = { vm.setSleepFinishChapter(it) },
@@ -826,6 +827,7 @@ private fun SleepTimerSheet(
     totalMin: Int?,
     finishChapter: Boolean,
     finishDefault: Boolean,
+    lastMin: Int,
     endOfChapter: Boolean,
     onSelectMinutes: (Int, Boolean) -> Unit,
     onToggleFinish: (Boolean) -> Unit,
@@ -834,7 +836,8 @@ private fun SleepTimerSheet(
 ) {
     val running = remainSec != null || endOfChapter
     // 滚轮初值：运行中沿用本次设定，否则 30（不在预设里也没关系，滚轮 1～360 全覆盖）
-    var wheelMin by remember { mutableIntStateOf(snapSleepMin(totalMin ?: 30)) }
+    // 滚轮初值：运行中沿用本次设定，否则上次所选（都贴到 30 分钟格）
+    var wheelMin by remember { mutableIntStateOf(snapSleepMin(totalMin ?: lastMin)) }
     var finish by remember { mutableStateOf(if (remainSec != null) finishChapter else finishDefault) }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -910,8 +913,8 @@ private fun SleepTimerSheet(
     }
 }
 
-/** 上限 360、30 分钟一格：30/60/…/360 共 12 格 */
-private const val SLEEP_MAX_MIN = 360
+/** 上限 600、30 分钟一格：30/60/…/600 共 20 格 */
+private const val SLEEP_MAX_MIN = 600
 private const val SLEEP_STEP_MIN = 30
 private const val SLEEP_GRID_COUNT = SLEEP_MAX_MIN / SLEEP_STEP_MIN
 
@@ -950,12 +953,6 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
         }
     }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "$value 分钟",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
         Box(modifier = Modifier.fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -970,7 +967,7 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
                     val m = (i + 1) * SLEEP_STEP_MIN
                     val selected = m == (centerIndex?.let { (it + 1) * SLEEP_STEP_MIN } ?: value)
                     Text(
-                        text = "$m",
+                        text = if (selected) "$m 分钟" else "$m",
                         modifier = Modifier.height(itemH).wrapContentHeight(Alignment.CenterVertically),
                         style = if (selected) MaterialTheme.typography.titleMedium
                         else MaterialTheme.typography.bodyLarge,

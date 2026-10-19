@@ -41,6 +41,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
+    /** 睡眠定时滚轮上次所选分钟（默认 30，启动定时即记住） */
+    val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 30 }
 
     val themeMode: Flow<ThemeMode> = ds.data.map { prefs ->
         prefs[THEME_MODE]?.let(ThemeMode::fromKey)
@@ -97,6 +99,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setSleepFinishChapter(v: Boolean) {
         ds.edit { it[SLEEP_FINISH_CHAPTER] = v }
+    }
+
+    suspend fun setSleepLastMinutes(min: Int) {
+        ds.edit { it[SLEEP_LAST_MINUTES] = min.coerceIn(30, 600) }
     }
 
 
@@ -241,6 +247,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val SPEED = floatPreferencesKey("speed")
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
+        val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")
