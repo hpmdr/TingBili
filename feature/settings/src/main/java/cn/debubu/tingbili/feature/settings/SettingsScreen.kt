@@ -13,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：播放与音频设置（步长 / 定时预设）。主题在「外观」，图片格式与缓存在「其他设置」。 */
+/** 二级页：播放与音频设置（步长）。主题在「外观」，图片格式与缓存在「其他设置」。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -37,7 +36,6 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
-    val presets by vm.timerPresets.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
         topBar = {
@@ -75,26 +73,6 @@ fun SettingsScreen(
                 }
             }
 
-            Column {
-                Text("定时预设（分钟）", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "播放页定时弹窗顶部的快捷选项（至少保留一个）；任意分钟用弹窗滚轮选",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 60, 90, 120, 180).forEach { m ->
-                        FilterChip(
-                            selected = m in presets,
-                            onClick = {
-                                val next = if (m in presets) presets - m else presets + m
-                                if (next.isNotEmpty()) vm.setTimerPresets(next)
-                            },
-                            label = { Text("${m}分") },
-                        )
-                    }
-                }
-            }
         }
     }
 }

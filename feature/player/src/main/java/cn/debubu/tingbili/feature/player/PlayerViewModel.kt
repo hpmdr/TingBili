@@ -102,9 +102,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** 睡眠定时快捷选项（设置页可改，默认 30/60/90/120） */
-    val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(30, 60, 90, 120))
-
     val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, sub, stepSec ->
         val lyrics = sub.lines
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)

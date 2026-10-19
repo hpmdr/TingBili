@@ -41,11 +41,6 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
-    val timerPresets: Flow<Set<Int>> = ds.data.map { prefs ->
-        prefs[TIMER_PRESETS]?.split(",")?.mapNotNull { it.toIntOrNull() }
-            ?.filter { it in 1..1440 }?.toSet()?.takeIf { it.isNotEmpty() }
-            ?: DEFAULT_TIMER_PRESETS
-    }
 
     val themeMode: Flow<ThemeMode> = ds.data.map { prefs ->
         prefs[THEME_MODE]?.let(ThemeMode::fromKey)
@@ -104,11 +99,6 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[SLEEP_FINISH_CHAPTER] = v }
     }
 
-    suspend fun setTimerPresets(presets: Set<Int>) {
-        val cleaned = presets.filter { it in 1..1440 }.toSet().takeIf { it.isNotEmpty() }
-            ?: DEFAULT_TIMER_PRESETS
-        ds.edit { it[TIMER_PRESETS] = cleaned.joinToString(",") }
-    }
 
     suspend fun setDynamicColor(v: Boolean) {
         setThemeMode(if (v) ThemeMode.SYSTEM else ThemeMode.DEFAULT)
@@ -250,9 +240,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val STEP_SEC = intPreferencesKey("step_sec")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val SPEED = floatPreferencesKey("speed")
-        val TIMER_PRESETS = stringPreferencesKey("timer_presets")
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
-        val DEFAULT_TIMER_PRESETS = setOf(30, 60, 90, 120)
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")

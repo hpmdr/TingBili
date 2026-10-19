@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
@@ -114,7 +113,6 @@ fun PlayerScreen(
     var showChapterSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
-    val timerPresets by vm.timerPresets.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -314,7 +312,6 @@ fun PlayerScreen(
             finishChapter = s.sleepFinishChapter,
             finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
             endOfChapter = s.sleepEndOfChapter,
-            presets = timerPresets.sorted(),
             onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
             onToggleFinish = { vm.setSleepFinishChapter(it) },
             onCancel = { vm.cancelSleepTimer() },
@@ -830,7 +827,6 @@ private fun SleepTimerSheet(
     finishChapter: Boolean,
     finishDefault: Boolean,
     endOfChapter: Boolean,
-    presets: List<Int>,
     onSelectMinutes: (Int, Boolean) -> Unit,
     onToggleFinish: (Boolean) -> Unit,
     onCancel: () -> Unit,
@@ -838,7 +834,7 @@ private fun SleepTimerSheet(
 ) {
     val running = remainSec != null || endOfChapter
     // 滚轮初值：运行中沿用本次设定，否则 30（不在预设里也没关系，滚轮 1～360 全覆盖）
-    var wheelMin by remember { mutableIntStateOf((totalMin ?: 30).coerceIn(1, SLEEP_MAX_MIN)) }
+    var wheelMin by remember { mutableIntStateOf(snapSleepMin(totalMin ?: 30)) }
     var finish by remember { mutableStateOf(if (remainSec != null) finishChapter else finishDefault) }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -876,20 +872,7 @@ private fun SleepTimerSheet(
                 }
             }
             if (!endOfChapter) {
-                // 快捷预设（设置页可改）：点即开始，用当前开关状态
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    presets.take(4).forEach { m ->
-                        FilterChip(
-                            selected = totalMin == m,
-                            onClick = { onSelectMinutes(m, finish); onDismiss() },
-                            label = { Text("$m 分") },
-                        )
-                    }
-                }
-                // 分钟滚轮：1 分钟一格，上限 360
+                // 分钟滚轮：30 分钟一格，上限 360
                 MinuteWheel(value = wheelMin, onValueChange = { wheelMin = it })
                 // 到点后播完本章再停：倒计时结束转入播完即停，不立即暂停
                 Row(
@@ -927,16 +910,23 @@ private fun SleepTimerSheet(
     }
 }
 
-/** 上限 360 分钟 */
+/** 上限 360、30 分钟一格：30/60/…/360 共 12 格 */
 private const val SLEEP_MAX_MIN = 360
+private const val SLEEP_STEP_MIN = 30
+private const val SLEEP_GRID_COUNT = SLEEP_MAX_MIN / SLEEP_STEP_MIN
 
-/** 分钟滚轮：1 分钟一格，居中项为主色大字强调（只用字体颜色，不铺内容背景） */
+/** 就近贴到 30 分钟格 */
+private fun snapSleepMin(min: Int): Int =
+    ((min.coerceIn(1, SLEEP_MAX_MIN) + SLEEP_STEP_MIN / 2) / SLEEP_STEP_MIN)
+        .coerceIn(1, SLEEP_GRID_COUNT) * SLEEP_STEP_MIN
+
+/** 分钟滚轮：30 分钟一格，居中项为主色大字强调（只用字体颜色不铺内容背景） */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
     val itemH = 48.dp
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = (value - 1).coerceIn(0, SLEEP_MAX_MIN - 1),
+        initialFirstVisibleItemIndex = (value / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1),
     )
     val fling = rememberSnapFlingBehavior(lazyListState = listState)
     // 视口中心项即当前选择
@@ -955,7 +945,7 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
     // 停稳后把中心项回传（滚动中不写，避免抖动）
     LaunchedEffect(centerIndex, listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
-            val m = ((centerIndex ?: (value - 1)) + 1).coerceIn(1, SLEEP_MAX_MIN)
+            val m = ((centerIndex ?: (value / SLEEP_STEP_MIN - 1)) + 1) * SLEEP_STEP_MIN
             if (m != value) onValueChange(m)
         }
     }
@@ -976,9 +966,9 @@ private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
                 contentPadding = PaddingValues(vertical = itemH),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                items(SLEEP_MAX_MIN, key = { it }) { i ->
-                    val m = i + 1
-                    val selected = m == (centerIndex?.plus(1) ?: value)
+                items(SLEEP_GRID_COUNT, key = { it }) { i ->
+                    val m = (i + 1) * SLEEP_STEP_MIN
+                    val selected = m == (centerIndex?.let { (it + 1) * SLEEP_STEP_MIN } ?: value)
                     Text(
                         text = "$m",
                         modifier = Modifier.height(itemH).wrapContentHeight(Alignment.CenterVertically),
