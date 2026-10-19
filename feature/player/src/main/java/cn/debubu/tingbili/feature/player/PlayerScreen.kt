@@ -74,6 +74,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -753,22 +756,26 @@ private fun FullscreenLyricsList(
     ) {
         // 上下各留半屏内边距，首尾行也能居中
         val centerPadding = maxHeight / 2
-        // 视口半高合成时即可知：偏移这里算好，不读 layoutInfo。
-        // layoutInfo 首帧还没布局（viewport=0），拿它算偏移进全屏第一眼必错位。
-        // 真机实测：scrollToItem 的正偏移是把目标行顶到视口上方（滚过头），
-        // 要居中必须传负偏移（目标行顶 = 视口顶 - off，即行下沉半屏居中）。
-        // 当前行 titleMedium+6dp 约 52dp 高，减半行即居中，估算差半行内肉眼不可见。
-        val density = LocalDensity.current
-        val centerScrollOffset = with(density) {
-            -(centerPadding.roundToPx() - 26.dp.roundToPx())
-        }
-        // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态，只滚一次会定错位置
-        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerScrollOffset) {
+        // 闭环居中：先粗定位把目标行弄进布局，再按实测位置 scrollBy 精调到正中。
+        // 不依赖 scrollToItem 的 offset 语义（真机证明其负偏移在冷/热布局下都落不到中央，
+        // 只会把目标行晾在底边），scrollBy 是纯相对位移无歧义；到首尾时自然钳制。
+        // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态只滚一次会定错位置
+        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerPadding) {
             val idx = state.currentLyricIndex
             if (idx < 0 || idx >= state.lyrics.size) return@LaunchedEffect
             // 瞬时跟随不用动画：动画会被下一句打断，越跟越偏
             try {
-                listState.scrollToItem(idx, scrollOffset = centerScrollOffset)
+                listState.scrollToItem(idx)
+                // 等目标行真实出现在布局里（冷进场时首滚只为把它组合出来）
+                snapshotFlow {
+                    listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
+                }.filterNotNull().first()
+                val info = listState.layoutInfo
+                val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
+                    ?: return@LaunchedEffect
+                val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                val delta = (item.offset + item.size / 2 - viewportCenter).toFloat()
+                if (delta != 0f) listState.scroll { scrollBy(delta) }
             } catch (_: Exception) {
                 // 切歌/切字幕轨时列表并发变化，忽略本次跟随
             }
@@ -782,7 +789,8 @@ private fun FullscreenLyricsList(
         ) {
             itemsIndexed(
                 items = state.lyrics,
-                key = { _, line -> line.timeMs },
+                // timeMs 会重（AI 字幕同秒多行），key 必须唯一否则复用错位连带滚错位置
+                key = { idx, line -> "$idx-${line.timeMs}" },
             ) { idx, line ->
                 val isCurrent = idx == state.currentLyricIndex
                 Text(
