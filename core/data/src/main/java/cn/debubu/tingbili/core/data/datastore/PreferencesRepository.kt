@@ -14,9 +14,26 @@ import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+
+/** playurl 直链持久缓存条目：B 站直链约 2h 过期，TTL 到即视为失效 */
+@Serializable
+data class CachedPlayUrl(
+    val url: String,
+    val fetchedAtMs: Long = 0L,
+) {
+    fun isFresh(nowMs: Long = System.currentTimeMillis()): Boolean =
+        url.isNotBlank() && fetchedAtMs > 0L && nowMs - fetchedAtMs < PLAYURL_CACHE_TTL_MS
+
+    companion object {
+        /** 与 PlayerManager.PROACTIVE_REFRESH_MS 对齐：提前半小时失效，留足余量 */
+        const val PLAYURL_CACHE_TTL_MS = 90 * 60 * 1000L
+    }
+}
 
 class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
@@ -143,6 +160,39 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L) }
     }
 
+    /** playurl 缓存：key="$bvid:$cid"，冷启动/切集先读这里，命中即秒开 */
+    val playUrlCache: Flow<Map<String, CachedPlayUrl>> = ds.data.map { prefs ->
+        prefs[PLAYURL_CACHE_JSON]?.let { json ->
+            try {
+                Json.decodeFromString(MapSerializer(String.serializer(), CachedPlayUrl.serializer()), json)
+            } catch (_: Exception) {
+                emptyMap()
+            }
+        } ?: emptyMap()
+    }
+
+    /** 合并写入并淘汰：去过期、超上限去最旧，单次 edit 完成 */
+    suspend fun putPlayUrls(entries: Map<String, CachedPlayUrl>, nowMs: Long = System.currentTimeMillis()) {
+        if (entries.isEmpty()) return
+        ds.edit { prefs ->
+            val cur = (prefs[PLAYURL_CACHE_JSON]?.let { json ->
+                try {
+                    Json.decodeFromString(MapSerializer(String.serializer(), CachedPlayUrl.serializer()), json)
+                } catch (_: Exception) {
+                    emptyMap()
+                }
+            } ?: emptyMap()).toMutableMap()
+            cur.putAll(entries)
+            val cutoff = nowMs - CachedPlayUrl.PLAYURL_CACHE_TTL_MS
+            val pruned = cur.filterValues { it.fetchedAtMs >= cutoff }
+                .entries.sortedBy { it.value.fetchedAtMs }.takeLast(MAX_PLAYURL_CACHE)
+                .associate { it.key to it.value }
+            prefs[PLAYURL_CACHE_JSON] = Json.encodeToString(
+                MapSerializer(String.serializer(), CachedPlayUrl.serializer()), pruned
+            )
+        }
+    }
+
     suspend fun clearLastPlayback() {
         ds.edit {
             it.remove(LAST_QUEUE_JSON)
@@ -210,5 +260,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val LAST_INDEX = intPreferencesKey("last_index")
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")
         val LAST_SOURCE_TITLE = stringPreferencesKey("last_source_title")
+        val PLAYURL_CACHE_JSON = stringPreferencesKey("playurl_cache_json")
+        const val MAX_PLAYURL_CACHE = 300
     }
 }
