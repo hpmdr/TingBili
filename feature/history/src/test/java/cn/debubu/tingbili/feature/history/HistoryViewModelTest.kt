@@ -27,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -90,6 +91,7 @@ class HistoryViewModelTest {
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = map[bvid to cid]
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flow
+        override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override suspend fun delete(bvid: String, cid: Long) {
             map.remove(bvid to cid)
             flow.value = map.values.sortedByDescending { it.updatedAt }

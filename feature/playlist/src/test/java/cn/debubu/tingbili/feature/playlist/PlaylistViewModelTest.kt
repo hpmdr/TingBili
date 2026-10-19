@@ -165,6 +165,7 @@ class PlaylistViewModelTest {
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = null
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override suspend fun delete(bvid: String, cid: Long) {}
         override suspend fun clearAll() {}
     }
