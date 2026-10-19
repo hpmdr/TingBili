@@ -19,14 +19,36 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Release 签名只认环境变量（CI Secrets 解码后传入），keystore 永不入库。
+        // 本地没有 keystore 文件时保持未签名：CI 侧缺 Secrets 会直接失败，见 release.yml。
+        create("release") {
+            System.getenv("RELEASE_STORE_FILE")?.let { storePath ->
+                storeFile = file(storePath)
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            // 有 keystore 才挂签名：本地直接 assembleRelease 不会炸，CI 一定带签名出包。
+            // （minify 暂不开：先保证发版链路跑通，瘦身另起一事。）
+            System.getenv("RELEASE_STORE_FILE")?.let { storePath ->
+                if (file(storePath).exists()) signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     defaultConfig {
         applicationId = "cn.debubu.tingbili"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // 发版时由 release.yml 传入：APP_VERSION_NAME 取自 tag（如 v1.1.0→1.1.0），
+        // APP_VERSION_CODE 取 CI run_number（单调递增即可）；本地默认 1/1.0。
+        versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("APP_VERSION_NAME") ?: "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

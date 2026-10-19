@@ -10,6 +10,10 @@
   （依赖与插件版本统一在 `gradle/libs.versions.toml` 维护，文档里不再重复，免得两处跑偏）
 - 架构：`app` 壳 + `core:ui/media/data` + `feature:home/playlist/history/player/settings` + `data:bilibili`（特性模块化 Clean Architecture）
 
+## 下载（尝鲜/分享给朋友）
+- 去本仓库右侧 **Releases** 下最新版的 `app-release.apk`，手机浏览器打开直接安装（正式签名，后续版本可覆盖更新）。
+- 注：debug 包和 release 包签名不同，之前装过 debug 版的需先卸载（本地听书进度会丢，歌单在 B 站账号里不受影响）。
+
 ## 功能（MVP）
 - 后台常驻播放 + 通知/锁屏/蓝牙/耳机线控 + 来电/拔出暂停
 - 倍速 0.5-3.0 + 自定义秒步进（5-60s）+ 顺序/随机/单曲/列表循环
