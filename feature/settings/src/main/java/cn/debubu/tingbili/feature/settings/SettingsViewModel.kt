@@ -18,7 +18,7 @@ class SettingsViewModel @Inject constructor(
 
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
     val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(15, 30, 60, 90)
+        viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(30, 60, 90, 120)
     )
 
     fun setStep(v: Int) {

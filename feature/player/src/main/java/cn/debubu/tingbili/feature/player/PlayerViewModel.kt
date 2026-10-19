@@ -47,6 +47,10 @@ data class PlayerUiState(
     val subtitleIndex: Int = 0,
     /** 睡眠定时剩余秒数，null=关闭 */
     val sleepRemainSec: Int? = null,
+    /** 倒计时总秒数（设定值，弹窗高亮用） */
+    val sleepTotalSec: Int? = null,
+    /** 倒计时进行中的“到点后播完本章再停”开关 */
+    val sleepFinishChapter: Boolean = false,
     val sleepEndOfChapter: Boolean = false
 )
 
@@ -55,7 +59,7 @@ data class PlayerUiState(
 class PlayerViewModel @Inject constructor(
     private val player: PlayerManager,
     private val repo: BiliRepository,
-    prefs: PreferencesRepository,
+    private val prefs: PreferencesRepository,
 ) : ViewModel() {
 
     private val trackFlow = player.state
@@ -97,6 +101,10 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** 睡眠定时快捷选项（设置页可改，默认 30/60/90/120） */
+    val timerPresets: StateFlow<Set<Int>> = prefs.timerPresets
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), setOf(30, 60, 90, 120))
+
     val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, sub, stepSec ->
         val lyrics = sub.lines
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
@@ -121,6 +129,8 @@ class PlayerViewModel @Inject constructor(
             subtitleTracks = sub.tracks,
             subtitleIndex = sub.index,
             sleepRemainSec = p.sleepRemainSec,
+            sleepTotalSec = p.sleepTotalSec,
+            sleepFinishChapter = p.sleepFinishChapter,
             sleepEndOfChapter = p.sleepEndOfChapter
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerUiState())
@@ -158,9 +168,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch { player.play(q, index, uiState.value.sourceTitle) }
     }
 
+    /** “到点后播完本章再停”默认开关（持久化，下次弹窗沿用） */
+    val sleepFinishDefault: StateFlow<Boolean> = prefs.sleepFinishChapter
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     /** 睡眠定时透传（Manager 内内存态，触发自带落盘） */
-    fun startSleepTimer(seconds: Int) = player.startSleepTimer(seconds)
-    fun startEndOfChapterTimer() = player.startEndOfChapterTimer()
+    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
+        viewModelScope.launch { prefs.setSleepFinishChapter(finishChapter) }
+        player.startSleepTimer(seconds, finishChapter)
+    }
+
+    /** 倒计时进行中改开关（同步 Manager + 记住偏好） */
+    fun setSleepFinishChapter(v: Boolean) {
+        viewModelScope.launch { prefs.setSleepFinishChapter(v) }
+        player.setSleepFinishChapter(v)
+    }
+
     fun cancelSleepTimer() = player.cancelSleepTimer()
 
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */

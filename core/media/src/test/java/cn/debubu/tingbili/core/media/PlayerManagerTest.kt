@@ -112,7 +112,6 @@ class PlayerManagerTest {
     private lateinit var prefs: PreferencesRepository
     private lateinit var biliRepo: BiliRepository
     private lateinit var playerManager: PlayerManager
-    private lateinit var timerManager: TimerManager
 
     @Before
     fun setUp() {
@@ -129,7 +128,6 @@ class PlayerManagerTest {
         prefs = PreferencesRepository(dataStore)
         biliRepo = BiliRepository(FakeBiliApi())
         playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, biliRepo, context)
-        timerManager = TimerManager(fakePlayer)
     }
 
     @Test
@@ -174,20 +172,41 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `end of chapter timer fires on track change`() = runTest {
+    fun `sleep timer with finishChapter enters chapter tail then stops`() = runTest {
         playerManager.testScope = this
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 1000, null),
-            Track("BV2", 2, "t2", "a", "", 1000, null),
+            Track("BV1", 1, "t1", "a", "", 3_600_000, null),
+            Track("BV2", 2, "t2", "a", "", 3_600_000, null),
         )
         playerManager.play(tracks, 0)
-        playerManager.startEndOfChapterTimer()
+        playerManager.startSleepTimer(60, finishChapter = true)
+        assertEquals(60, playerManager.state.value.sleepRemainSec)
+        assertEquals(true, playerManager.state.value.sleepFinishChapter)
+        advanceTimeBy(61_000)
+        runCurrent()
+        // 到点后不暂停，转入播完即停阶段
+        assertEquals(true, playerManager.state.value.isPlaying)
         assertEquals(true, playerManager.state.value.sleepEndOfChapter)
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
         playerManager.next()
         advanceTimeBy(2000)
         runCurrent()
         assertEquals(false, playerManager.state.value.isPlaying)
         assertEquals(false, playerManager.state.value.sleepEndOfChapter)
+        playerManager.release()
+    }
+
+    @Test
+    fun `sleep timer setFinishChapter off mid-countdown stops at time`() = runTest {
+        playerManager.testScope = this
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.startSleepTimer(60, finishChapter = true)
+        playerManager.setSleepFinishChapter(false)
+        assertEquals(false, playerManager.state.value.sleepFinishChapter)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals(false, playerManager.state.value.isPlaying)
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
         playerManager.release()
     }
 
@@ -250,28 +269,6 @@ class PlayerManagerTest {
         assertEquals("BV1", fakeHistory.saved.first().bvid)
         assertEquals(12345L, fakeHistory.saved.first().positionMs)
         playerManager.release()
-    }
-
-    @Test
-    fun `timer pauses after delay`() = runTest {
-        timerManager.testScope = this
-        fakePlayer.play() // start playing
-        assertTrue(fakePlayer.isPlaying)
-        timerManager.set(2000L)
-        advanceTimeBy(2100L)
-        assertTrue(!fakePlayer.isPlaying)
-        timerManager.cancel()
-    }
-
-    @Test
-    fun `timer cancel stops pause`() = runTest {
-        timerManager.testScope = this
-        fakePlayer.play()
-        timerManager.set(2000L)
-        timerManager.cancel()
-        advanceTimeBy(3000L)
-        assertTrue(fakePlayer.isPlaying)
-        timerManager.cancel()
     }
 
     @Test

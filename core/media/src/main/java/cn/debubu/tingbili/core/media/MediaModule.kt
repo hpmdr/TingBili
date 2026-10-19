@@ -15,7 +15,4 @@ object MediaModule {
     fun providePlayerHandle(connection: PlaybackConnection): PlayerHandle =
         MediaControllerHandle(connection)
 
-    @Provides
-    @Singleton
-    fun provideTimerManager(handle: PlayerHandle): TimerManager = TimerManager(handle)
 }

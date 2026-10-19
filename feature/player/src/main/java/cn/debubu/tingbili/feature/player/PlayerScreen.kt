@@ -4,7 +4,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,9 +35,11 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,19 +53,25 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -103,6 +114,7 @@ fun PlayerScreen(
     var showChapterSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    val timerPresets by vm.timerPresets.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -298,9 +310,13 @@ fun PlayerScreen(
     if (showTimerSheet) {
         SleepTimerSheet(
             remainSec = s.sleepRemainSec,
+            totalMin = s.sleepTotalSec?.div(60),
+            finishChapter = s.sleepFinishChapter,
+            finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
             endOfChapter = s.sleepEndOfChapter,
-            onSelectMinutes = { vm.startSleepTimer(it * 60) },
-            onSelectChapter = { vm.startEndOfChapterTimer() },
+            presets = timerPresets.sorted(),
+            onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
+            onToggleFinish = { vm.setSleepFinishChapter(it) },
             onCancel = { vm.cancelSleepTimer() },
             onDismiss = { showTimerSheet = false },
         )
@@ -806,71 +822,181 @@ private fun FullscreenLyricsList(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SleepTimerSheet(
     remainSec: Int?,
+    totalMin: Int?,
+    finishChapter: Boolean,
+    finishDefault: Boolean,
     endOfChapter: Boolean,
-    onSelectMinutes: (Int) -> Unit,
-    onSelectChapter: () -> Unit,
+    presets: List<Int>,
+    onSelectMinutes: (Int, Boolean) -> Unit,
+    onToggleFinish: (Boolean) -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val running = remainSec != null || endOfChapter
+    // 滚轮初值：运行中沿用本次设定，否则 30（不在预设里也没关系，滚轮 1～360 全覆盖）
+    var wheelMin by remember { mutableIntStateOf((totalMin ?: 30).coerceIn(1, SLEEP_MAX_MIN)) }
+    var finish by remember { mutableStateOf(if (remainSec != null) finishChapter else finishDefault) }
+    // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(text = "睡眠定时", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            if (remainSec != null || endOfChapter) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
+            if (running) {
+                // 运行中提示只用字体颜色强调，不铺底色：图标 + 主色正文 + 文本按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = if (endOfChapter) "播完本章后自动停止" else "将在 ${sleepLabel(remainSec, false)} 后自动停止",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        TextButton(onClick = { onCancel(); onDismiss() }) { Text("取消定时") }
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.Timer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (endOfChapter) "播完本章后自动停止"
+                        else "将在 ${sleepLabel(remainSec, false)} 后自动停止",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onCancel(); onDismiss() }) { Text("取消定时") }
                 }
             }
-            SleepOptionRow(label = "播完本章", selected = endOfChapter, onClick = { onSelectChapter(); onDismiss() })
-            SleepOptionRow(label = "15 分钟", selected = false, onClick = { onSelectMinutes(15); onDismiss() })
-            SleepOptionRow(label = "30 分钟", selected = false, onClick = { onSelectMinutes(30); onDismiss() })
-            SleepOptionRow(label = "60 分钟", selected = false, onClick = { onSelectMinutes(60); onDismiss() })
+            if (!endOfChapter) {
+                // 快捷预设（设置页可改）：点即开始，用当前开关状态
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    presets.take(4).forEach { m ->
+                        FilterChip(
+                            selected = totalMin == m,
+                            onClick = { onSelectMinutes(m, finish); onDismiss() },
+                            label = { Text("$m 分") },
+                        )
+                    }
+                }
+                // 分钟滚轮：1 分钟一格，上限 360
+                MinuteWheel(value = wheelMin, onValueChange = { wheelMin = it })
+                // 到点后播完本章再停：倒计时结束转入播完即停，不立即暂停
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            finish = !finish
+                            if (remainSec != null) onToggleFinish(finish)
+                        }
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "到点后播完本章再停", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "定时结束时播完当前章节再暂停",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = finish, onCheckedChange = {
+                        finish = it
+                        if (remainSec != null) onToggleFinish(it)
+                    })
+                }
+                Button(
+                    onClick = { onSelectMinutes(wheelMin, finish); onDismiss() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (running) "更新定时（$wheelMin 分钟）" else "开始定时（$wheelMin 分钟）")
+                }
+            }
         }
     }
 }
 
+/** 上限 360 分钟 */
+private const val SLEEP_MAX_MIN = 360
+
+/** 分钟滚轮：1 分钟一格，居中项为主色大字强调（只用字体颜色，不铺内容背景） */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SleepOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-        else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge)
-            if (selected) {
-                Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+private fun MinuteWheel(value: Int, onValueChange: (Int) -> Unit) {
+    val itemH = 48.dp
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (value - 1).coerceIn(0, SLEEP_MAX_MIN - 1),
+    )
+    val fling = rememberSnapFlingBehavior(lazyListState = listState)
+    // 视口中心项即当前选择
+    val centerIndex by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            if (info.visibleItemsInfo.isEmpty()) null
+            else {
+                val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                info.visibleItemsInfo.minByOrNull {
+                    kotlin.math.abs((it.offset + it.size / 2) - center)
+                }?.index
+            }
+        }
+    }
+    // 停稳后把中心项回传（滚动中不写，避免抖动）
+    LaunchedEffect(centerIndex, listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            val m = ((centerIndex ?: (value - 1)) + 1).coerceIn(1, SLEEP_MAX_MIN)
+            if (m != value) onValueChange(m)
+        }
+    }
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "$value 分钟",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                flingBehavior = fling,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemH * 3),
+                contentPadding = PaddingValues(vertical = itemH),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                items(SLEEP_MAX_MIN, key = { it }) { i ->
+                    val m = i + 1
+                    val selected = m == (centerIndex?.plus(1) ?: value)
+                    Text(
+                        text = "$m",
+                        modifier = Modifier.height(itemH).wrapContentHeight(Alignment.CenterVertically),
+                        style = if (selected) MaterialTheme.typography.titleMedium
+                        else MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            // 中线刻度：只画上下两条细线，不给内容铺背景
+            Column(modifier = Modifier.fillMaxWidth().height(itemH * 3)) {
+                Spacer(modifier = Modifier.height(itemH))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.weight(1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(itemH))
             }
         }
     }

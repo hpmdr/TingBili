@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +37,7 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
+    val presets by vm.timerPresets.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
         topBar = {
@@ -75,11 +77,21 @@ fun SettingsScreen(
 
             Column {
                 Text("定时预设（分钟）", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "播放页定时弹窗顶部的快捷选项（至少保留一个）；任意分钟用弹窗滚轮选",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 60, 90).forEach { m ->
-                        Button(onClick = { /* timer preset handled via PlayerManager in real app */ }) {
-                            Text("${m}分")
-                        }
+                    listOf(15, 30, 60, 90, 120, 180).forEach { m ->
+                        FilterChip(
+                            selected = m in presets,
+                            onClick = {
+                                val next = if (m in presets) presets - m else presets + m
+                                if (next.isNotEmpty()) vm.setTimerPresets(next)
+                            },
+                            label = { Text("${m}分") },
+                        )
                     }
                 }
             }

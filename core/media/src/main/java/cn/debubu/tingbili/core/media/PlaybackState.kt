@@ -29,7 +29,11 @@ data class PlaybackState(
      * 触发时暂停并落盘进度（见 [PlayerManager]），由播放页展示倒计时。
      */
     val sleepRemainSec: Int? = null,
-    /** 播完本章模式：当前章结束即停，与倒计时互斥 */
+    /** 倒计时总秒数（设定值，用于弹窗高亮当前生效项；结束/取消时清空） */
+    val sleepTotalSec: Int? = null,
+    /** 到点后播完本章再停（倒计时进行中的暂存开关；到点后转入播完即停阶段） */
+    val sleepFinishChapter: Boolean = false,
+    /** 播完即停阶段：倒计时已结束，等当前章播完就停 */
     val sleepEndOfChapter: Boolean = false,
 ) {
     companion object {

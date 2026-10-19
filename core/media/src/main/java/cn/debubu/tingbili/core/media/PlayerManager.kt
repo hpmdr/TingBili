@@ -324,30 +324,52 @@ class PlayerManager @Inject constructor(
     // ── 睡眠定时（内存态，进程死即失效；触发=pause，自带落盘进度） ──
     private var sleepJob: Job? = null
 
-    /** 倒计时定时：seconds 秒后暂停。60 秒起，与播完本章互斥 */
-    fun startSleepTimer(seconds: Int) {
+    /**
+     * 倒计时定时：seconds 秒后停止，60 秒起。
+     * @param finishChapter 到点后是否播完本章再停（到点后转入播完即停阶段，不立即暂停）。
+     */
+    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
         sleepJob?.cancel()
         var left = seconds.coerceAtLeast(60)
-        _state.update { it.copy(sleepRemainSec = left, sleepEndOfChapter = false) }
+        _state.update {
+            it.copy(
+                sleepRemainSec = left,
+                sleepTotalSec = left,
+                sleepFinishChapter = finishChapter,
+                sleepEndOfChapter = false,
+            )
+        }
         sleepJob = effectiveScope().launch {
             while (left > 0) {
                 delay(1000)
                 left--
                 _state.update { it.copy(sleepRemainSec = left) }
             }
-            fireSleepTimer()
+            if (_state.value.sleepFinishChapter) enterChapterTail() else fireSleepTimer()
         }
     }
 
-    /** 播完本章即停：切歌或播到尾时暂停。手动暂停不取消（章还没完） */
-    fun startEndOfChapterTimer() {
-        sleepJob?.cancel()
-        val key = currentKey()
-        if (key == null) {
-            _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+    /**
+     * 倒计时进行中改“到点后播完本章再停”开关。播完即停阶段关掉=整单取消
+     *（否则关了开关定时还会停在章尾，不符合直觉）。
+     */
+    fun setSleepFinishChapter(v: Boolean) {
+        val s = _state.value
+        if (s.sleepEndOfChapter) {
+            if (!v) cancelSleepTimer()
             return
         }
-        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = true) }
+        if (s.sleepRemainSec != null) _state.update { it.copy(sleepFinishChapter = v) }
+    }
+
+    /** 倒计时到点 + 开关开：转入播完即停阶段。切歌或播到尾时暂停；手动暂停不取消（章还没完） */
+    private fun enterChapterTail() {
+        val key = currentKey()
+        if (key == null) {
+            fireSleepTimer()
+            return
+        }
+        _state.update { it.copy(sleepRemainSec = null, sleepTotalSec = null, sleepEndOfChapter = true) }
         sleepJob = effectiveScope().launch {
             while (true) {
                 delay(1000)
@@ -365,13 +387,27 @@ class PlayerManager @Inject constructor(
     fun cancelSleepTimer() {
         sleepJob?.cancel()
         sleepJob = null
-        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+        _state.update {
+            it.copy(
+                sleepRemainSec = null,
+                sleepTotalSec = null,
+                sleepFinishChapter = false,
+                sleepEndOfChapter = false,
+            )
+        }
     }
 
     private fun fireSleepTimer() {
         // pause() 内已落盘进度，满足“定时停止必须记好进度”
         pause()
-        _state.update { it.copy(sleepRemainSec = null, sleepEndOfChapter = false) }
+        _state.update {
+            it.copy(
+                sleepRemainSec = null,
+                sleepTotalSec = null,
+                sleepFinishChapter = false,
+                sleepEndOfChapter = false,
+            )
+        }
     }
 
     private fun currentKey(): Pair<String, Long>? =
