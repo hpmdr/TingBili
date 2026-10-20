@@ -245,7 +245,7 @@ open class AuthRepository @Inject constructor(
 
     data class GeeResult(val validate: String, val seccode: String, val challenge: String)
 
-    suspend fun fetchGeeTicket(): Result<GeeTicket> = withContext(Dispatchers.IO) {
+    open suspend fun fetchGeeTicket(): Result<GeeTicket> = withContext(Dispatchers.IO) {
         runCatching {
             val body = get("$passportBase/x/passport-login/captcha?source=main_web")
             val dto = json.decodeFromString(CaptchaDto.serializer(), body)
@@ -256,7 +256,7 @@ open class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun sendSms(
+    open suspend fun sendSms(
         cid: Int, tel: String, ticket: GeeTicket, result: GeeResult,
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
@@ -276,7 +276,7 @@ open class AuthRepository @Inject constructor(
      * 短信登录：成功返回 despite code==0；data.status==2 表示撞风控（需二次验证，
      * 该链路最后一步 oauth 要 app 签名，Web 路径走不通，直接报 message 让用户换扫码/Cookie）。
      */
-    suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> = withContext(Dispatchers.IO) {
+    open suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> = withContext(Dispatchers.IO) {
         val body = try {
             val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
             post("$passportBase/x/passport-login/web/login/sms", form, null)

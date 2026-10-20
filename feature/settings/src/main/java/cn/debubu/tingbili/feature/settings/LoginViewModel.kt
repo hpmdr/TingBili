@@ -164,6 +164,8 @@ class LoginViewModel @Inject constructor(
         data object Sending : SmsUi
         /** 已发送：secondsLeft 重发倒计时，captchaKey 登录用，sentAtMs 算 5 分钟过期 */
         data class Sent(val secondsLeft: Int, val captchaKey: String, val sentAtMs: Long) : SmsUi
+        /** 登录请求飞行中：按钮转圈+禁用，挡连点 */
+        data object Submitting : SmsUi
         data class Failed(val message: String) : SmsUi
     }
 
@@ -194,12 +196,17 @@ class LoginViewModel @Inject constructor(
 
     /** 短信：先拿极验票据 → 弹滑块 → 滑完自动发短信 */
     fun sendSms(cid: Int, tel: String) {
+        // 守卫必须在一切校验之前：第二次点击进来时状态已不是 Sent，
+        // 后面的 as? Sent 会取空并把飞行中的忙态覆盖掉（本 bug 的真身）。
+        if (_sms.value is SmsUi.Sending || _sms.value is SmsUi.Submitting) return
         if (tel.isBlank()) {
             _sms.value = SmsUi.Failed("手机号不能为空")
             return
         }
+        // 同步挡连点：状态必须在 launch 之前占好，否则同帧两次点击都会发请求
+        // （UI 的 enabled 要等下一帧重组才生效，拦不住连点）。
+        _sms.value = SmsUi.Sending
         viewModelScope.launch {
-            _sms.value = SmsUi.Sending
             val ticket = auth.fetchGeeTicket().getOrElse {
                 _sms.value = SmsUi.Failed(it.message ?: "获取验证信息失败")
                 return@launch
@@ -237,6 +244,7 @@ class LoginViewModel @Inject constructor(
 
     /** 短信登录：照抄 PiliPlus 三道校验（取过码 / 填过码 / 5 分钟有效期） */
     fun submitSms(cid: Int, tel: String, code: String) {
+        if (_sms.value is SmsUi.Submitting) return
         val sent = _sms.value as? SmsUi.Sent
         if (sent == null || sent.captchaKey.isBlank()) {
             _sms.value = SmsUi.Failed("请先点击获取验证码")
@@ -250,6 +258,7 @@ class LoginViewModel @Inject constructor(
             _sms.value = SmsUi.Failed("验证码已过期，请重新获取")
             return
         }
+        _sms.value = SmsUi.Submitting
         viewModelScope.launch {
             auth.smsLogin(cid, tel.trim(), code.trim(), sent.captchaKey)
                 .onSuccess { _sms.value = SmsUi.Idle }
@@ -259,12 +268,14 @@ class LoginViewModel @Inject constructor(
 
     /** 密码登录：先拿极验票据 → 弹滑块 → 滑完自动登录（RSA 加密在仓储层） */
     fun submitPassword(username: String, password: String) {
+        // 同 sendSms：守卫在前，同步占位挡连点
+        if (_password.value is PasswordUi.Working) return
         if (username.isBlank() || password.isBlank()) {
             _password.value = PasswordUi.Failed("用户名或密码不能为空")
             return
         }
+        _password.value = PasswordUi.Working
         viewModelScope.launch {
-            _password.value = PasswordUi.Working
             val ticket = auth.fetchGeeTicket().getOrElse {
                 _password.value = PasswordUi.Failed(it.message ?: "获取验证信息失败")
                 return@launch

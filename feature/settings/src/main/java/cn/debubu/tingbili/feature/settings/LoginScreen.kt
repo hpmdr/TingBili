@@ -258,6 +258,7 @@ private fun SmsTab(vm: LoginViewModel) {
         if (!sentKey.isNullOrBlank()) codeFocus.requestFocus()
     }
     val sending = sms is LoginViewModel.SmsUi.Sending
+    val submitting = sms is LoginViewModel.SmsUi.Submitting
     val sent = sms as? LoginViewModel.SmsUi.Sent
     Column(
         modifier = Modifier
@@ -294,7 +295,7 @@ private fun SmsTab(vm: LoginViewModel) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
-            val canSend = !sending && (sent == null || sent.secondsLeft <= 0)
+            val canSend = !sending && !submitting && (sent == null || sent.secondsLeft <= 0)
             Button(
                 onClick = { vm.sendSms(zone.toIntOrNull() ?: 86, tel) },
                 enabled = canSend,
@@ -314,9 +315,13 @@ private fun SmsTab(vm: LoginViewModel) {
         Button(
             onClick = { vm.submitSms(zone.toIntOrNull() ?: 86, tel, code) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !sending,
+            enabled = !sending && !submitting,
         ) {
-            Text("登录")
+            if (submitting) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (submitting) "登录中" else "登录")
         }
         Text(
             "先过滑块再发短信（B 站要求）；验证码 5 分钟内有效。风控期可能收不到短信，可换扫码/Cookie。",

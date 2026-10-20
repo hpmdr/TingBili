@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -46,6 +47,12 @@ class LoginViewModelTest {
     private inner class FakeAuth(val polls: List<QrStatus>) :
         AuthRepository(Json { ignoreUnknownKeys = true }, store) {
         var generateCalls = 0
+        var ticketCalls = 0
+        var smsSendCalls = 0
+        var smsLoginCalls = 0
+        var ticketDelayMs = 0L
+        var sendDelayMs = 0L
+        var loginDelayMs = 0L
         private var pollIndex = 0
         override suspend fun generateQr(): Result<QrData> {
             generateCalls++
@@ -55,6 +62,24 @@ class LoginViewModelTest {
             polls.getOrElse(pollIndex++) { polls.last() }
         override suspend fun finishWebLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
             Result.success(BiliSession("S", "J", 7L))
+        override suspend fun fetchGeeTicket(): Result<AuthRepository.GeeTicket> {
+            ticketCalls++
+            if (ticketDelayMs > 0) delay(ticketDelayMs)
+            return Result.success(AuthRepository.GeeTicket("t", "g", "c"))
+        }
+        override suspend fun sendSms(
+            cid: Int, tel: String,
+            ticket: AuthRepository.GeeTicket, result: AuthRepository.GeeResult
+        ): Result<String> {
+            smsSendCalls++
+            if (sendDelayMs > 0) delay(sendDelayMs)
+            return Result.success("CAPTCHA_KEY")
+        }
+        override suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> {
+            smsLoginCalls++
+            if (loginDelayMs > 0) delay(loginDelayMs)
+            return Result.success(BiliSession("S", "J", 7L))
+        }
     }
 
     private fun fakeAuth(polls: List<QrStatus>) = FakeAuth(polls)
@@ -138,5 +163,56 @@ class LoginViewModelTest {
         advanceTimeBy(1_500)
         assertEquals(2, auth.generateCalls)
         assertEquals(179, (vm.qr.value as QrUi.Ready).secondsLeft)
+    }
+
+    @Test
+    fun `sendSms double tap fetches ticket once`() = runTest(dispatcher) {
+        val auth = fakeAuth(listOf(QrStatus.Waiting))
+        auth.ticketDelayMs = 1_000
+        val vm = LoginViewModel(auth)
+        vm.sendSms(86, "13800000000")
+        vm.sendSms(86, "13800000000")
+        advanceTimeBy(500)
+        assertEquals(1, auth.ticketCalls)
+        advanceTimeBy(1_000)
+        assertEquals(1, auth.ticketCalls)
+        assertTrue(vm.gee.value is LoginViewModel.GeeUi.Showing)
+    }
+
+    @Test
+    fun `submitSms double tap logins once with Submitting state`() = runTest(dispatcher) {
+        val auth = fakeAuth(listOf(QrStatus.Waiting))
+        auth.sendDelayMs = 1_000
+        auth.loginDelayMs = 2_000
+        val vm = LoginViewModel(auth)
+        // 先走完发码流程
+        vm.sendSms(86, "13800000000")
+        advanceTimeBy(500)
+        vm.onGeeResult("v", "s", "c")
+        advanceTimeBy(1_500)
+        assertTrue(vm.sms.value is LoginViewModel.SmsUi.Sent)
+        // 连点登录两次：第二次必须被吞掉，且中间有 Submitting 忙态
+        vm.submitSms(86, "13800000000", "123456")
+        vm.submitSms(86, "13800000000", "123456")
+        // 忙态同步可见，不依赖 pump；且第二次没冲掉它
+        assertEquals(LoginViewModel.SmsUi.Submitting, vm.sms.value)
+        advanceTimeBy(100)
+        assertEquals(1, auth.smsLoginCalls)
+        assertTrue(vm.sms.value is LoginViewModel.SmsUi.Submitting)
+        advanceTimeBy(3_000)
+        assertEquals(1, auth.smsLoginCalls)
+        assertTrue(vm.sms.value is LoginViewModel.SmsUi.Idle)
+    }
+
+    @Test
+    fun `submitPassword double tap fetches ticket once`() = runTest(dispatcher) {
+        val auth = fakeAuth(listOf(QrStatus.Waiting))
+        auth.ticketDelayMs = 1_000
+        val vm = LoginViewModel(auth)
+        vm.submitPassword("13800000000", "secret")
+        vm.submitPassword("13800000000", "secret")
+        advanceTimeBy(500)
+        assertEquals(1, auth.ticketCalls)
+        assertTrue(vm.password.value is LoginViewModel.PasswordUi.Working)
     }
 }
