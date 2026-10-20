@@ -67,7 +67,9 @@ fun HomeScreen(
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
+    val snapshot by vm.snapshotTracks.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
+    val snapshotGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
 
@@ -76,6 +78,9 @@ fun HomeScreen(
     LaunchedEffect(refreshState) {
         if (refreshState !is LoadState.Loading) isRefreshing = false
     }
+
+    // SWR：Paging 尚无数据但有快照时，先秒开快照，后台刷新到了再切到 Paging。
+    val showSnapshot = paging.itemCount == 0 && !snapshot.isNullOrEmpty()
 
     Column(
         modifier = Modifier
@@ -87,24 +92,105 @@ fun HomeScreen(
             keywords = homeKeywords,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         )
-        if (paging.loadState.refresh is LoadState.Loading && paging.itemCount > 0) {
+        if (paging.loadState.refresh is LoadState.Loading && (paging.itemCount > 0 || showSnapshot)) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        // 有快照兜底时，刷新失败不弹整屏错误，只露横幅（保列表）；无快照才走 Paging 整屏态。
+        if (showSnapshot && refreshState is LoadState.Error) {
+            SnapshotErrorBanner(
+                message = refreshState.error.message,
+                onRetry = { paging.retry() }
+            )
+        }
+        if (showSnapshot && refreshState is LoadState.Loading) {
+            Text(
+                text = "上次推荐 · 正在更新",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
                 isRefreshing = true
                 vm.shuffleKeywords()
-                scope.launch { gridState.scrollToItem(0) }
+                scope.launch {
+                    gridState.scrollToItem(0)
+                    snapshotGridState.scrollToItem(0)
+                }
             },
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            TrackPagingGrid(
-                paging = paging,
-                gridState = gridState,
-                onTrackClick = { track -> onTrackToDetail(track.bvid) }
+            if (showSnapshot) {
+                SnapshotGrid(
+                    tracks = snapshot!!,
+                    gridState = snapshotGridState,
+                    onTrackClick = { track -> onTrackToDetail(track.bvid) }
+                )
+            } else {
+                TrackPagingGrid(
+                    paging = paging,
+                    gridState = gridState,
+                    onTrackClick = { track -> onTrackToDetail(track.bvid) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SnapshotErrorBanner(
+    message: String?,
+    onRetry: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "更新失败：${message ?: "请稍后重试"}，当前为上次推荐",
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(onClick = onRetry) { Text("重试") }
+    }
+}
+
+@Composable
+private fun SnapshotGrid(
+    tracks: List<Track>,
+    gridState: LazyGridState,
+    onTrackClick: (Track) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 156.dp),
+        state = gridState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(
+            items = tracks,
+            key = { "${it.bvid}:${it.cid}" }
+        ) { track ->
+            TrackGridCard(
+                track = track,
+                onClick = { onTrackClick(track) }
             )
         }
     }

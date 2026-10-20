@@ -14,6 +14,8 @@ import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
+import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
+import cn.debubu.tingbili.core.data.db.HomeSnapshotEntity
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
@@ -158,10 +160,19 @@ class HomeViewModelTest {
         fun addedCount() = tracks.size
     }
 
+    class FakeHomeSnapshotDao : HomeSnapshotDao {
+        var entity: HomeSnapshotEntity? = null
+        override suspend fun get(): HomeSnapshotEntity? = entity
+        override fun observe(): Flow<HomeSnapshotEntity?> = flowOf(entity)
+        override suspend fun save(e: HomeSnapshotEntity) { entity = e }
+        override suspend fun clear() { entity = null }
+    }
+
     private lateinit var fakeApi: FakeBiliApi
     private lateinit var repo: BiliRepository
     private lateinit var player: PlayerManager
     private lateinit var playlistDao: FakePlaylistDao
+    private lateinit var snapshotDao: FakeHomeSnapshotDao
     private lateinit var prefs: PreferencesRepository
 
     @Before
@@ -173,6 +184,7 @@ class HomeViewModelTest {
         prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
         player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo, context)
         playlistDao = FakePlaylistDao()
+        snapshotDao = FakeHomeSnapshotDao()
     }
 
     @After
@@ -182,14 +194,14 @@ class HomeViewModelTest {
 
     @Test
     fun `home exposes recommended paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
     }
 
     @Test
     fun `shuffle emits new paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
         vm.pagingFlow.first()
         vm.shuffleKeywords()
         // 常驻流：刷新后必有新一份 PagingData（只断言换新，不断言随机顺序本身）
@@ -233,7 +245,7 @@ class HomeViewModelTest {
 
     @Test
     fun `showBottomSheet expands BV via view`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
         vm.showBottomSheetForBv("BV1xx")
         advanceUntilIdle()
         assertTrue(vm.showBottomSheet.first())
@@ -245,7 +257,7 @@ class HomeViewModelTest {
 
     @Test
     fun `addToPlaylist single and all`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
         val track = Track(bvid = "BV1xx", cid = 1001, title = "T1", author = "a", cover = "", durationMs = 60000, subtitleUrl = null)
         vm.addToPlaylist(track)
         advanceUntilIdle()
@@ -268,6 +280,38 @@ class HomeViewModelTest {
         )
         // anchor at 0, closest page prevKey null nextKey 2 => refreshKey 1
         assertEquals(1, source.getRefreshKey(state))
+    }
+
+    @Test
+    fun `snapshot loads at startup when cached`() = runTest(dispatcher) {
+        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
+        snapshotDao.entity = HomeSnapshotEntity(
+            keywordsJson = json.encodeToString(listOf("有声小说")),
+            tracksJson = json.encodeToString(tracks),
+            updatedAt = System.currentTimeMillis()
+        )
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        advanceUntilIdle()
+        assertEquals(1, vm.snapshotTracks.first()?.size)
+        assertEquals("BV1xx", vm.snapshotTracks.first()!![0].bvid)
+    }
+
+    @Test
+    fun `first page saves snapshot`() = runTest {
+        var saved: List<Track>? = null
+        val source = HomePagingSource(repo) { tracks, _ -> saved = tracks }
+        val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(result is PagingSource.LoadResult.Page)
+        assertNotNull(saved)
+        assertEquals(2, saved!!.size)
+    }
+
+    @Test
+    fun `snapshot empty when no cache`() = runTest(dispatcher) {
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        advanceUntilIdle()
+        assertEquals(null, vm.snapshotTracks.first())
     }
 }
 

@@ -6,13 +6,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, HistoryEntity::class],
-    version = 6,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, HistoryEntity::class, HomeSnapshotEntity::class],
+    version = 7,
     exportSchema = false
 )
 abstract class TingBiliDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun historyDao(): HistoryDao
+    abstract fun homeSnapshotDao(): HomeSnapshotDao
 
     companion object {
         /** 纯新增可空列 cover，AutoMigration 失效时的兜底手动迁移 */
@@ -47,6 +48,12 @@ abstract class TingBiliDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE HistoryEntity ADD COLUMN listenDurationMs INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+        /** 新增首页快照单行表（SWR 秒开），老库直接建表即可，无数据迁移 */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `HomeSnapshotEntity` (`id` INTEGER NOT NULL, `keywordsJson` TEXT NOT NULL, `tracksJson` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
             }
         }
     }

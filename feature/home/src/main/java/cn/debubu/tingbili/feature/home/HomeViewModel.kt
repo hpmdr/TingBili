@@ -7,6 +7,8 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
+import cn.debubu.tingbili.core.data.db.HomeSnapshotEntity
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.PlaylistEntity
@@ -25,13 +27,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: BiliRepository,
     private val prefs: PreferencesRepository,
     private val player: PlayerManager,
-    private val playlistDao: PlaylistDao
+    private val playlistDao: PlaylistDao,
+    private val homeSnapshotDao: HomeSnapshotDao,
+    private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 ) : ViewModel() {
 
     // 数据层常驻：流的生命周期与 ViewModel 对齐（Eagerly 启动，VM 释放才停），
@@ -41,6 +46,43 @@ class HomeViewModel @Inject constructor(
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
         viewModelScope, SharingStarted.Eagerly, HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
     )
+
+    /**
+     * SWR 快照：冷启动秒开上次首屏，后台 Paging 刷新成功后覆盖。
+     * 为空 = 无缓存/解析失败，UI 走纯 Paging 链路；非空时 Paging 失败也要保列表。
+     */
+    private val _snapshotTracks = MutableStateFlow<List<Track>?>(null)
+    val snapshotTracks: StateFlow<List<Track>?> = _snapshotTracks.asStateFlow()
+
+    private val _snapshotUpdatedAt = MutableStateFlow<Long?>(null)
+    val snapshotUpdatedAt: StateFlow<Long?> = _snapshotUpdatedAt.asStateFlow()
+
+    /** 快照是否过期（TTL 外仍展示，只用于“正在更新”提示文案） */
+    fun isSnapshotStale(nowMs: Long = System.currentTimeMillis()): Boolean {
+        val ts = _snapshotUpdatedAt.value ?: return true
+        return nowMs - ts > HOME_SNAPSHOT_TTL_MS
+    }
+
+    init {
+        viewModelScope.launch {
+            try {
+                val entity = homeSnapshotDao.get()
+                if (entity != null) {
+                    val tracks = try {
+                        json.decodeFromString<List<Track>>(entity.tracksJson)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    if (tracks.isNotEmpty()) {
+                        _snapshotTracks.value = tracks.take(MAX_SNAPSHOT_TRACKS)
+                        _snapshotUpdatedAt.value = entity.updatedAt
+                    }
+                }
+            } catch (_: Exception) {
+                // 快照读失败不打断首页，纯当无缓存
+            }
+        }
+    }
 
     /** 下拉刷新计数：每次 +1 即随机重排关键词并重建推荐流 */
     private val _refreshTick = MutableStateFlow(0)
@@ -57,14 +99,34 @@ class HomeViewModel @Inject constructor(
         }
             .flatMapLatest { ordered ->
                 Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-                    HomePagingSource(repo, ordered)
+                    HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
+                        saveSnapshot(tracks, orderedKeywords)
+                    }
                 }.flow.cachedIn(viewModelScope)
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, PagingData.empty())
 
-    /** 下拉刷新：随机重排关键词，推荐流自动重建 */
+    /** 下拉刷新：随机重排关键词，推荐流自动重建（快照不清，失败时还能兜底） */
     fun shuffleKeywords() {
         _refreshTick.value += 1
+    }
+
+    private fun saveSnapshot(tracks: List<Track>, orderedKeywords: List<String>) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val bounded = tracks.take(MAX_SNAPSHOT_TRACKS)
+                homeSnapshotDao.save(
+                    HomeSnapshotEntity(
+                        keywordsJson = json.encodeToString<List<String>>(orderedKeywords),
+                        tracksJson = json.encodeToString<List<Track>>(bounded),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            } catch (_: Exception) {
+                // 落盘失败静默，首页不受影响
+            }
+        }
     }
 
     // BV multi-P bottomSheet state
@@ -196,5 +258,12 @@ class HomeViewModel @Inject constructor(
         val existing = playlistDao.getPlaylists()
         if (existing.isNotEmpty()) return existing.first().id
         return playlistDao.insert(PlaylistEntity(name = "默认收藏"))
+    }
+
+    companion object {
+        /** 快照 TTL：15min 内不提示过期，超期仍展示、后台静默刷 */
+        const val HOME_SNAPSHOT_TTL_MS = 15 * 60 * 1000L
+        /** 快照上限：只存首屏 60 条，有界清理 */
+        const val MAX_SNAPSHOT_TRACKS = 60
     }
 }

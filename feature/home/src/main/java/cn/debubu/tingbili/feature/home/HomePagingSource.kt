@@ -8,10 +8,13 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
 /**
  * 首页发现流：策展关键词分页轮换（第 1 页搜词 1、第 2 页搜词 2……循环），
  * 关键词列表来自设置（DataStore），增减后自动刷新。
+ *
+ * @param onFirstPage 首页加载成功后的回调（SWR 快照用），调用方负责落盘，异常内部吞掉不影响分页。
  */
 class HomePagingSource(
     private val repo: BiliRepository,
-    private val keywords: List<String> = emptyList()
+    private val keywords: List<String> = emptyList(),
+    private val onFirstPage: ((tracks: List<Track>, orderedKeywords: List<String>) -> Unit)? = null
 ) : PagingSource<Int, Track>() {
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Track> {
@@ -22,6 +25,13 @@ class HomePagingSource(
             val tracks = repo.searchPage(keyword, page)
             val nextKey = if (tracks.isEmpty()) null else page + 1
             val prevKey = if (page == 1) null else page - 1
+            if (page == 1 && tracks.isNotEmpty()) {
+                try {
+                    onFirstPage?.invoke(tracks, kws)
+                } catch (_: Exception) {
+                    // 快照回调永不打断分页
+                }
+            }
             LoadResult.Page(data = tracks, prevKey = prevKey, nextKey = nextKey)
         } catch (e: Exception) {
             LoadResult.Error(e)

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.data.bilibili.BiliApi
@@ -41,7 +42,8 @@ object AppDataModule {
                 TingBiliDatabase.MIGRATION_2_3,
                 TingBiliDatabase.MIGRATION_3_4,
                 TingBiliDatabase.MIGRATION_4_5,
-                TingBiliDatabase.MIGRATION_5_6
+                TingBiliDatabase.MIGRATION_5_6,
+                TingBiliDatabase.MIGRATION_6_7
             )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
@@ -51,6 +53,9 @@ object AppDataModule {
 
     @Provides
     fun providePlaylistDao(db: TingBiliDatabase): PlaylistDao = db.playlistDao()
+
+    @Provides
+    fun provideHomeSnapshotDao(db: TingBiliDatabase): HomeSnapshotDao = db.homeSnapshotDao()
 
     @Provides
     @Singleton
