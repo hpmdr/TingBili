@@ -15,6 +15,7 @@ import cn.debubu.tingbili.core.data.db.PlaylistEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.media.PlayerManager
+import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -37,8 +38,12 @@ class HomeViewModel @Inject constructor(
     private val player: PlayerManager,
     private val playlistDao: PlaylistDao,
     private val homeSnapshotDao: HomeSnapshotDao,
+    private val scrollTopBus: HomeScrollTopBus,
     private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 ) : ViewModel() {
+
+    /** 回顶事件（底栏/Rail 双击推荐时 +1，首页收到即滚到顶） */
+    val scrollTopTick: StateFlow<Int> = scrollTopBus.tick
 
     // 数据层常驻：流的生命周期与 ViewModel 对齐（Eagerly 启动，VM 释放才停），
     // 与有没有收集器无关。进搜索/详情/切 Tab 再回来都是秒回、无网络、无转圈；

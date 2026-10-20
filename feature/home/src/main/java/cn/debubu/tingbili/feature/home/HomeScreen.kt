@@ -76,6 +76,14 @@ fun HomeScreen(
     val snapshotGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
+    // 推荐 tab 双击回顶（底栏/Rail 经总线发事件；标题双击走直连，两路都到这）
+    val scrollTopTick by vm.scrollTopTick.collectAsStateWithLifecycle()
+    LaunchedEffect(scrollTopTick) {
+        if (scrollTopTick > 0) {
+            gridState.animateScrollToItem(0)
+            snapshotGridState.animateScrollToItem(0)
+        }
+    }
 
     // 下拉指示器只跟随用户主动刷新；初始加载走全屏转圈，不抢戏
     val refreshState = paging.loadState.refresh

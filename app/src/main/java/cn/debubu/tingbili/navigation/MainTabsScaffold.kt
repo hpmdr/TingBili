@@ -60,6 +60,8 @@ fun MainTabsScaffold(
     val isMeSelected = destination?.hierarchy?.any { it.hasRoute<MeRoute>() } == true
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationSuiteDefaults.itemColors()
+    // 推荐 tab 双击回顶（item{} 是 DSL 非组合作用域，helper 必须在外层调）
+    val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
 
     val miniPlayerVisibility = rememberMiniPlayerVisibility()
     if (layoutType == NavigationSuiteType.NavigationBar) {
@@ -74,12 +76,7 @@ fun MainTabsScaffold(
             navigationSuiteItems = {
                 item(
                     selected = isHomeSelected,
-                    onClick = {
-                        navController.navigate(HomeRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
+                    onClick = homeTabClick,
                     icon = {
                         Icon(
                             imageVector = if (isHomeSelected) Icons.Filled.Explore else Icons.Outlined.Explore,

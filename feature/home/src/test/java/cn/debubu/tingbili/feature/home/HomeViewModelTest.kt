@@ -203,14 +203,14 @@ class HomeViewModelTest {
 
     @Test
     fun `home exposes recommended paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
     }
 
     @Test
     fun `shuffle emits new paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         vm.pagingFlow.first()
         vm.shuffleKeywords()
         // 常驻流：刷新后必有新一份 PagingData（只断言换新，不断言随机顺序本身）
@@ -223,11 +223,20 @@ class HomeViewModelTest {
             tracksJson = "[{\"bvid\":\"BV1\",\"cid\":1,\"title\":\"t\",\"author\":\"a\",\"cover\":\"\",\"durationMs\":1000,\"subtitleUrl\":null}]",
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         runCurrent()
         assertEquals(false, vm.pagingStarted.value)
         vm.startPaging()
         assertEquals(true, vm.pagingStarted.value)
+    }
+
+    @Test
+    fun `scroll top request surfaces as tick`() = runTest(dispatcher) {
+        val bus = cn.debubu.tingbili.core.ui.HomeScrollTopBus()
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, bus)
+        assertEquals(0, vm.scrollTopTick.value)
+        bus.requestScrollTop()
+        assertEquals(1, vm.scrollTopTick.value)
     }
 
     @Test
@@ -291,7 +300,7 @@ class HomeViewModelTest {
 
     @Test
     fun `showBottomSheet expands BV via view`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         vm.showBottomSheetForBv("BV1xx")
         advanceUntilIdle()
         assertTrue(vm.showBottomSheet.first())
@@ -303,7 +312,7 @@ class HomeViewModelTest {
 
     @Test
     fun `addToPlaylist single and all`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         val track = Track(bvid = "BV1xx", cid = 1001, title = "T1", author = "a", cover = "", durationMs = 60000, subtitleUrl = null)
         vm.addToPlaylist(track)
         advanceUntilIdle()
@@ -337,7 +346,7 @@ class HomeViewModelTest {
             tracksJson = json.encodeToString(tracks),
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         advanceUntilIdle()
         assertEquals(1, vm.snapshotTracks.first()?.size)
         assertEquals("BV1xx", vm.snapshotTracks.first()!![0].bvid)
@@ -355,14 +364,14 @@ class HomeViewModelTest {
 
     @Test
     fun `snapshot empty when no cache`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         advanceUntilIdle()
         assertEquals(null, vm.snapshotTracks.first())
     }
 
     @Test
     fun `no cache auto starts paging`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         advanceUntilIdle()
         assertEquals(true, vm.pagingStarted.first())
     }
@@ -376,7 +385,7 @@ class HomeViewModelTest {
             tracksJson = json.encodeToString(tracks),
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         advanceUntilIdle()
         assertEquals(false, vm.pagingStarted.first())
         assertEquals(1, vm.snapshotTracks.first()?.size)

@@ -10,6 +10,7 @@ import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
+import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.data.bilibili.BiliApi
@@ -61,6 +62,10 @@ object AppDataModule {
 
     @Provides
     fun provideSubtitleDiskDao(db: TingBiliDatabase): SubtitleDiskDao = db.subtitleDiskDao()
+
+    @Provides
+    @Singleton
+    fun provideHomeScrollTopBus(): HomeScrollTopBus = HomeScrollTopBus()
 
     @Provides
     @Singleton

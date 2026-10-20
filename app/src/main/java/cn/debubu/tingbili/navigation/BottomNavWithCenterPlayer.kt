@@ -28,6 +28,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -43,7 +44,11 @@ class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
     prefs: PreferencesRepository,
     auth: AuthRepository,
+    private val scrollTopBus: HomeScrollTopBus,
 ) : ViewModel() {
+
+    /** 推荐 tab 双击回顶（事件经单例总线发给首页，见 HomeScrollTopBus） */
+    fun requestHomeScrollTop() = scrollTopBus.requestScrollTop()
 
     init {
         // 登录态保活：进程启动时检查一次，需要续期则静默续期；失败忽略，下次启动再试
@@ -97,6 +102,8 @@ fun BottomNavWithCenterPlayer(
     val isMeSelected = destination?.hierarchy?.any { it.hasRoute<MeRoute>() } == true
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationBarItemDefaults.colors()
+    // 推荐 tab 双击回顶（onClick lambda 非组合作用域，helper 必须在外层调）
+    val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
     val track = state.currentTrack
 
     val trackKey = track?.let { "${it.bvid}:${it.cid}" }
@@ -120,15 +127,7 @@ fun BottomNavWithCenterPlayer(
         NavigationBar {
         NavigationBarItem(
             selected = isHomeSelected,
-            onClick = {
-                navController.navigate(HomeRoute) {
-                    launchSingleTop = true
-                    restoreState = true
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }
-                }
-            },
+            onClick = homeTabClick,
             icon = {
                 Icon(
                     imageVector = if (isHomeSelected) Icons.Filled.Explore else Icons.Outlined.Explore,
