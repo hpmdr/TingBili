@@ -6,6 +6,10 @@ import cn.debubu.tingbili.data.bilibili.dto.SubtitleData
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleInfo
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleItem
+import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
+import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
+import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
+import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
 import cn.debubu.tingbili.core.data.db.SubtitleDiskEntity
@@ -39,6 +43,10 @@ class SubtitleCacheTest {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
             override suspend fun view(bvid: String): ViewDto = ViewDto()
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): FavFolderDto = FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): FavDetailDto = FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): ToviewDto = ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): BiliHistoryDto = BiliHistoryDto()
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
                 subtitleCalls++
                 return SubtitleDto(

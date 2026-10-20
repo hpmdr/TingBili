@@ -8,8 +8,8 @@ import androidx.compose.ui.test.performTextInput
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
 import cn.debubu.tingbili.data.bilibili.auth.BiliSession
-import cn.debubu.tingbili.feature.settings.LoginScreen
-import cn.debubu.tingbili.feature.settings.LoginViewModel
+import cn.debubu.tingbili.feature.mine.LoginScreen
+import cn.debubu.tingbili.feature.mine.LoginViewModel
 import kotlinx.serialization.json.Json
 import org.junit.Rule
 import org.junit.Test

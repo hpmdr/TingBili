@@ -55,7 +55,7 @@ feature:search (Paging3 搜索 + 结果列表)
 feature:playlist (CRUD + dedup + reorder + playAll)
 feature:history (history flow + resume)
 feature:player (LyricState + SubtitleParser + full-screen)
-feature:settings (step/dynamicColor)
+feature:mine (我的 + B站收藏/历史/稍后听 + 设置/登录)
 ```
 
 ## 二期

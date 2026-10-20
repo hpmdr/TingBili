@@ -42,6 +42,22 @@ object LoginRoute
 @Serializable
 object PlayerRoute
 
+/** 我的页二级页:B站收藏夹列表 */
+@Serializable
+object BiliFavFoldersRoute
+
+/** 我的页二级页:收藏夹详情 */
+@Serializable
+data class BiliFavDetailRoute(val mediaId: Long, val title: String = "")
+
+/** 我的页二级页:B站历史 */
+@Serializable
+object BiliHistoryRoute
+
+/** 我的页二级页:稍后听 */
+@Serializable
+object BiliToviewRoute
+
 /** 视频详情页路由，携带 BV 号 */
 @Serializable
 data class VideoDetailRoute(val bvid: String)

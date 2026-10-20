@@ -1,6 +1,10 @@
 package cn.debubu.tingbili.data.bilibili
 
+import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
+import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
+import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
@@ -27,6 +31,40 @@ interface BiliApi {
         @Query("cid") cid: Long,
         @Query("fnval") fnval: Int = 16
     ): PlayUrlDto
+
+    // B站账号体系(我的页二级页,只读):收藏夹/夹内/稍后看/历史,对标 PiliPlus
+    @GET("/x/v3/fav/folder/created/list")
+    suspend fun favFolders(
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20,
+        @Query("up_mid") upMid: Long = 0L,
+    ): FavFolderDto
+
+    @GET("/x/v3/fav/resource/list")
+    suspend fun favMedias(
+        @Query("media_id") mediaId: Long,
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20,
+        @Query("keyword") keyword: String = "",
+        @Query("order") order: String = "mtime",
+        @Query("type") type: Int = 0,
+        @Query("tid") tid: Int = 0,
+        @Query("platform") platform: String = "web",
+    ): FavDetailDto
+
+    @GET("/x/v2/history/toview/web")
+    suspend fun toview(
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20,
+    ): ToviewDto
+
+    @GET("/x/web-interface/history/cursor")
+    suspend fun historyCursor(
+        @Query("type") type: String = "all",
+        @Query("ps") ps: Int = 20,
+        @Query("max") max: Long = 0L,
+        @Query("view_at") viewAt: Long = 0L,
+    ): BiliHistoryDto
 
     @GET("/x/player/wbi/v2")
     suspend fun subtitle(

@@ -43,5 +43,5 @@ class WbiInterceptor(
     }
 
     private fun needsWbiSign(url: HttpUrl): Boolean =
-        url.encodedPath.contains("/search/") || url.encodedPath.contains("/wbi/")
+        url.encodedPath.contains("/search/") || url.encodedPath.contains("/wbi/") || url.encodedPath.contains("/history/toview/web")
 }

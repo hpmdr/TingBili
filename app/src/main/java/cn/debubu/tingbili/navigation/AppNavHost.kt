@@ -11,18 +11,23 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import androidx.navigation.toRoute
 import cn.debubu.tingbili.feature.detail.DetailScreen
-import cn.debubu.tingbili.feature.settings.LoginScreen
+import cn.debubu.tingbili.feature.mine.LoginScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistDetailScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.search.SearchScreen
-import cn.debubu.tingbili.feature.settings.AppearanceScreen
-import cn.debubu.tingbili.feature.settings.MeScreen
-import cn.debubu.tingbili.feature.settings.OtherSettingsScreen
-import cn.debubu.tingbili.feature.settings.SettingsScreen
+import cn.debubu.tingbili.feature.mine.AppearanceScreen
+import cn.debubu.tingbili.feature.mine.BiliFavDetailScreen
+import cn.debubu.tingbili.feature.mine.BiliFavFoldersScreen
+import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
+import cn.debubu.tingbili.feature.mine.BiliToviewScreen
+import cn.debubu.tingbili.feature.mine.MeScreen
+import cn.debubu.tingbili.feature.mine.OtherSettingsScreen
+import cn.debubu.tingbili.feature.mine.SettingsScreen
 
 @Composable
 fun AppRootNavHost(
@@ -51,18 +56,9 @@ fun AppRootNavHost(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
                     onOpenOtherSettings = { navController.navigate(OtherSettingsRoute) },
-                    onOpenPlaylists = {
-                        navController.navigate(PlaylistRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
-                    onOpenHistory = {
-                        navController.navigate(HistoryRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
+                    onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
+                    onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
+                    onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
                     onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 )
             }
@@ -83,6 +79,37 @@ fun AppRootNavHost(
         }
         composable<OtherSettingsRoute> {
             OtherSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable<BiliFavFoldersRoute> {
+            BiliFavFoldersScreen(
+                onBack = { navController.popBackStack() },
+                onFolderClick = { id, title -> navController.navigate(BiliFavDetailRoute(id, title)) },
+                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<BiliFavDetailRoute> { entry ->
+            val args = entry.toRoute<BiliFavDetailRoute>()
+            BiliFavDetailScreen(
+                mediaId = args.mediaId,
+                title = args.title,
+                onBack = { navController.popBackStack() },
+                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<BiliHistoryRoute> {
+            BiliHistoryScreen(
+                onBack = { navController.popBackStack() },
+                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<BiliToviewRoute> {
+            BiliToviewScreen(
+                onBack = { navController.popBackStack() },
+                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+            )
         }
         composable<SearchRoute> {
             SearchScreen(

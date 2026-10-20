@@ -2,7 +2,11 @@ package cn.debubu.tingbili.data.bilibili
 
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.data.bilibili.dto.BiliFavFolder
+import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleFile
+import cn.debubu.tingbili.data.bilibili.dto.toFolders
+import cn.debubu.tingbili.data.bilibili.dto.toSpaceVideos
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleResult
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
@@ -138,6 +142,40 @@ class BiliRepository @Inject constructor(
         }
     } catch (e: Exception) {
         Result.Error(e.message ?: "subtitle failed", e)
+    }
+
+    // ── 我的页:B站账号体系(只读,需登录 Cookie) ──
+
+    suspend fun getFavFolders(upMid: Long, pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliFavFolder>, Boolean>> = try {
+        val dto = api.favFolders(pn, ps, upMid)
+        if (dto.code != 0) Result.Error(dto.message.ifBlank { "fav folders failed: code ${dto.code}" })
+        else Result.Success(dto.toFolders())
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "fav folders failed", e)
+    }
+
+    suspend fun getFavMedias(mediaId: Long, pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliSpaceVideo>, Boolean>> = try {
+        val dto = api.favMedias(mediaId, pn, ps)
+        if (dto.code != 0) Result.Error(dto.message.ifBlank { "fav medias failed: code ${dto.code}" })
+        else Result.Success(dto.toSpaceVideos())
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "fav medias failed", e)
+    }
+
+    suspend fun getToview(pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliSpaceVideo>, Int>> = try {
+        val dto = api.toview(pn, ps)
+        if (dto.code != 0) Result.Error(dto.message.ifBlank { "toview failed: code ${dto.code}" })
+        else Result.Success(dto.toSpaceVideos() to (dto.data?.count ?: 0))
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "toview failed", e)
+    }
+
+    suspend fun getBiliHistory(max: Long = 0L, viewAt: Long = 0L, ps: Int = 20): Result<List<BiliSpaceVideo>> = try {
+        val dto = api.historyCursor(ps = ps, max = max, viewAt = viewAt)
+        if (dto.code != 0) Result.Error(dto.message.ifBlank { "history failed: code ${dto.code}" })
+        else Result.Success(dto.toSpaceVideos())
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "history failed", e)
     }
 
     /** 下载并解析字幕正文；CDN 返回 404 / 空体 / 非预期格式都按「没字幕」处理 */

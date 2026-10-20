@@ -107,7 +107,7 @@ dependencies {
     implementation(project(":feature:playlist"))
     implementation(project(":feature:history"))
     implementation(project(":feature:player"))
-    implementation(project(":feature:settings"))
+    implementation(project(":feature:mine"))
     implementation(project(":feature:detail"))
     implementation(project(":feature:search"))
     implementation(libs.androidx.core.ktx)

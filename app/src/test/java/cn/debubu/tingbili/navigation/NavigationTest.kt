@@ -202,6 +202,27 @@ class NavigationTest {
     }
 
     @Test
+    fun `bili space routes resolve in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = BiliFavFoldersRoute) {
+                composable<BiliFavFoldersRoute> { Text("bili favs") }
+                composable<BiliFavDetailRoute> { Text("bili fav detail") }
+                composable<BiliHistoryRoute> { Text("bili history") }
+                composable<BiliToviewRoute> { Text("bili toview") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(BiliFavDetailRoute(123L, "t")) }
+        composeTestRule.onNodeWithText("bili fav detail").assertIsDisplayed()
+        composeTestRule.runOnIdle { navController.navigate(BiliHistoryRoute) }
+        composeTestRule.onNodeWithText("bili history").assertIsDisplayed()
+        composeTestRule.runOnIdle { navController.navigate(BiliToviewRoute) }
+        composeTestRule.onNodeWithText("bili toview").assertIsDisplayed()
+    }
+
+    @Test
     fun `loginRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {
