@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.compose.material3)
     implementation(libs.navigation.compose)
     implementation(libs.paging.compose)

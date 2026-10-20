@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.feature.player
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -127,6 +128,8 @@ fun PlayerScreen(
     val headerTitle = playerHeaderTitle(s.track)
 
     var lyricFullscreen by rememberSaveable { mutableStateOf(false) }
+    // 全屏字幕时拦截返回：先退回封面态，再按一次才退出播放页
+    BackHandler(enabled = lyricFullscreen) { lyricFullscreen = false }
     var showTimerSheet by remember { mutableStateOf(false) }
     var showChapterSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
