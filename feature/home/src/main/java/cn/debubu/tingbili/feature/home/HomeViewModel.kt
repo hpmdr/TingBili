@@ -131,6 +131,11 @@ class HomeViewModel @Inject constructor(
         _refreshTick.value += 1
     }
 
+    /** 快照底部“加载更多”：只开闸不换词，切到 Paging 流继续往后翻（与下拉同流，不重排） */
+    fun startPaging() {
+        _pagingStarted.value = true
+    }
+
     private fun saveSnapshot(tracks: List<Track>, orderedKeywords: List<String>) {
         if (tracks.isEmpty()) return
         viewModelScope.launch {

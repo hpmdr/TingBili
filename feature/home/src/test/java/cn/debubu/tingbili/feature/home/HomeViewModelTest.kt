@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -214,6 +215,19 @@ class HomeViewModelTest {
         vm.shuffleKeywords()
         // 常驻流：刷新后必有新一份 PagingData（只断言换新，不断言随机顺序本身）
         assertNotNull(vm.pagingFlow.drop(1).first())
+    }
+
+    @Test
+    fun `startPaging opens gate on snapshot cold start`() = runTest(dispatcher) {
+        snapshotDao.entity = HomeSnapshotEntity(
+            tracksJson = "[{\"bvid\":\"BV1\",\"cid\":1,\"title\":\"t\",\"author\":\"a\",\"cover\":\"\",\"durationMs\":1000,\"subtitleUrl\":null}]",
+            updatedAt = System.currentTimeMillis()
+        )
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        runCurrent()
+        assertEquals(false, vm.pagingStarted.value)
+        vm.startPaging()
+        assertEquals(true, vm.pagingStarted.value)
     }
 
     @Test

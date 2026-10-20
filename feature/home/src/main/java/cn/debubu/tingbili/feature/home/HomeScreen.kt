@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -149,7 +150,8 @@ fun HomeScreen(
                 SnapshotGrid(
                     tracks = snapshot!!,
                     gridState = snapshotGridState,
-                    onTrackClick = { track -> onTrackToDetail(track.bvid) }
+                    onTrackClick = { track -> onTrackToDetail(track.bvid) },
+                    onLoadMore = vm::startPaging,
                 )
             } else {
                 TrackPagingGrid(
@@ -193,7 +195,8 @@ private fun SnapshotErrorBanner(
 private fun SnapshotGrid(
     tracks: List<Track>,
     gridState: LazyGridState,
-    onTrackClick: (Track) -> Unit
+    onTrackClick: (Track) -> Unit,
+    onLoadMore: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 156.dp),
@@ -211,6 +214,23 @@ private fun SnapshotGrid(
                 track = track,
                 onClick = { onTrackClick(track) }
             )
+        }
+        // 快照只有首屏：到底不是没数据，是 Paging 还没开闸，按钮切过去继续翻
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "快照只有首屏，下拉或点下面继续看最新推荐",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = onLoadMore) { Text("加载更多推荐") }
+            }
         }
     }
 }
