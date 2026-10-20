@@ -3,7 +3,10 @@ package cn.debubu.tingbili.navigation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import cn.debubu.tingbili.feature.player.PlayerViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -96,7 +99,16 @@ fun AppRootNavHost(
         composable<PlaylistDetailRoute> {
             PlaylistDetailScreen(onBack = { navController.popBackStack() })
         }
-        composable<PlayerRoute> { PlayerScreen(onBack = { navController.popBackStack() }) }
+        composable<PlayerRoute> { backStackEntry ->
+            // 播放页 VM 挂到 Tabs 容器条目上：播着的时候退多少次、进多少次都是同一个 VM，
+            // 状态（进度/歌词/字幕选择）不断，uiState 也不重建。Tabs 条目与应用前台同寿，
+            // 进程起来它就在，退出应用才销毁；空闲时 VM 只剩轻量流，无实质占用。
+            val tabsEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(MainTabsRoute)
+            }
+            val vm: PlayerViewModel = hiltViewModel(tabsEntry)
+            PlayerScreen(vm = vm, onBack = { navController.popBackStack() })
+        }
     }
 }
 
