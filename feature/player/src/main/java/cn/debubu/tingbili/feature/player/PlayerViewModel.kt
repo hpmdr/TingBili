@@ -2,10 +2,9 @@ package cn.debubu.tingbili.feature.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
-import cn.debubu.tingbili.data.bilibili.BiliRepository
+import cn.debubu.tingbili.data.bilibili.SubtitleCache
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -59,7 +58,7 @@ data class PlayerUiState(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val player: PlayerManager,
-    private val repo: BiliRepository,
+    private val subtitles: SubtitleCache,
     private val prefs: PreferencesRepository,
 ) : ViewModel() {
 
@@ -86,11 +85,10 @@ class PlayerViewModel @Inject constructor(
                     flowOf(SubState())
                 } else {
                     flow {
-                        val tracks = (repo.listSubtitleTracks(track.bvid, track.cid) as? Result.Success)
-                            ?.data ?: emptyList()
+                        val tracks = subtitles.tracks(track.bvid, track.cid)
                         val safeIdx = idx.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
                         val chosen = tracks.getOrNull(safeIdx)
-                        val lines = chosen?.let { repo.loadSubtitleLines(it.url) } ?: emptyList()
+                        val lines = chosen?.let { subtitles.lines(it.url) } ?: emptyList()
                         // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
                         if (lines.isEmpty()) emit(SubState(tracks, safeIdx))
                         else emit(SubState(tracks, safeIdx, lines, chosen!!.displayLabel, chosen.isAi))

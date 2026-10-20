@@ -12,6 +12,7 @@ import cn.debubu.tingbili.core.media.PlayerHandle
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
+import cn.debubu.tingbili.data.bilibili.SubtitleCache
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
@@ -123,7 +124,7 @@ class PlayerViewModelTest {
         player.restoreLastPlayback()
         prefs.stepSec.first()
         assertEquals("BV1xx", player.state.value.currentTrack?.bvid)
-        val vm = PlayerViewModel(player, repo, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo), prefs)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
