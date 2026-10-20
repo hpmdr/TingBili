@@ -217,7 +217,7 @@ private fun HomeSearchEntry(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "TingBili",
+            text = "听视频",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )

@@ -165,8 +165,8 @@ fun MeScreen(
                     icon = Icons.Filled.Info,
                     iconTint = Color(0xFF06B6D4),
                     iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
-                    title = "关于与帮助",
-                    subtitle = "版本信息 · 开源与免责声明",
+                    title = "关于",
+                    subtitle = "版本信息 · 免责声明",
                     onClick = { showAbout = true }
                 )
             }
@@ -537,17 +537,17 @@ private fun AboutDialog(onDismiss: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("关于与帮助") },
+        title = { Text("关于") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("TingBili v$version", fontWeight = FontWeight.SemiBold)
+                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "B 站专用音频播放器（非官方）。仅供学习交流，禁止商用。",
+                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
                 Text(
-                    "内容与账号数据均来自哔哩哔哩，如有侵权请联系删除。",
+                    "非哔哩哔哩官方应用，与 B 站无关；内容与账号数据均来自哔哩哔哩，如有侵权请联系删除。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
