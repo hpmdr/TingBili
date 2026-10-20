@@ -115,8 +115,20 @@ class PlayerViewModel @Inject constructor(
                 } else {
                     flow {
                         emit(SubState(status = SubtitleLoadState.Loading))
+                        // SWR：磁盘快照先秒显（冷启动恢复播放零等待），新鲜快照直接免网络；
+                        // 失败/过期才走网络，有旧快照时失败也不闪错误（静默保留旧字幕）。
+                        val cached = subtitles.cached(track.bvid, track.cid)
+                        val cachedTracks = cached?.tracks.orEmpty()
+                        val cachedHit = cached != null && idx == cached.index && cached.lines.isNotEmpty()
+                        if (cachedHit) {
+                            emit(SubState(cachedTracks, cached.index, cached.lines, cached.label, cached.isAi, SubtitleLoadState.Ready))
+                        } else if (cachedTracks.isNotEmpty()) {
+                            // 轨列表秒出（切轨/旧快照），正文按需拉
+                            emit(SubState(cachedTracks, idx.coerceIn(0, (cachedTracks.size - 1).coerceAtLeast(0)), status = SubtitleLoadState.Loading))
+                        }
+                        if (cachedHit && cached.isFresh()) return@flow
                         when (val tr = subtitles.tracksResult(track.bvid, track.cid)) {
-                            is Result.Error -> emit(SubState(status = SubtitleLoadState.Error))
+                            is Result.Error -> if (cached == null) emit(SubState(status = SubtitleLoadState.Error))
                             is Result.Success -> {
                                 val tracks = tr.data
                                 if (tracks.isEmpty()) {
@@ -126,9 +138,10 @@ class PlayerViewModel @Inject constructor(
                                     val chosen = tracks.getOrNull(safeIdx)
                                     val lr = chosen?.let { subtitles.linesResult(it.url) }
                                     if (lr is Result.Success && lr.data.isNotEmpty()) {
-                                        emit(SubState(tracks, safeIdx, lr.data, chosen!!.displayLabel, chosen.isAi, SubtitleLoadState.Ready))
+                                        subtitles.store(track.bvid, track.cid, tracks, safeIdx, lr.data, chosen!!.displayLabel, chosen.isAi)
+                                        emit(SubState(tracks, safeIdx, lr.data, chosen.displayLabel, chosen.isAi, SubtitleLoadState.Ready))
                                     } else if (lr is Result.Error) {
-                                        emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Error))
+                                        if (cached == null) emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Error))
                                     } else {
                                         // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
                                         emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Empty))

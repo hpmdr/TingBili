@@ -150,7 +150,7 @@ class PlayerViewModelTest {
         player.restoreLastPlayback()
         prefs.stepSec.first()
         assertEquals("BV1xx", player.state.value.currentTrack?.bvid)
-        val vm = PlayerViewModel(player, SubtitleCache(repo), auth, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -171,7 +171,7 @@ class PlayerViewModelTest {
         prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, SubtitleCache(repo), auth, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -201,7 +201,7 @@ class PlayerViewModelTest {
             }
             fun callCount() = calls
         }
-        val cache = SubtitleCache(BiliRepository(failingApi))
+        val cache = SubtitleCache(BiliRepository(failingApi), FakeSubtitleDiskDao())
         val track = demoTrack()
         prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
         player.restoreLastPlayback()
@@ -224,6 +224,31 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `fresh disk snapshot shows Ready with zero network`() = runTest(dispatcher) {
+        loginAndRebuildAuth()
+        val track = demoTrack().copy(subtitleUrl = null)
+        val disk = FakeSubtitleDiskDao()
+        val seed = SubtitleCache(repo, disk)
+        val tracks = listOf(cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack("zh-CN", "中文", "https://x/s.json", false))
+        val lines = listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1000L, "你好"))
+        seed.store(track.bvid, track.cid, tracks, 0, lines, "中文", false)
+        val callsBefore = api.subtitleCalls
+        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        player.restoreLastPlayback()
+        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs)
+        val collectJob = launch { vm.uiState.collect {} }
+        try {
+            runCurrent()
+            advanceTimeBy(100)
+            assertEquals(SubtitleLoadState.Ready, vm.uiState.value.subtitleLoadState)
+            assertEquals(lines, vm.uiState.value.lyrics)
+            assertEquals(callsBefore, api.subtitleCalls)
+        } finally {
+            collectJob.cancel()
+        }
+    }
+
+    @Test
     fun `subtitle scale defaults persists and clamps`() = runTest(dispatcher) {
         assertEquals(1f, prefs.subtitleScale.first())
         prefs.setSubtitleScale(1.15f)
@@ -236,3 +261,15 @@ class PlayerViewModelTest {
 }
 
 private fun android.content.Context.preferencesDataStoreFile(name: String): java.io.File = java.io.File(cacheDir, "$name.preferences_pb")
+
+/** 字幕盘内存替身：空盘=老行为（纯内存），预存=冷启动快照 */
+private class FakeSubtitleDiskDao(
+    private val map: MutableMap<String, cn.debubu.tingbili.core.data.db.SubtitleDiskEntity> = mutableMapOf()
+) : cn.debubu.tingbili.core.data.db.SubtitleDiskDao {
+    override suspend fun get(key: String) = map[key]
+    override suspend fun save(e: cn.debubu.tingbili.core.data.db.SubtitleDiskEntity) { map[e.cacheKey] = e }
+    override suspend fun prune(keep: Int) {
+        map.values.sortedByDescending { it.fetchedAt }.drop(keep).forEach { map.remove(it.cacheKey) }
+    }
+    override suspend fun clear() = map.clear()
+}

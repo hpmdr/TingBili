@@ -60,7 +60,8 @@ data class SubtitleBodyItem(
     @SerialName("music") val music: Double = 0.0
 )
 
-/** 归一化后的字幕轨，[url] 已是可以直接请求的绝对地址 */
+/** 归一化后的字幕轨，[url] 已是可以直接请求的绝对地址（磁盘快照要整体 JSON 存；displayLabel 是计算属性，不参与序列化） */
+@Serializable
 data class SubtitleTrack(
     val lan: String,
     val lanDoc: String,

@@ -7,6 +7,8 @@ import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleInfo
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleItem
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
+import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
+import cn.debubu.tingbili.core.data.db.SubtitleDiskEntity
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -21,6 +23,7 @@ class SubtitleCacheTest {
 
     private lateinit var server: MockWebServer
     private lateinit var cache: SubtitleCache
+    private lateinit var fakeDisk: FakeSubtitleDiskDao
     private var subtitleCalls = 0
     private lateinit var subUrl: String
 
@@ -48,7 +51,8 @@ class SubtitleCacheTest {
             }
         }
         val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
-        cache = SubtitleCache(BiliRepository(api, OkHttpClient(), json))
+        fakeDisk = FakeSubtitleDiskDao()
+        cache = SubtitleCache(BiliRepository(api, OkHttpClient(), json), fakeDisk)
     }
 
     @After
@@ -115,4 +119,41 @@ class SubtitleCacheTest {
         assertEquals(1, cache.lines(subUrl).size)
         assertEquals(2, server.requestCount)
     }
+
+    @Test
+    fun `disk snapshot roundtrips and reports freshness`() = runTest {
+        assertEquals(null, cache.cached("BV1xx", 1001L))
+        val tracks = listOf(cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack("zh-CN", "中文", subUrl, false))
+        val lines = listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1000L, "你好"))
+        cache.store("BV1xx", 1001L, tracks, 0, lines, "中文", false)
+        val got = cache.cached("BV1xx", 1001L)!!
+        assertEquals(tracks, got.tracks)
+        assertEquals(lines, got.lines)
+        assertEquals(true, got.isFresh())
+        assertEquals(false, got.isFresh(got.fetchedAt + SubtitleCache.SUBTITLE_DISK_TTL_MS + 1))
+        // 空正文不落盘：读回仍是旧快照
+        cache.store("BV1xx", 1001L, tracks, 0, emptyList(), "中文", false)
+        assertEquals(lines, cache.cached("BV1xx", 1001L)!!.lines)
+    }
+
+    @Test
+    fun `disk prune keeps newest 50`() = runTest {
+        val tracks = listOf(cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack("zh-CN", "中文", subUrl, false))
+        val lines = listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1000L, "x"))
+        repeat(55) { i -> cache.store("BV$i", 1L, tracks, 0, lines, "中文", false) }
+        assertEquals(SubtitleCache.MAX_DISK_ENTRIES, fakeDisk.size())
+    }
+}
+
+/** DAO 内存替身：语义对齐 Room（REPLACE + 按新旧裁剪） */
+private class FakeSubtitleDiskDao : SubtitleDiskDao {
+    private val map = LinkedHashMap<String, SubtitleDiskEntity>()
+    override suspend fun get(key: String): SubtitleDiskEntity? = map[key]
+    override suspend fun save(e: SubtitleDiskEntity) { map[e.cacheKey] = e }
+    override suspend fun prune(keep: Int) {
+        val drop = map.values.sortedByDescending { it.fetchedAt }.drop(keep).map { it.cacheKey }
+        drop.forEach { map.remove(it) }
+    }
+    override suspend fun clear() = map.clear()
+    fun size(): Int = map.size
 }
