@@ -1017,9 +1017,9 @@ private fun SleepTimerSheet(
     onDismiss: () -> Unit,
 ) {
     val running = remainSec != null || endOfChapter
-    // 滚轮初值：运行中沿用本次设定，否则 30（不在预设里也没关系，滚轮 1～360 全覆盖）
-    // 滚轮初值：运行中沿用本次设定，否则上次所选（都贴到 30 分钟格）
-    // 带 key：冷启动时 flow 初值尚未落盘重组后要用最新值重算（无 key 会钉死初值 30/false）
+    // 滚轮初值：运行中沿用本次设定，否则上次所选、无记忆则 60（60 居中露出 30/90，暗示可滑）
+    // （不在预设里也没关系，滚轮全覆盖，都贴到 30 分钟格）
+    // 带 key：冷启动时 flow 初值尚未落盘重组后要用最新值重算（无 key 会钉死初值 60/false）
     var wheelMin by remember(totalMin, lastMin) {
         mutableIntStateOf(snapSleepMin(totalMin ?: lastMin))
     }

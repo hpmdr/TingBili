@@ -43,8 +43,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
     val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
-    /** 睡眠定时滚轮上次所选分钟（默认 30，启动定时即记住） */
-    val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 30 }
+    /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
+    val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
 
     val themeMode: Flow<ThemeMode> = ds.data.map { prefs ->
         prefs[THEME_MODE]?.let(ThemeMode::fromKey)
