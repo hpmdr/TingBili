@@ -111,6 +111,8 @@ fun AppRootNavHost(
                 vm = vm,
                 onBack = { navController.popBackStack() },
                 onLoginClick = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                onDetailClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                onSettingsClick = { navController.navigate(SettingsRoute) },
             )
         }
     }

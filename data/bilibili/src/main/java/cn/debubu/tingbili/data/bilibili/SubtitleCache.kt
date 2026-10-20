@@ -121,6 +121,26 @@ class SubtitleCache @Inject constructor(
         }
     }
 
+    /**
+     * 作废整个 BV 的快照（播放页“刷新当前内容”用）：内存按 `bvid:` 前缀清，
+     * 连带正文一起清（正文 key 是 url，从被清的轨里反查）；磁盘按前缀删。
+     * 下次管线重走即走网络，字幕后补/改版能捡回来。
+     */
+    suspend fun invalidateBv(bvid: String) {
+        if (bvid.isBlank()) return
+        val prefix = "$bvid:"
+        synchronized(lock) {
+            val doomedTracks = tracksCache.keys.filter { it.startsWith(prefix) }
+            val doomedUrls = doomedTracks.flatMap { key -> tracksCache[key].orEmpty().map { it.url } }.toSet()
+            doomedTracks.forEach { tracksCache.remove(it) }
+            doomedUrls.forEach { linesCache.remove(it) }
+        }
+        try {
+            disk.deleteByPrefix(prefix)
+        } catch (_: Exception) {
+        }
+    }
+
     /** 写快照（网络成功非空后由管线调）+ 顺手裁到 50 集 */
     suspend fun store(
         bvid: String,

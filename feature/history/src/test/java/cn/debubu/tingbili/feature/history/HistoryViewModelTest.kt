@@ -72,6 +72,14 @@ class HistoryViewModelTest {
             mediaItems = items; this.startIndex = startIndex; _pos = startPositionMs
         }
         override fun replaceMediaItem(index: Int, item: MediaItem) { if (index in mediaItems.indices) mediaItems = mediaItems.toMutableList().also { it[index] = item } }
+
+        override val mediaItemCount: Int get() = mediaItems.size
+        override fun addMediaItem(index: Int, item: MediaItem) {
+            mediaItems = mediaItems.toMutableList().also { it.add(index.coerceIn(0, it.size), item) }
+        }
+        override fun removeMediaItem(index: Int) {
+            mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it.removeAt(index) }
+        }
         override fun prepare() {}
         override fun play() { playCalled = true }
         override fun pause() {}

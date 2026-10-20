@@ -42,6 +42,10 @@ interface SubtitleDiskDao {
     @Query("DELETE FROM SubtitleDiskEntity WHERE cacheKey NOT IN (SELECT cacheKey FROM SubtitleDiskEntity ORDER BY fetchedAt DESC LIMIT :keep)")
     suspend fun prune(keep: Int)
 
+    /** 删掉整个 BV 的快照（刷新时强制重拉用，前缀 `bvid:`） */
+    @Query("DELETE FROM SubtitleDiskEntity WHERE cacheKey LIKE :prefix || '%'")
+    suspend fun deleteByPrefix(prefix: String)
+
     @Query("DELETE FROM SubtitleDiskEntity")
     suspend fun clear()
 }

@@ -54,6 +54,16 @@ class SettingsViewModelTest {
         assertEquals(30, prefs.stepSec.first())
     }
 
+    @Test fun `subtitle scale persists and clamps`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs)
+        vm.setSubtitleScale(1.15f)
+        advanceUntilIdle()
+        assertEquals(1.15f, prefs.subtitleScale.first())
+        vm.setSubtitleScale(99f)
+        advanceUntilIdle()
+        assertEquals(1.3f, prefs.subtitleScale.first())
+    }
+
     @Test fun `step coerced in range 5 to 60`() = runTest(dispatcher) {
         val vm = SettingsViewModel(prefs)
         vm.setStep(100)

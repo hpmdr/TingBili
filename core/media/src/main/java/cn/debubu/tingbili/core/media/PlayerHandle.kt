@@ -17,6 +17,9 @@ interface PlayerHandle {
     val currentMediaItemIndex: Int
     fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long)
     fun replaceMediaItem(index: Int, item: MediaItem)
+    /** 队列刷新专用：单项插入/删除（不断播）。ExoPlayer 原生支持，替换整表会打断当前播放故不用。 */
+    fun addMediaItem(index: Int, item: MediaItem)
+    fun removeMediaItem(index: Int)
     fun prepare()
     fun play()
     fun pause()

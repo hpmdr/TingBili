@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
+import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
+import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -72,6 +75,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitles: SubtitleCache,
     private val auth: AuthRepository,
     private val prefs: PreferencesRepository,
+    private val repo: BiliRepository,
 ) : ViewModel() {
 
     private val trackFlow = player.state
@@ -251,9 +255,49 @@ class PlayerViewModel @Inject constructor(
 
     fun cancelSleepTimer() = player.cancelSleepTimer()
 
-    /** 字幕字号：设置页四档，写偏好即持久化 */
-    fun setSubtitleScale(v: Float) {
-        viewModelScope.launch { prefs.setSubtitleScale(v) }
+    /** 刷新转圈（顶栏 ⋮ 变菊花，防连点） */
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    /** 一次性提示（Detail 页同款：界面 Toast 后调 consumeMessage 清掉） */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+    fun consumeMessage() {
+        _message.value = null
+    }
+
+    /**
+     * 刷新当前 BV：分 P 增减/改名不断播对齐 + 字幕缓存作废重拉。
+     * 失败绝不清空旧队列（Toast 报“已保留旧数据”）。
+     */
+    fun refreshBv() {
+        if (_isRefreshing.value) return
+        val cur = uiState.value.track ?: return
+        if (uiState.value.isLoading) {
+            _message.value = "正在加载，稍后再试"
+            return
+        }
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                when (val r = repo.getViewDetail(cur.bvid)) {
+                    is Result.Error -> _message.value = "刷新失败，已保留旧数据"
+                    is Result.Success -> {
+                        val res = player.refreshQueue(r.data.toTracks(), r.data.title)
+                        // 字幕可能后补/改版：作废该 BV 缓存，管线重走按需重拉
+                        subtitles.invalidateBv(cur.bvid)
+                        retrySubtitles()
+                        _message.value = when {
+                            res.added > 0 -> "已更新，新增 ${res.added} 集"
+                            res.removed > 0 || res.updated > 0 -> "已更新到最新"
+                            else -> "已是最新"
+                        }
+                    }
+                }
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
     }
 
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */

@@ -11,6 +11,7 @@ import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.datastore.CachedPlayUrl
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
+import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -123,6 +124,188 @@ class PlayerManager @Inject constructor(
     }
 
     /**
+     * playurl 批量解析：持久缓存命中即用，未命中并发补（限 4 并发防风控），结果回写。
+     * 返回 track→url（解析失败的项直接丢掉，调用方跳过）。
+     */
+    private suspend fun resolveUrls(tracks: List<Track>): Map<Track, String> {
+        if (tracks.isEmpty()) return emptyMap()
+        val nowMs = System.currentTimeMillis()
+        val urlCache = try {
+            prefs.playUrlCache.first()
+        } catch (_: Exception) {
+            emptyMap()
+        }
+        val out = mutableMapOf<Track, String>()
+        val missing = mutableListOf<Track>()
+        for (t in tracks) {
+            val hit = urlCache["${t.bvid}:${t.cid}"]?.takeIf { it.isFresh(nowMs) }?.url
+            if (hit.isNullOrBlank()) missing.add(t) else out[t] = hit
+        }
+        if (missing.isNotEmpty()) {
+            val semaphore = Semaphore(4)
+            val fetched = supervisorScope {
+                missing.map { track ->
+                    async {
+                        runCatching {
+                            semaphore.withPermit {
+                                val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
+                                    is Result.Success -> r.data.takeIf { it.isNotBlank() }
+                                    is Result.Error -> null
+                                }
+                                if (url != null) track to url else null
+                            }
+                        }.getOrNull()
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            if (fetched.isNotEmpty()) {
+                prefs.putPlayUrls(
+                    fetched.associate { (t, u) -> "${t.bvid}:${t.cid}" to CachedPlayUrl(u, nowMs) },
+                    nowMs,
+                )
+                fetched.forEach { (t, u) -> out[t] = u }
+            }
+        }
+        return out
+    }
+
+    /** Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它） */
+    private fun Track.toMediaItem(url: String, imageFormat: ImageFormat): MediaItem =
+        MediaItem.Builder()
+            .setUri(url)
+            .setMediaId("$bvid:$cid")
+            .setCustomCacheKey("$bvid:$cid")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(author)
+                    .setArtworkUri(cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
+                    .build()
+            )
+            .build()
+
+    /** 队列刷新结果：给 Toast 文案用（added>0 报新增，否则报已是最新/已更新） */
+    data class QueueRefreshResult(val added: Int, val removed: Int, val updated: Int)
+
+    /**
+     * 播放页“刷新当前内容”：B 站侧分 P 增减/改名后，不断播把队列对齐到最新。
+     *
+     * - 新增：解析 playurl 后插到新顺序对应位置（解析失败的跳过）。
+     * - 删除：只删非在播项；在播的分 P 被删则原位保留（拍板语义），播完再消失。
+     * - 改名/封面/时长：非在播项原位 replace；在播项只更新 UI 态（transport 里的还连着旧元数据，
+     *   uri 没变不断播，下一切歌自然对齐）。
+     * - transport 与 queue 对不上（理论上不会）时只更新 UI、不碰 transport，绝不崩。
+     * - 与 play() 互斥（同一把锁），空新列表直接忽略。
+     */
+    suspend fun refreshQueue(newTracks: List<Track>, sourceTitle: String?): QueueRefreshResult =
+        playMutex.withLock {
+            if (newTracks.isEmpty()) return QueueRefreshResult(0, 0, 0)
+            val title = sourceTitle?.takeIf { it.isNotBlank() }
+            val old = queue
+            if (old.isEmpty() || currentIndex !in old.indices) {
+                // 无有效队列：收下新列表等用户点（本来也没在播，不碰 transport）
+                queue = newTracks
+                currentIndex = -1
+                _state.update { it.copy(queue = newTracks, currentIndex = -1, currentTrack = null, sourceTitle = title) }
+                return QueueRefreshResult(0, 0, 0)
+            }
+            fun Track.key() = bvid to cid
+            val newKeys = newTracks.map { it.key() }.toSet()
+            val oldKeys = old.map { it.key() }.toSet()
+            val playing = old[currentIndex]
+            // 最终队列：新顺序；在播被删则在原下标处保留
+            val final = newTracks.toMutableList()
+            if (playing.key() !in newKeys) final.add(currentIndex.coerceIn(0, final.size), playing)
+            val removed = old.count { it.key() !in newKeys && it.key() != playing.key() }
+            val updated = final.count { f -> old.find { it.key() == f.key() }?.let { it != f } == true }
+            val transportOk = try {
+                transport.mediaItemCount == old.size
+            } catch (_: Exception) {
+                false
+            }
+            if (transportOk) {
+                // 删：倒序，只动非在播；删到当前下标之前的要同步挪 cur
+                var cur = currentIndex
+                old.indices.sortedDescending()
+                    .filter { i -> i != currentIndex && old[i].key() !in newKeys }
+                    .forEach { i ->
+                        try {
+                            transport.removeMediaItem(i)
+                        } catch (_: Exception) {
+                        }
+                        if (i < cur) cur--
+                    }
+                // 增/改：按最终顺序走一遍（B 站分 P 只增删不重排，走位必然对齐；
+                // 万一重排，对不上就停手：UI 照新，transport 不再动，绝不插出重复项）
+                val mirror = old.filterIndexed { i, t -> i == currentIndex || t.key() in newKeys }.toMutableList()
+                var tPlay = cur
+                val addedTracks = final.filter { it.key() !in mirror.map { m -> m.key() }.toSet() }
+                val urlMap = resolveUrls(addedTracks)
+                val imageFormat = prefs.imageFormat.first()
+                val urlCache = try {
+                    prefs.playUrlCache.first()
+                } catch (_: Exception) {
+                    emptyMap()
+                }
+                val nowMs = System.currentTimeMillis()
+                var added = 0
+                for ((i, item) in final.withIndex()) {
+                    val m = mirror.getOrNull(i)
+                    if (m != null && m.key() == item.key()) {
+                        if (m != item && i != tPlay) {
+                            val url = urlCache["${item.bvid}:${item.cid}"]
+                                ?.takeIf { it.isFresh(nowMs) }?.url
+                            if (url != null) {
+                                try {
+                                    transport.replaceMediaItem(i, item.toMediaItem(url, imageFormat))
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                        continue
+                    }
+                    if (mirror.any { it.key() == item.key() }) break // 重排：停手保平安
+                    val url = urlMap[item] ?: continue // 新增解析失败：UI 和 transport 都跳过该集
+                    try {
+                        transport.addMediaItem(i, item.toMediaItem(url, imageFormat))
+                    } catch (_: Exception) {
+                        continue
+                    }
+                    mirror.add(i, item)
+                    if (i <= tPlay) tPlay++
+                    added++
+                }
+                val finalIdx = final.indexOfFirst { it.key() == playing.key() }.takeIf { it >= 0 } ?: tPlay
+                queue = final
+                currentIndex = finalIdx
+                _state.update {
+                    it.copy(
+                        queue = final,
+                        currentIndex = finalIdx,
+                        currentTrack = final.getOrNull(finalIdx),
+                        sourceTitle = title,
+                    )
+                }
+                persistQueue()
+                return QueueRefreshResult(added, removed, updated)
+            }
+            // transport 对不上：只更新 UI
+            val finalIdx = final.indexOfFirst { it.key() == playing.key() }.takeIf { it >= 0 } ?: 0
+            queue = final
+            currentIndex = finalIdx
+            _state.update {
+                it.copy(
+                    queue = final,
+                    currentIndex = finalIdx,
+                    currentTrack = final.getOrNull(finalIdx),
+                    sourceTitle = title,
+                )
+            }
+            persistQueue()
+            return QueueRefreshResult(final.count { it.key() !in oldKeys }, removed, updated)
+        }
+
+    /**
      * Play queue starting at [index]. Builds MediaItems via BiliRepository.getPlayUrl (audio-only),
      * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
      * 加载期间 isLoading=true 且互斥，防止重复点击。
@@ -159,47 +342,12 @@ class PlayerManager @Inject constructor(
             // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
             val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
 
-            // Build MediaItems — playurl 持久缓存命中即用，未命中并发补（限 4 并发防风控），结果回写；
-            // 跳过解析失败的项。冷启动/重装恢复时缓存命中则 0 网络解析、秒开。
-            val nowMs = System.currentTimeMillis()
-            val urlCache = try {
-                prefs.playUrlCache.first()
-            } catch (_: Exception) {
-                emptyMap()
-            }
-            val cachedUrls = mutableMapOf<Track, String>()
-            val missing = mutableListOf<Track>()
-            for (t in resolved) {
-                val hit = urlCache["${t.bvid}:${t.cid}"]?.takeIf { it.isFresh(nowMs) }?.url
-                if (hit.isNullOrBlank()) missing.add(t) else cachedUrls[t] = hit
-            }
-            if (missing.isNotEmpty()) {
-                val semaphore = Semaphore(4)
-                val fetched = supervisorScope {
-                    missing.map { track ->
-                        async {
-                            runCatching {
-                                semaphore.withPermit {
-                                    val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
-                                        is Result.Success -> r.data.takeIf { it.isNotBlank() }
-                                        is Result.Error -> null
-                                    }
-                                    if (url != null) track to url else null
-                                }
-                            }.getOrNull()
-                        }
-                    }.awaitAll().filterNotNull()
-                }
-                if (fetched.isNotEmpty()) {
-                    prefs.putPlayUrls(
-                        fetched.associate { (t, u) -> "${t.bvid}:${t.cid}" to CachedPlayUrl(u, nowMs) },
-                        nowMs,
-                    )
-                    fetched.forEach { (t, u) -> cachedUrls[t] = u }
-                }
-            }
+            // playurl 批量解析（缓存命中即用、未命中并发补，见 resolveUrls）；失败项跳过。
+            // 冷启动/重装恢复时缓存命中则 0 网络解析、秒开。
+            val urlMap = resolveUrls(resolved)
+            val imageFormat = prefs.imageFormat.first()
             val items = resolved.mapNotNull { track ->
-                cachedUrls[track]?.let { track to it }
+                urlMap[track]?.let { track to it }
             }
             if (items.isEmpty()) {
                 _state.update { it.copy(isPlaying = false, isLoading = false, errorMessage = "暂无可播放音源") }
@@ -225,23 +373,8 @@ class PlayerManager @Inject constructor(
             effectiveScope().launch {
                 prefs.setLastPlayback(playableTracks, startIndex, resolvedStartPosition, resolvedSourceTitle)
             }
-            val imageFormat = prefs.imageFormat.first()
-
             transport.setMediaItems(
-                items.map { (track, url) ->
-                    MediaItem.Builder()
-                        .setUri(url)
-                        .setMediaId("${track.bvid}:${track.cid}")
-                        .setCustomCacheKey("${track.bvid}:${track.cid}")
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(track.title)
-                                .setArtist(track.author)
-                                .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
-                                .build()
-                        )
-                        .build()
-                },
+                items.map { (track, url) -> track.toMediaItem(url, imageFormat) },
                 startIndex,
                 resolvedStartPosition,
             )
@@ -574,18 +707,7 @@ class PlayerManager @Inject constructor(
                         effectiveScope().launch {
                             prefs.putPlayUrls(mapOf("${track.bvid}:${track.cid}" to CachedPlayUrl(newUrl)))
                         }
-                        val imageFormat = prefs.imageFormat.first()
-                        val newItem = MediaItem.Builder()
-                            .setUri(newUrl)
-                            .setMediaId("${track.bvid}:${track.cid}")
-                            .setCustomCacheKey("${track.bvid}:${track.cid}")
-                            .setMediaMetadata(
-                                MediaMetadata.Builder()
-                                    .setTitle(track.title)
-                                    .setArtist(track.author)
-                                    .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
-                                    .build()
-                            ).build()
+                        val newItem = track.toMediaItem(newUrl, prefs.imageFormat.first())
                         transport.replaceMediaItem(currentIndex, newItem)
                     }
                 }

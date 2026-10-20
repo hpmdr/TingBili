@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
@@ -106,11 +108,21 @@ import coil3.compose.AsyncImage
 fun PlayerScreen(
     onBack: () -> Unit = {},
     onLoginClick: () -> Unit = {},
+    onDetailClick: (String) -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
     val context = LocalContext.current
     val s by vm.uiState.collectAsStateWithLifecycle()
+    val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
+    val refreshMessage by vm.message.collectAsStateWithLifecycle()
+    LaunchedEffect(refreshMessage) {
+        refreshMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            vm.consumeMessage()
+        }
+    }
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
     val headerTitle = playerHeaderTitle(s.track)
 
@@ -118,7 +130,7 @@ fun PlayerScreen(
     var showTimerSheet by remember { mutableStateOf(false) }
     var showChapterSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
-    var showSettingsSheet by remember { mutableStateOf(false) }
+    var showMoreSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -130,7 +142,7 @@ fun PlayerScreen(
     ) {
         PlayerTopBar(
             title = headerTitle,
-            onMoreClick = { showSettingsSheet = true },
+            onMoreClick = { showMoreSheet = true },
             onBack = onBack,
         )
 
@@ -359,12 +371,93 @@ fun PlayerScreen(
             onDismiss = { showSubtitleSheet = false },
         )
     }
-    if (showSettingsSheet) {
-        PlaybackSettingsSheet(
-            currentScale = s.subtitleScale,
-            onSelectScale = vm::setSubtitleScale,
-            onDismiss = { showSettingsSheet = false },
+    if (showMoreSheet) {
+        PlayerMoreSheet(
+            refreshing = isRefreshing,
+            onRefresh = { vm.refreshBv() },
+            onDetail = {
+                s.track?.bvid?.takeIf { it.isNotBlank() }?.let(onDetailClick)
+                showMoreSheet = false
+            },
+            onSettings = {
+                showMoreSheet = false
+                onSettingsClick()
+            },
+            onDismiss = { showMoreSheet = false },
         )
+    }
+}
+
+/** 右上 ⋮ 动作表：刷新当前内容 / 查看 BV 详情 / 播放设置（切字幕/定时等仍在原位） */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayerMoreSheet(
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    onDetail: () -> Unit,
+    onSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PlayerMoreRow(
+                icon = Icons.Filled.Refresh,
+                label = if (refreshing) "正在刷新…" else "刷新当前内容",
+                trailingLoading = refreshing,
+                enabled = !refreshing,
+                onClick = onRefresh,
+            )
+            PlayerMoreRow(
+                icon = Icons.Filled.Info,
+                label = "查看 BV 详情",
+                onClick = onDetail,
+            )
+            PlayerMoreRow(
+                icon = Icons.Filled.Settings,
+                label = "播放设置",
+                onClick = onSettings,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerMoreRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    trailingLoading: Boolean = false,
+    enabled: Boolean = true,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (trailingLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
+        }
     }
 }
 
@@ -1190,66 +1283,6 @@ private fun SubtitleSheet(
                     }
                 }
             }
-        }
-    }
-}
-
-/** 字幕字号四档：相对系数（跟随系统字体缩放），默认标准 1.0x */
-private val SUBTITLE_SCALE_OPTIONS = listOf(
-    0.85f to "小",
-    1f to "标准",
-    1.15f to "大",
-    1.3f to "特大",
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PlaybackSettingsSheet(
-    currentScale: Float,
-    onSelectScale: (Float) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(text = "播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = "字幕字号",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SUBTITLE_SCALE_OPTIONS.forEach { (scale, label) ->
-                val selected = kotlin.math.abs(currentScale - scale) < 0.001f
-                Surface(
-                    onClick = { onSelectScale(scale) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                        if (selected) {
-                            Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

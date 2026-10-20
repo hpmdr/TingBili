@@ -64,6 +64,14 @@ class PlayerManagerTest {
         override fun replaceMediaItem(index: Int, item: MediaItem) {
             mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it[index] = item }
         }
+
+        override val mediaItemCount: Int get() = mediaItems.size
+        override fun addMediaItem(index: Int, item: MediaItem) {
+            mediaItems = mediaItems.toMutableList().also { it.add(index.coerceIn(0, it.size), item) }
+        }
+        override fun removeMediaItem(index: Int) {
+            mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it.removeAt(index) }
+        }
         override fun prepare() {}
         override fun play() { _isPlaying = true }
         override fun pause() { _isPlaying = false }
@@ -207,6 +215,70 @@ class PlayerManagerTest {
         runCurrent()
         assertEquals(false, playerManager.state.value.isPlaying)
         assertEquals(null, playerManager.state.value.sleepRemainSec)
+        playerManager.release()
+    }
+
+    @Test
+    fun `refreshQueue appends new episodes without interrupting`() = runTest {
+        playerManager.testScope = this
+        val old = listOf(
+            Track("BV1", 1, "P1", "a", "", 1000, null),
+            Track("BV1", 2, "P2", "a", "", 1000, null),
+        )
+        playerManager.play(old, 0)
+        runCurrent()
+        val res = playerManager.refreshQueue(old + Track("BV1", 3, "P3", "a", "", 1000, null), "书")
+        assertEquals(1, res.added)
+        assertEquals(0, res.removed)
+        assertEquals(3, fakePlayer.mediaItems.size)
+        assertEquals("BV1:3", fakePlayer.mediaItems[2].mediaId)
+        assertEquals(0, playerManager.state.value.currentIndex)
+        assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `refreshQueue removes stale renames kept and holds position`() = runTest {
+        playerManager.testScope = this
+        val old = listOf(
+            Track("BV1", 1, "P1", "a", "", 1000, null),
+            Track("BV1", 2, "P2", "a", "", 1000, null),
+            Track("BV1", 3, "P3", "a", "", 1000, null),
+        )
+        playerManager.play(old, 1)
+        runCurrent()
+        val new = listOf(
+            Track("BV1", 1, "P1-new", "a", "", 1000, null),
+            Track("BV1", 2, "P2", "a", "", 1000, null),
+            Track("BV1", 4, "P4", "a", "", 1000, null),
+        )
+        val res = playerManager.refreshQueue(new, "书")
+        assertEquals(1, res.added)
+        assertEquals(1, res.removed) // P3 没了（非在播，直接删）
+        assertEquals(1, res.updated) // P1 改名
+        assertEquals(listOf("BV1:1", "BV1:2", "BV1:4"), fakePlayer.mediaItems.map { it.mediaId })
+        assertEquals(1, playerManager.state.value.currentIndex) // 还在 P2 上
+        assertEquals("P1-new", fakePlayer.mediaItems[0].mediaMetadata.title)
+        assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `refreshQueue keeps deleted playing episode in place`() = runTest {
+        playerManager.testScope = this
+        val old = listOf(
+            Track("BV1", 1, "P1", "a", "", 1000, null),
+            Track("BV1", 2, "P2", "a", "", 1000, null),
+        )
+        playerManager.play(old, 0)
+        runCurrent()
+        // 在播的 P1 被删：保留原位（拍板语义），不计 removed
+        val res = playerManager.refreshQueue(listOf(old[1]), "书")
+        assertEquals(0, res.removed)
+        assertEquals(listOf("BV1:1", "BV1:2"), fakePlayer.mediaItems.map { it.mediaId })
+        assertEquals(0, playerManager.state.value.currentIndex)
+        assertEquals("BV1", playerManager.state.value.currentTrack?.bvid)
+        assertTrue(playerManager.state.value.isPlaying)
         playerManager.release()
     }
 

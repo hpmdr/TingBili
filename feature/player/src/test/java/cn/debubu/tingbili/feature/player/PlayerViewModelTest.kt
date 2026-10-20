@@ -73,6 +73,8 @@ class PlayerViewModelTest {
         override val isPlaying: Boolean get() = false
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {}
         override fun replaceMediaItem(index: Int, item: MediaItem) {}
+        override fun addMediaItem(index: Int, item: MediaItem) {}
+        override fun removeMediaItem(index: Int) {}
         override fun prepare() {}
         override fun play() {}
         override fun pause() {}
@@ -150,7 +152,7 @@ class PlayerViewModelTest {
         player.restoreLastPlayback()
         prefs.stepSec.first()
         assertEquals("BV1xx", player.state.value.currentTrack?.bvid)
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -171,7 +173,7 @@ class PlayerViewModelTest {
         prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -206,7 +208,7 @@ class PlayerViewModelTest {
         prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, cache, auth, prefs)
+        val vm = PlayerViewModel(player, cache, auth, prefs, repo)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -235,7 +237,7 @@ class PlayerViewModelTest {
         val callsBefore = api.subtitleCalls
         prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
         player.restoreLastPlayback()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -243,6 +245,29 @@ class PlayerViewModelTest {
             assertEquals(SubtitleLoadState.Ready, vm.uiState.value.subtitleLoadState)
             assertEquals(lines, vm.uiState.value.lyrics)
             assertEquals(callsBefore, api.subtitleCalls)
+        } finally {
+            collectJob.cancel()
+        }
+    }
+
+    @Test
+    fun `refreshBv keeps old queue on view failure`() = runTest(dispatcher) {
+        loginAndRebuildAuth()
+        val track = demoTrack()
+        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        player.restoreLastPlayback()
+        // SlowSubtitleApi.view 回空 data → getViewDetail 走 Error（真机对应“刷新失败”）
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        val collectJob = launch { vm.uiState.collect {} }
+        try {
+            runCurrent()
+            vm.refreshBv()
+            runCurrent()
+            advanceTimeBy(200)
+            assertEquals("刷新失败，已保留旧数据", vm.message.value)
+            assertEquals(listOf(track), vm.uiState.value.queue)
+            vm.consumeMessage()
+            assertEquals(null, vm.message.value)
         } finally {
             collectJob.cancel()
         }
@@ -272,4 +297,5 @@ private class FakeSubtitleDiskDao(
         map.values.sortedByDescending { it.fetchedAt }.drop(keep).forEach { map.remove(it.cacheKey) }
     }
     override suspend fun clear() = map.clear()
+    override suspend fun deleteByPrefix(prefix: String) { map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) } }
 }

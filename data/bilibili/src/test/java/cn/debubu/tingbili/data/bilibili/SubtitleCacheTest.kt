@@ -16,6 +16,8 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -137,6 +139,19 @@ class SubtitleCacheTest {
     }
 
     @Test
+    fun `invalidateBv clears memory and disk`() = runTest {
+        cache.tracks("BV1xx", 1001L)
+        assertEquals(1, subtitleCalls)
+        val tracks = listOf(cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack("zh-CN", "中文", subUrl, false))
+        cache.store("BV1xx", 1001L, tracks, 0, listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1L, "x")), "中文", false)
+        assertNotNull(cache.cached("BV1xx", 1001L))
+        cache.invalidateBv("BV1xx")
+        assertNull(cache.cached("BV1xx", 1001L))
+        cache.tracks("BV1xx", 1001L)
+        assertEquals(2, subtitleCalls)
+    }
+
+    @Test
     fun `disk prune keeps newest 50`() = runTest {
         val tracks = listOf(cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack("zh-CN", "中文", subUrl, false))
         val lines = listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1000L, "x"))
@@ -155,5 +170,6 @@ private class FakeSubtitleDiskDao : SubtitleDiskDao {
         drop.forEach { map.remove(it) }
     }
     override suspend fun clear() = map.clear()
+    override suspend fun deleteByPrefix(prefix: String) { map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) } }
     fun size(): Int = map.size
 }
