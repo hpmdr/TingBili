@@ -68,6 +68,7 @@ fun HomeScreen(
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     val snapshot by vm.snapshotTracks.collectAsStateWithLifecycle()
+    val pagingStarted by vm.pagingStarted.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
     val snapshotGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
@@ -105,6 +106,15 @@ fun HomeScreen(
         if (showSnapshot && refreshState is LoadState.Loading) {
             Text(
                 text = "上次推荐 · 正在更新",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        } else if (showSnapshot && !pagingStarted) {
+            Text(
+                text = "上次推荐 · 下拉获取新内容",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 4.dp),

@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -63,23 +64,34 @@ class HomeViewModel @Inject constructor(
         return nowMs - ts > HOME_SNAPSHOT_TTL_MS
     }
 
+    /**
+     * 冷启动不自动刷新：有快照就直接看上次的，用户下拉才走网络；
+     * 无快照（首次安装/被清）才自动起 Paging。省流量，快照稳定可见。
+     */
+    private val _pagingStarted = MutableStateFlow(false)
+    val pagingStarted: StateFlow<Boolean> = _pagingStarted.asStateFlow()
+
     init {
         viewModelScope.launch {
             try {
                 val entity = homeSnapshotDao.get()
-                if (entity != null) {
-                    val tracks = try {
+                val tracks = if (entity != null) {
+                    try {
                         json.decodeFromString<List<Track>>(entity.tracksJson)
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    if (tracks.isNotEmpty()) {
-                        _snapshotTracks.value = tracks.take(MAX_SNAPSHOT_TRACKS)
-                        _snapshotUpdatedAt.value = entity.updatedAt
-                    }
+                } else emptyList()
+                if (tracks.isNotEmpty()) {
+                    _snapshotTracks.value = tracks.take(MAX_SNAPSHOT_TRACKS)
+                    _snapshotUpdatedAt.value = entity!!.updatedAt
+                    _pagingStarted.value = false
+                } else {
+                    _pagingStarted.value = true
                 }
             } catch (_: Exception) {
-                // 快照读失败不打断首页，纯当无缓存
+                // 快照读失败不打断首页，纯当无缓存：自动起 Paging
+                _pagingStarted.value = true
             }
         }
     }
@@ -90,24 +102,30 @@ class HomeViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: StateFlow<PagingData<Track>> =
-        combine(prefs.homeKeywords, _refreshTick) { kws, _ ->
+        combine(prefs.homeKeywords, _refreshTick, _pagingStarted) { kws, _, started ->
             // 随机重排，多词时尽量与上次不同，避免“刷了个寂寞”
             var shuffled = kws.shuffled()
             if (shuffled.size > 1 && shuffled == lastKeywordOrder) shuffled = kws.shuffled()
             lastKeywordOrder = shuffled
-            shuffled
+            shuffled to started
         }
-            .flatMapLatest { ordered ->
-                Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
-                    HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
-                        saveSnapshot(tracks, orderedKeywords)
-                    }
-                }.flow.cachedIn(viewModelScope)
+            .flatMapLatest { (ordered, started) ->
+                if (!started) {
+                    // 有快照的冷启动：不建 Pager、不碰网络，只看缓存
+                    flowOf(PagingData.empty())
+                } else {
+                    Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
+                        HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
+                            saveSnapshot(tracks, orderedKeywords)
+                        }
+                    }.flow.cachedIn(viewModelScope)
+                }
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, PagingData.empty())
 
-    /** 下拉刷新：随机重排关键词，推荐流自动重建（快照不清，失败时还能兜底） */
+    /** 用户手动刷新（下拉）：开闸放行 Paging，随机重排关键词并重建推荐流（快照不清，失败时还能兜底） */
     fun shuffleKeywords() {
+        _pagingStarted.value = true
         _refreshTick.value += 1
     }
 

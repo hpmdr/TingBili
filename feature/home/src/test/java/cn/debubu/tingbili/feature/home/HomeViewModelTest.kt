@@ -313,6 +313,31 @@ class HomeViewModelTest {
         advanceUntilIdle()
         assertEquals(null, vm.snapshotTracks.first())
     }
+
+    @Test
+    fun `no cache auto starts paging`() = runTest(dispatcher) {
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        advanceUntilIdle()
+        assertEquals(true, vm.pagingStarted.first())
+    }
+
+    @Test
+    fun `cached snapshot blocks auto paging until manual refresh`() = runTest(dispatcher) {
+        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
+        snapshotDao.entity = HomeSnapshotEntity(
+            keywordsJson = json.encodeToString(listOf("有声小说")),
+            tracksJson = json.encodeToString(tracks),
+            updatedAt = System.currentTimeMillis()
+        )
+        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao)
+        advanceUntilIdle()
+        assertEquals(false, vm.pagingStarted.first())
+        assertEquals(1, vm.snapshotTracks.first()?.size)
+        vm.shuffleKeywords()
+        advanceUntilIdle()
+        assertEquals(true, vm.pagingStarted.first())
+    }
 }
 
 // helper extension for preferencesDataStoreFile in test
