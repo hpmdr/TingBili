@@ -114,7 +114,9 @@ class HomeViewModel @Inject constructor(
                     // 有快照的冷启动：不建 Pager、不碰网络，只看缓存
                     flowOf(PagingData.empty())
                 } else {
-                    Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
+                    // maxSize 显式有界：默认不清旧页（Track 很小但页多了也是堆），
+                    // 200 条后自动丢远离视口的页，内存不随滑动涨。
+                    Pager(PagingConfig(pageSize = 20, enablePlaceholders = false, maxSize = 200)) {
                         HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
                             saveSnapshot(tracks, orderedKeywords)
                         }

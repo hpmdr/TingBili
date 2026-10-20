@@ -1,7 +1,9 @@
 package cn.debubu.tingbili.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +93,13 @@ fun HomeScreen(
         HomeSearchEntry(
             onClick = onSearchClick,
             keywords = homeKeywords,
+            // 双击标题回顶部：下拉刷新处同款（两个 grid 哪个可见回哪个）
+            onTitleDoubleClick = {
+                scope.launch {
+                    gridState.animateScrollToItem(0)
+                    snapshotGridState.animateScrollToItem(0)
+                }
+            },
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         )
         if (paging.loadState.refresh is LoadState.Loading && (paging.itemCount > 0 || showSnapshot)) {
@@ -206,10 +215,12 @@ private fun SnapshotGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeSearchEntry(
     onClick: () -> Unit,
     keywords: List<String>,
+    onTitleDoubleClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -219,7 +230,11 @@ private fun HomeSearchEntry(
         Text(
             text = "听视频",
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onDoubleClick = onTitleDoubleClick,
+            )
         )
         Spacer(Modifier.width(12.dp))
         Row(
