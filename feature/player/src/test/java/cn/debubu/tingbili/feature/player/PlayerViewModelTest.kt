@@ -222,6 +222,17 @@ class PlayerViewModelTest {
             collectJob.cancel()
         }
     }
+
+    @Test
+    fun `subtitle scale defaults persists and clamps`() = runTest(dispatcher) {
+        assertEquals(1f, prefs.subtitleScale.first())
+        prefs.setSubtitleScale(1.15f)
+        assertEquals(1.15f, prefs.subtitleScale.first())
+        prefs.setSubtitleScale(99f)
+        assertEquals(1.3f, prefs.subtitleScale.first())
+        prefs.setSubtitleScale(0f)
+        assertEquals(0.85f, prefs.subtitleScale.first())
+    }
 }
 
 private fun android.content.Context.preferencesDataStoreFile(name: String): java.io.File = java.io.File(cacheDir, "$name.preferences_pb")

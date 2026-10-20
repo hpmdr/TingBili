@@ -40,6 +40,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val stepSec: Flow<Int> = ds.data.map { it[STEP_SEC] ?: 15 }
     val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
+    /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
+    val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（默认 30，启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 30 }
@@ -95,6 +97,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setSpeed(v: Float) {
         ds.edit { it[SPEED] = v }
+    }
+
+    suspend fun setSubtitleScale(v: Float) {
+        ds.edit { it[SUBTITLE_SCALE] = v.coerceIn(0.85f, 1.3f) }
     }
 
     suspend fun setSleepFinishChapter(v: Boolean) {
@@ -246,6 +252,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val STEP_SEC = intPreferencesKey("step_sec")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val SPEED = floatPreferencesKey("speed")
+        val SUBTITLE_SCALE = floatPreferencesKey("subtitle_scale")
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
         val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")

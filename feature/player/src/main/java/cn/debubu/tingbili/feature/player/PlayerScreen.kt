@@ -210,6 +210,7 @@ fun PlayerScreen(
                     lyrics = s.lyrics,
                     currentIndex = s.currentLyricIndex,
                     status = s.subtitleLoadState,
+                    fontScale = s.subtitleScale,
                     onCardClick = {
                         when (s.subtitleLoadState) {
                             SubtitleLoadState.Ready -> lyricFullscreen = true
@@ -359,7 +360,11 @@ fun PlayerScreen(
         )
     }
     if (showSettingsSheet) {
-        PlaybackSettingsSheet(onDismiss = { showSettingsSheet = false })
+        PlaybackSettingsSheet(
+            currentScale = s.subtitleScale,
+            onSelectScale = vm::setSubtitleScale,
+            onDismiss = { showSettingsSheet = false },
+        )
     }
 }
 
@@ -650,6 +655,7 @@ private fun MiniLyricCard(
     currentIndex: Int,
     status: SubtitleLoadState,
     onCardClick: () -> Unit,
+    fontScale: Float = 1f,
 ) {
     val prev = lyrics.getOrNull(currentIndex - 1)?.text
     val current = lyrics.getOrNull(currentIndex)?.text
@@ -740,7 +746,9 @@ private fun MiniLyricCard(
                 if (!prev.isNullOrBlank()) {
                     Text(
                         text = prev,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -750,7 +758,9 @@ private fun MiniLyricCard(
                 }
                 Text(
                     text = current,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = MaterialTheme.typography.titleMedium.fontSize * fontScale,
+                    ),
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
@@ -761,7 +771,9 @@ private fun MiniLyricCard(
                 if (!next1.isNullOrBlank()) {
                     Text(
                         text = next1,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -772,7 +784,9 @@ private fun MiniLyricCard(
                 if (!next2.isNullOrBlank()) {
                     Text(
                         text = next2,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -855,8 +869,15 @@ private fun FullscreenLyricsList(
                 val isCurrent = idx == state.currentLyricIndex
                 Text(
                     text = line.text,
-                    style = if (isCurrent) MaterialTheme.typography.titleMedium
-                        else MaterialTheme.typography.bodySmall,
+                    style = if (isCurrent) {
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontSize = MaterialTheme.typography.titleMedium.fontSize * state.subtitleScale,
+                        )
+                    } else {
+                        MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * state.subtitleScale,
+                        )
+                    },
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     color = if (isCurrent) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1173,24 +1194,61 @@ private fun SubtitleSheet(
     }
 }
 
+/** 字幕字号四档：相对系数（跟随系统字体缩放），默认标准 1.0x */
+private val SUBTITLE_SCALE_OPTIONS = listOf(
+    0.85f to "小",
+    1f to "标准",
+    1.15f to "大",
+    1.3f to "特大",
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlaybackSettingsSheet(onDismiss: () -> Unit) {
+private fun PlaybackSettingsSheet(
+    currentScale: Float,
+    onSelectScale: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(text = "播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                text = "设置内容整理中，敬请期待",
-                style = MaterialTheme.typography.bodyMedium,
+                text = "字幕字号",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            SUBTITLE_SCALE_OPTIONS.forEach { (scale, label) ->
+                val selected = kotlin.math.abs(currentScale - scale) < 0.001f
+                Surface(
+                    onClick = { onSelectScale(scale) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                        if (selected) {
+                            Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
         }
     }

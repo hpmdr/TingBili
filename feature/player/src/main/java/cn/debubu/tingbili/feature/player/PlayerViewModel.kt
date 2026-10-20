@@ -49,6 +49,8 @@ data class PlayerUiState(
     val subtitleIndex: Int = 0,
     /** 字幕栏状态：加载中 / 就绪 / 无字幕 / 未登录 / 失败可重试 */
     val subtitleLoadState: SubtitleLoadState = SubtitleLoadState.Loading,
+    /** 字幕字号缩放（0.85/1.0/1.15/1.3，全屏+迷你一起跟） */
+    val subtitleScale: Float = 1f,
     /** 睡眠定时剩余秒数，null=关闭 */
     val sleepRemainSec: Int? = null,
     /** 倒计时总秒数（设定值，弹窗高亮用） */
@@ -146,7 +148,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** 睡眠定时快捷选项（设置页可改，默认 30/60/90/120） */
-    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec) { p, sub, stepSec ->
+    val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec, prefs.subtitleScale) { p, sub, stepSec, subtitleScale ->
         val lyrics = sub.lines
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
         PlayerUiState(
@@ -158,6 +160,7 @@ class PlayerViewModel @Inject constructor(
             bufferedPositionMs = p.bufferedPositionMs,
             durationMs = p.durationMs,
             stepSec = stepSec,
+            subtitleScale = subtitleScale,
             speed = p.speed,
             repeatMode = p.repeatMode,
             track = p.currentTrack,
@@ -234,6 +237,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun cancelSleepTimer() = player.cancelSleepTimer()
+
+    /** 字幕字号：设置页四档，写偏好即持久化 */
+    fun setSubtitleScale(v: Float) {
+        viewModelScope.launch { prefs.setSubtitleScale(v) }
+    }
 
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
     fun cycleSpeed() {
