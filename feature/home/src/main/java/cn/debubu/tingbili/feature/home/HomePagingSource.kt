@@ -9,6 +9,8 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
  * 首页发现流：策展关键词分页轮换（第 1 页搜词 1、第 2 页搜词 2……循环），
  * 关键词列表来自设置（DataStore），增减后自动刷新。
  *
+ * 同一关键词的第几轮决定接口页码（轮内从第 1 页起取）：第 5 页=词 1 第 2 页，
+ * 而不是接口第 5 页，否则每个词的前几页永远被跳过。
  * @param onFirstPage 首页加载成功后的回调（SWR 快照用），调用方负责落盘，异常内部吞掉不影响分页。
  */
 class HomePagingSource(
@@ -22,7 +24,8 @@ class HomePagingSource(
         return try {
             val kws = keywords.ifEmpty { DEFAULT_RECOMMEND_KEYWORDS }
             val keyword = kws[(page - 1) % kws.size]
-            val tracks = repo.searchPage(keyword, page)
+            val apiPage = (page - 1) / kws.size + 1
+        val tracks = repo.searchPage(keyword, apiPage)
             val nextKey = if (tracks.isEmpty()) null else page + 1
             val prevKey = if (page == 1) null else page - 1
             if (page == 1 && tracks.isNotEmpty()) {

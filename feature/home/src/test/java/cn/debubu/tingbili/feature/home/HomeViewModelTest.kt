@@ -252,6 +252,30 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `rotation restarts api page per keyword round`() = runTest {
+        val calls = mutableListOf<Pair<String, Int>>()
+        val api = object : BiliApi {
+            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto {
+                calls.add(keyword to page)
+                return SearchDto(code = 0, data = SearchData(result = fakeApi.searchResult, page = page, numResults = 2, numPages = 9))
+            }
+            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        }
+        val kws = listOf("A", "B", "C", "D")
+        val source = HomePagingSource(BiliRepository(api), kws)
+        (1..6).forEach { pg ->
+            val r = source.load(PagingSource.LoadParams.Refresh(key = pg, loadSize = 20, placeholdersEnabled = false))
+            assertTrue(r is PagingSource.LoadResult.Page)
+        }
+        assertEquals(
+            listOf("A" to 1, "B" to 1, "C" to 1, "D" to 1, "A" to 2, "B" to 2),
+            calls
+        )
+    }
+
+    @Test
     fun `HomePagingSource error propagates`() = runTest {
         val errorApi = object : BiliApi {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = throw RuntimeException("network error")
