@@ -48,7 +48,12 @@ dependencies {
     implementation(libs.material.icons.extended)
     testImplementation(libs.junit)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.arch.core.testing)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.media3.exoplayer)
+    testImplementation(libs.datastore.preferences)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
 }
 
 kotlin {

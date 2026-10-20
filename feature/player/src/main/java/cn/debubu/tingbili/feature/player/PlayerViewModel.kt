@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -76,6 +77,8 @@ class PlayerViewModel @Inject constructor(
         val isAi: Boolean = false,
     )
 
+    // 首帧即发空字幕占位：combine 不等字幕网络，track/进度秒出，字幕到了再补。
+    // 否则打开播放页必先闪一帧“未播放”（uiState 初始值 track=null），字幕越慢闪得越明显。
     private val subtitleFlow: Flow<SubState> =
         combine(trackFlow, selectedSubtitleIndex) { track, idx -> track to idx }
             .flatMapLatest { (track, idx) ->
@@ -94,6 +97,7 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
             }
+            .onStart { emit(SubState()) }
 
     init {
         viewModelScope.launch {
