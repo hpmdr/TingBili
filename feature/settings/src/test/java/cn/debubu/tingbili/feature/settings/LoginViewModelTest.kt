@@ -43,18 +43,21 @@ class LoginViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun fakeAuth(polls: List<QrStatus>): AuthRepository =
-        object : AuthRepository(Json { ignoreUnknownKeys = true }, store) {
-            override suspend fun generateQr(): Result<QrData> =
-                Result.success(QrData("K", "https://qr/x"))
-
-            private var pollIndex = 0
-            override suspend fun pollQr(qrcodeKey: String): QrStatus =
-                polls.getOrElse(pollIndex++) { polls.last() }
-
-            override suspend fun finishWebLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
-                Result.success(BiliSession("S", "J", 7L))
+    private inner class FakeAuth(val polls: List<QrStatus>) :
+        AuthRepository(Json { ignoreUnknownKeys = true }, store) {
+        var generateCalls = 0
+        private var pollIndex = 0
+        override suspend fun generateQr(): Result<QrData> {
+            generateCalls++
+            return Result.success(QrData("K", "https://qr/x"))
         }
+        override suspend fun pollQr(qrcodeKey: String): QrStatus =
+            polls.getOrElse(pollIndex++) { polls.last() }
+        override suspend fun finishWebLogin(redirectUrl: String, refreshToken: String): Result<BiliSession> =
+            Result.success(BiliSession("S", "J", 7L))
+    }
+
+    private fun fakeAuth(polls: List<QrStatus>) = FakeAuth(polls)
 
     @Test
     fun `transient poll failures keep qr alive`() = runTest(dispatcher) {
@@ -93,5 +96,47 @@ class LoginViewModelTest {
         advanceTimeBy(180_000)
         val terminal = vm.qr.value
         assertTrue(terminal is QrUi.Failed)
+    }
+
+    @Test
+    fun `stop freezes countdown while away`() = runTest(dispatcher) {
+        val vm = LoginViewModel(fakeAuth(listOf(QrStatus.Waiting)))
+        vm.startQr()
+        advanceTimeBy(2_500)
+        assertEquals(178, (vm.qr.value as QrUi.Ready).secondsLeft)
+        vm.stopQr()
+        advanceTimeBy(10_000)
+        // 停了就不走字：还是 178
+        assertEquals(178, (vm.qr.value as QrUi.Ready).secondsLeft)
+    }
+
+    @Test
+    fun `resume continues countdown without regenerating`() = runTest(dispatcher) {
+        val auth = fakeAuth(listOf(QrStatus.Waiting))
+        val vm = LoginViewModel(auth)
+        vm.startQr()
+        advanceTimeBy(3_500)
+        assertEquals(177, (vm.qr.value as QrUi.Ready).secondsLeft)
+        vm.stopQr()
+        vm.resumeQr() // 真时间几乎没走：扣 0 秒，原码续跑
+        advanceTimeBy(2_500)
+        assertEquals(1, auth.generateCalls)
+        assertEquals(175, (vm.qr.value as QrUi.Ready).secondsLeft)
+    }
+
+    @Test
+    fun `resume after expiry regenerates`() = runTest(dispatcher) {
+        val auth = fakeAuth(listOf(QrStatus.Waiting))
+        val vm = LoginViewModel(auth)
+        var nowMs = 1_000_000L
+        vm.clock = { nowMs }
+        vm.startQr()
+        advanceTimeBy(1_500)
+        vm.stopQr()
+        nowMs += 200_000 // 离开 200 秒：码早过期了
+        vm.resumeQr()
+        advanceTimeBy(1_500)
+        assertEquals(2, auth.generateCalls)
+        assertEquals(179, (vm.qr.value as QrUi.Ready).secondsLeft)
     }
 }

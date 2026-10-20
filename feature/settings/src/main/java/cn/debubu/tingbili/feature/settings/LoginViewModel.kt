@@ -44,16 +44,56 @@ class LoginViewModel @Inject constructor(
 
     private var workJob: Job? = null
 
+    /** 当前码的 key（暂停后恢复轮询用）；手动刷新/重取时清空 */
+    private var qrKey: String? = null
+
+    /** 切走暂停的时间点（切回时扣掉离开的秒数，过期了就重取） */
+    private var qrPausedAtMs: Long? = null
+
+    /** 测试可注入时钟，默认真时间 */
+    internal var clock: () -> Long = { System.currentTimeMillis() }
+
     fun startQr() {
         workJob?.cancel()
+        qrKey = null
+        qrPausedAtMs = null
         _qr.value = QrUi.Generating
-        workJob = viewModelScope.launch {
+        viewModelScope.launch {
             val res = auth.generateQr()
             val data = res.getOrElse {
                 _qr.value = QrUi.Failed(it.message ?: "二维码生成失败（可能是网络/风控，412 可换网重试）")
                 return@launch
             }
+            qrKey = data.qrcodeKey
             _qr.value = QrUi.Ready(data.url, QR_TTL_SEC)
+            launchQrLoop(data.qrcodeKey)
+        }
+    }
+
+    /**
+     * 切回扫码页：码还有效就地续跑（倒计时扣掉离开的时间，不重取、不换码），
+     * 失效/失败/初始态则重取。Success 保持不动。
+     */
+    fun resumeQr() {
+        val cur = _qr.value
+        if (cur is QrUi.Success) return
+        val key = qrKey
+        if (cur is QrUi.Ready && key != null) {
+            val elapsedSec = qrPausedAtMs?.let { ((clock() - it) / 1000).toInt().coerceAtLeast(0) } ?: 0
+            val remaining = cur.secondsLeft - elapsedSec
+            if (remaining > RESUME_MIN_SEC) {
+                _qr.value = cur.copy(secondsLeft = remaining)
+                launchQrLoop(key)
+                return
+            }
+        }
+        startQr()
+    }
+
+    private fun launchQrLoop(qrcodeKey: String) {
+        workJob?.cancel()
+        qrPausedAtMs = null
+        workJob = viewModelScope.launch {
             val countJob = launch {
                 while (true) {
                     delay(1000)
@@ -70,7 +110,7 @@ class LoginViewModel @Inject constructor(
             // 杀死二维码的只有倒计时走完和 86038 过期
             while (true) {
                 delay(POLL_INTERVAL_MS)
-                when (val st = auth.pollQr(data.qrcodeKey)) {
+                when (val st = auth.pollQr(qrcodeKey)) {
                     is QrStatus.Waiting, is QrStatus.Scanned -> {
                         (_qr.value as? QrUi.Ready)?.let {
                             if (it.notice != null) _qr.value = it.copy(notice = null)
@@ -98,8 +138,10 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /** 切走停轮询（省请求、防风控）：码还在就记下时间点，切回 resumeQr 续跑 */
     fun stopQr() {
         workJob?.cancel()
+        if (_qr.value is QrUi.Ready) qrPausedAtMs = clock()
     }
 
     fun loginWithCookies(raw: String) {
@@ -264,6 +306,8 @@ class LoginViewModel @Inject constructor(
     companion object {
         const val QR_TTL_SEC = 180
         const val POLL_INTERVAL_MS = 2000L
+        /** 切回时剩余秒数高于此值才续跑，否则直接重取（剩几秒的码没扫码价值） */
+        const val RESUME_MIN_SEC = 10
         /** 短信验证码有效期：照抄 PiliPlus 的 5 分钟 */
         const val SMS_CODE_TTL_MS = 5 * 60 * 1000L
     }

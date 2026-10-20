@@ -77,11 +77,11 @@ fun LoginScreen(
     }
 
     // 扫码取码统一走这里（初次进入/切回），避免重复生成浪费请求
-    // 切走扫码页即停轮询（省请求、防风控）；切回且码已失效则重取
+    // 切走扫码页即停轮询（省请求、防风控）；切回 resumeQr：有效续跑、失效重取
     LaunchedEffect(tab, autoStartQr) {
         if (!autoStartQr) return@LaunchedEffect
         if (tab == QR_TAB) {
-            if (vm.qr.value.let { it !is QrUi.Ready && it !is QrUi.Success }) vm.startQr()
+            vm.resumeQr()
         } else {
             vm.stopQr()
         }
