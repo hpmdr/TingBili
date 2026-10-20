@@ -80,6 +80,34 @@ class SubtitleCacheTest {
     }
 
     @Test
+    fun `linesResult propagates http failure and retries`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500))
+        val first = cache.linesResult(subUrl)
+        assertEquals(true, first is cn.debubu.tingbili.core.data.Result.Error)
+        // 失败不缓存：再调重新下载
+        server.enqueue(MockResponse().setBody("""{"body":[{"from":1.0,"to":2.0,"content":"好了"}]}""").setResponseCode(200))
+        val second = cache.linesResult(subUrl)
+        assertEquals(true, second is cn.debubu.tingbili.core.data.Result.Success)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `lines cache evicts oldest beyond cap`() = runTest {
+        repeat(7) {
+            server.enqueue(MockResponse().setBody("""{"body":[{"from":1.0,"to":2.0,"content":"x"}]}""").setResponseCode(200))
+        }
+        val urls = (1..6).map { server.url("/s$it.json").toString() }
+        urls.forEach { cache.lines(it) }
+        assertEquals(6, server.requestCount)
+        // 正文上限 5 条：最早的 u1 被挤掉，重下一遍
+        cache.lines(urls[0])
+        assertEquals(7, server.requestCount)
+        // 没被挤的命中缓存，不再请求
+        cache.lines(urls[5])
+        assertEquals(7, server.requestCount)
+    }
+
+    @Test
     fun `empty lines are not cached`() = runTest {
         server.enqueue(MockResponse().setBody("""{"body":[]}""").setResponseCode(200))
         server.enqueue(MockResponse().setBody("""{"body":[{"from":1.0,"to":2.0,"content":"后补"}]}""").setResponseCode(200))

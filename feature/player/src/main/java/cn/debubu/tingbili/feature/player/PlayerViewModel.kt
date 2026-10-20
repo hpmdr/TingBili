@@ -2,9 +2,11 @@ package cn.debubu.tingbili.feature.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -45,6 +47,8 @@ data class PlayerUiState(
     /** 可用字幕轨（已排序），单轨/无轨时切换入口隐藏 */
     val subtitleTracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack> = emptyList(),
     val subtitleIndex: Int = 0,
+    /** 字幕栏状态：加载中 / 就绪 / 无字幕 / 未登录 / 失败可重试 */
+    val subtitleLoadState: SubtitleLoadState = SubtitleLoadState.Loading,
     /** 睡眠定时剩余秒数，null=关闭 */
     val sleepRemainSec: Int? = null,
     /** 倒计时总秒数（设定值，弹窗高亮用） */
@@ -54,11 +58,17 @@ data class PlayerUiState(
     val sleepEndOfChapter: Boolean = false
 )
 
+/** 字幕栏五态：Loading 首帧即出（不挡标题），NoAuth 提示登录，Error 给重试 */
+enum class SubtitleLoadState {
+    Loading, Ready, Empty, NoAuth, Error
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val player: PlayerManager,
     private val subtitles: SubtitleCache,
+    private val auth: AuthRepository,
     private val prefs: PreferencesRepository,
 ) : ViewModel() {
 
@@ -74,24 +84,56 @@ class PlayerViewModel @Inject constructor(
         val lines: List<LyricLine> = emptyList(),
         val label: String? = null,
         val isAi: Boolean = false,
+        val status: SubtitleLoadState = SubtitleLoadState.Loading,
     )
 
-    // 首帧即发空字幕占位：combine 不等字幕网络，track/进度秒出，字幕到了再补。
+    /** 未登录：B 站字幕拉不出来，直接提示登录，不发网络请求 */
+    val isLoggedIn: StateFlow<Boolean> = auth.sessionFlow
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, auth.sessionFlow.value != null)
+
+    /** 字幕失败重试计数：+1 即按当前曲目重走一遍 */
+    private val _subtitleRetryTick = MutableStateFlow(0)
+
+    fun retrySubtitles() {
+        _subtitleRetryTick.value += 1
+    }
+
+    // 首帧即发 Loading 占位：combine 不等字幕网络，track/进度秒出，字幕到了再补。
     // 否则打开播放页必先闪一帧“未播放”（uiState 初始值 track=null），字幕越慢闪得越明显。
     private val subtitleFlow: Flow<SubState> =
-        combine(trackFlow, selectedSubtitleIndex) { track, idx -> track to idx }
-            .flatMapLatest { (track, idx) ->
+        combine(trackFlow, selectedSubtitleIndex, _subtitleRetryTick, isLoggedIn) { track, idx, _, loggedIn ->
+            Triple(track, idx, loggedIn)
+        }
+            .flatMapLatest { (track, idx, loggedIn) ->
                 if (track == null) {
-                    flowOf(SubState())
+                    flowOf(SubState(status = SubtitleLoadState.Empty))
+                } else if (!loggedIn) {
+                    flowOf(SubState(status = SubtitleLoadState.NoAuth))
                 } else {
                     flow {
-                        val tracks = subtitles.tracks(track.bvid, track.cid)
-                        val safeIdx = idx.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
-                        val chosen = tracks.getOrNull(safeIdx)
-                        val lines = chosen?.let { subtitles.lines(it.url) } ?: emptyList()
-                        // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
-                        if (lines.isEmpty()) emit(SubState(tracks, safeIdx))
-                        else emit(SubState(tracks, safeIdx, lines, chosen!!.displayLabel, chosen.isAi))
+                        emit(SubState(status = SubtitleLoadState.Loading))
+                        when (val tr = subtitles.tracksResult(track.bvid, track.cid)) {
+                            is Result.Error -> emit(SubState(status = SubtitleLoadState.Error))
+                            is Result.Success -> {
+                                val tracks = tr.data
+                                if (tracks.isEmpty()) {
+                                    emit(SubState(status = SubtitleLoadState.Empty))
+                                } else {
+                                    val safeIdx = idx.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
+                                    val chosen = tracks.getOrNull(safeIdx)
+                                    val lr = chosen?.let { subtitles.linesResult(it.url) }
+                                    if (lr is Result.Success && lr.data.isNotEmpty()) {
+                                        emit(SubState(tracks, safeIdx, lr.data, chosen!!.displayLabel, chosen.isAi, SubtitleLoadState.Ready))
+                                    } else if (lr is Result.Error) {
+                                        emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Error))
+                                    } else {
+                                        // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
+                                        emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Empty))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -123,6 +165,7 @@ class PlayerViewModel @Inject constructor(
             currentIndex = p.currentIndex,
             lyrics = lyrics,
             currentLyricIndex = idx,
+            subtitleLoadState = sub.status,
             subtitleLabel = sub.label,
             subtitleIsAi = sub.isAi,
             subtitleTracks = sub.tracks,

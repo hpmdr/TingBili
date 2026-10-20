@@ -141,13 +141,30 @@ class BiliRepository @Inject constructor(
     }
 
     /** 下载并解析字幕正文；CDN 返回 404 / 空体 / 非预期格式都按「没字幕」处理 */
-    suspend fun loadSubtitleLines(url: String): List<LyricLine> = withContext(Dispatchers.IO) {
-        runCatching {
+    suspend fun loadSubtitleLines(url: String): List<LyricLine> =
+        when (val r = loadSubtitleLinesResult(url)) {
+            is Result.Success -> r.data
+            is Result.Error -> emptyList()
+        }
+
+    /**
+     * 同上，但区分「失败」与「空」：HTTP 非 2xx / 异常 / 解析失败走 Error（UI 给重试），
+     * 空正文走 Success(empty)（UI 按无字幕处理）。CDN 抽风是已知问题，吞掉就没法重试。
+     */
+    suspend fun loadSubtitleLinesResult(url: String): Result<List<LyricLine>> = withContext(Dispatchers.IO) {
+        try {
             httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
+                if (!response.isSuccessful) return@use Result.Error("字幕下载失败：${response.code}")
                 val text = response.body?.string().orEmpty()
-                if (text.isBlank()) emptyList() else json.decodeFromString<SubtitleFile>(text).toLyricLines()
+                if (text.isBlank()) return@use Result.Success(emptyList())
+                try {
+                    Result.Success(json.decodeFromString<SubtitleFile>(text).toLyricLines())
+                } catch (e: Exception) {
+                    Result.Error("字幕解析失败", e)
+                }
             }
-        }.getOrDefault(emptyList())
+        } catch (e: Exception) {
+            Result.Error("字幕网络异常", e)
+        }
     }
 }

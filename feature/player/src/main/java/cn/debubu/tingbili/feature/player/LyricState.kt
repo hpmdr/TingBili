@@ -12,7 +12,21 @@ data class LyricState(
 ) {
     fun indexFor(positionMs: Long): Int {
         if (lines.isEmpty()) return -1
-        return lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
+        // lines 按 timeMs 升序（toLyricLines 已排好）：二分找最后一个 <= position 的。
+        // 有声书一集几千行，线性扫每秒都来一次没必要。
+        var lo = 0
+        var hi = lines.size - 1
+        var ans = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            if (lines[mid].timeMs <= positionMs) {
+                ans = mid
+                lo = mid + 1
+            } else {
+                hi = mid - 1
+            }
+        }
+        return ans.coerceAtLeast(0)
     }
 
     companion object {

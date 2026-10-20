@@ -107,7 +107,11 @@ fun AppRootNavHost(
                 navController.getBackStackEntry(MainTabsRoute)
             }
             val vm: PlayerViewModel = hiltViewModel(tabsEntry)
-            PlayerScreen(vm = vm, onBack = { navController.popBackStack() })
+            PlayerScreen(
+                vm = vm,
+                onBack = { navController.popBackStack() },
+                onLoginClick = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+            )
         }
     }
 }

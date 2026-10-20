@@ -22,33 +22,52 @@ import javax.inject.Singleton
 class SubtitleCache @Inject constructor(
     private val repo: BiliRepository
 ) {
-    private val maxEntries: Int = MAX_ENTRIES
     private val lock = Any()
     private val tracksCache = LinkedHashMap<String, List<SubtitleTrack>>(16, 0.75f, true)
     private val linesCache = LinkedHashMap<String, List<LyricLine>>(16, 0.75f, true)
 
     /** 字幕轨列表（已排序，取首个即最佳轨）。失败返回空列表且不缓存。 */
-    suspend fun tracks(bvid: String, cid: Long): List<SubtitleTrack> {
-        if (bvid.isBlank()) return emptyList()
+    suspend fun tracks(bvid: String, cid: Long): List<SubtitleTrack> =
+        when (val r = tracksResult(bvid, cid)) {
+            is Result.Success -> r.data
+            is Result.Error -> emptyList()
+        }
+
+    /** 同上，但透出失败（调用方给重试）。空列表也是 Success（真没字幕）。 */
+    suspend fun tracksResult(bvid: String, cid: Long): Result<List<SubtitleTrack>> {
+        if (bvid.isBlank()) return Result.Success(emptyList())
         val key = "$bvid:$cid"
-        synchronized(lock) { tracksCache[key]?.let { return it } }
-        val result = (repo.listSubtitleTracks(bvid, cid) as? Result.Success)?.data ?: emptyList()
-        synchronized(lock) {
-            tracksCache[key] = result
-            evictLocked()
+        synchronized(lock) { tracksCache[key]?.let { return Result.Success(it) } }
+        val result = repo.listSubtitleTracks(bvid, cid)
+        if (result is Result.Success) {
+            synchronized(lock) {
+                tracksCache[key] = result.data
+                while (tracksCache.size > MAX_TRACK_ENTRIES) {
+                    tracksCache.keys.firstOrNull()?.let { tracksCache.remove(it) } ?: break
+                }
+            }
         }
         return result
     }
 
     /** 字幕正文。空正文按无字幕处理且不缓存（与 getSubtitle 语义一致）。 */
-    suspend fun lines(url: String): List<LyricLine> {
-        if (url.isBlank()) return emptyList()
-        synchronized(lock) { linesCache[url]?.let { return it } }
-        val result = repo.loadSubtitleLines(url)
-        synchronized(lock) {
-            if (result.isNotEmpty()) {
-                linesCache[url] = result
-                evictLocked()
+    suspend fun lines(url: String): List<LyricLine> =
+        when (val r = linesResult(url)) {
+            is Result.Success -> r.data
+            is Result.Error -> emptyList()
+        }
+
+    /** 同上，但透出失败（CDN 抽风时调用方给重试）。空正文是 Success(empty)。 */
+    suspend fun linesResult(url: String): Result<List<LyricLine>> {
+        if (url.isBlank()) return Result.Success(emptyList())
+        synchronized(lock) { linesCache[url]?.let { return Result.Success(it) } }
+        val result = repo.loadSubtitleLinesResult(url)
+        if (result is Result.Success && result.data.isNotEmpty()) {
+            synchronized(lock) {
+                linesCache[url] = result.data
+                while (linesCache.size > MAX_LINE_ENTRIES) {
+                    linesCache.keys.firstOrNull()?.let { linesCache.remove(it) } ?: break
+                }
             }
         }
         return result
@@ -60,14 +79,8 @@ class SubtitleCache @Inject constructor(
     }
 
     companion object {
-        const val MAX_ENTRIES = 20
-    }
-
-    private fun evictLocked() {
-        while (tracksCache.size + linesCache.size > maxEntries) {
-            val oldestTracks = tracksCache.keys.firstOrNull()
-            if (oldestTracks != null) tracksCache.remove(oldestTracks)
-            else linesCache.keys.firstOrNull()?.let { linesCache.remove(it) } ?: break
-        }
+        /** 轨列表很小，多留；正文是整本歌词，少留（同时只听一本） */
+        const val MAX_TRACK_ENTRIES = 20
+        const val MAX_LINE_ENTRIES = 5
     }
 }

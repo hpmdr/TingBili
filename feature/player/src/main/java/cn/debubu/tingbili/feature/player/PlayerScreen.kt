@@ -87,6 +87,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -104,9 +105,11 @@ import coil3.compose.AsyncImage
 @Composable
 fun PlayerScreen(
     onBack: () -> Unit = {},
+    onLoginClick: () -> Unit = {},
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
+    val context = LocalContext.current
     val s by vm.uiState.collectAsStateWithLifecycle()
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
     val headerTitle = playerHeaderTitle(s.track)
@@ -206,7 +209,18 @@ fun PlayerScreen(
                 MiniLyricCard(
                     lyrics = s.lyrics,
                     currentIndex = s.currentLyricIndex,
-                    onOpenFullscreen = { lyricFullscreen = true },
+                    status = s.subtitleLoadState,
+                    onCardClick = {
+                        when (s.subtitleLoadState) {
+                            SubtitleLoadState.Ready -> lyricFullscreen = true
+                            SubtitleLoadState.Empty -> android.widget.Toast.makeText(
+                                context, "暂无字幕", android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            SubtitleLoadState.NoAuth -> onLoginClick()
+                            SubtitleLoadState.Error -> vm.retrySubtitles()
+                            SubtitleLoadState.Loading -> Unit
+                        }
+                    },
                 )
             }
         } else {
@@ -629,19 +643,20 @@ private fun AuxItem(
     }
 }
 
-/** 封面态迷你实时字幕：上一行 + 当前行 + 下两行，点击进全屏字幕 */
+/** 封面态迷你实时字幕：上一行 + 当前行 + 下两行。点击行为按字幕状态分流 */
 @Composable
 private fun MiniLyricCard(
     lyrics: List<cn.debubu.tingbili.data.bilibili.model.LyricLine>,
     currentIndex: Int,
-    onOpenFullscreen: () -> Unit,
+    status: SubtitleLoadState,
+    onCardClick: () -> Unit,
 ) {
     val prev = lyrics.getOrNull(currentIndex - 1)?.text
     val current = lyrics.getOrNull(currentIndex)?.text
     val next1 = lyrics.getOrNull(currentIndex + 1)?.text
     val next2 = lyrics.getOrNull(currentIndex + 2)?.text
     Surface(
-        onClick = onOpenFullscreen,
+        onClick = onCardClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth(),
@@ -665,19 +680,63 @@ private fun MiniLyricCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.weight(1f))
+                // 只有真有字幕才给全屏入口：没字幕点进去也是空的，直接在外层提示
                 Text(
-                    text = "全屏字幕 ›",
+                    text = when (status) {
+                        SubtitleLoadState.Ready -> "全屏字幕 ›"
+                        SubtitleLoadState.NoAuth -> "去登录 ›"
+                        SubtitleLoadState.Error -> "重试"
+                        SubtitleLoadState.Loading -> "加载中…"
+                        SubtitleLoadState.Empty -> ""
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (current == null) {
-                Text(
-                    text = "暂无字幕",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+            when (status) {
+                SubtitleLoadState.Loading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "字幕加载中…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                SubtitleLoadState.NoAuth -> {
+                    Text(
+                        text = "登录后查看字幕",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                SubtitleLoadState.Error -> {
+                    Text(
+                        text = "字幕加载失败，点击重试",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                SubtitleLoadState.Empty -> {
+                    Text(
+                        text = "暂无字幕",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                SubtitleLoadState.Ready -> if (current == null) {
+                    Text(
+                        text = "暂无字幕",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
                 if (!prev.isNullOrBlank()) {
                     Text(
                         text = prev,
@@ -720,6 +779,7 @@ private fun MiniLyricCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
                 }
             }
         }
