@@ -85,13 +85,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          APK=app/build/outputs/apk/release/app-release.apk
+          # 包名与 app/build.gradle.kts 的 outputFileName 同口径：
+          # TingBili_{version}_android.apk（APP_VERSION_NAME 即 tag 去 v）
+          APK="app/build/outputs/apk/release/TingBili_${APP_VERSION_NAME}_android.apk"
+          test -f "$APK" || { echo "找不到 $APK" >&2; exit 1; }
+          ( cd "$(dirname "$APK")" && sha256sum "$(basename "$APK")" > "$(basename "$APK").sha256" )
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG 已存在：先去 Releases 页删除再重打" >&2
             exit 1
           fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --notes "手动发版 $TAG" "$APK"
+            gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --notes "手动发版 $TAG" "$APK" "$APK.sha256"
           else
-            gh release create "$TAG" --title "$TAG" --generate-notes "$APK"
+            gh release create "$TAG" --title "$TAG" --generate-notes "$APK" "$APK.sha256"
           fi
