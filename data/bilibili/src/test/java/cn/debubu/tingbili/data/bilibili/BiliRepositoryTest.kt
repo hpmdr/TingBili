@@ -231,6 +231,25 @@ class BiliRepositoryTest {
         assertTrue(r is Result.Error)
     }
 
+    @Test
+    fun `searchPage throws rate-limited on 412`() = runTest {
+        server.enqueue(jsonResponse("""{"code":-412,"message":"请求被拦截","data":null}"""))
+        try {
+            repo.searchPage("小说", 1)
+            org.junit.Assert.fail("expected BiliRateLimitedException")
+        } catch (e: cn.debubu.tingbili.data.bilibili.BiliRateLimitedException) {
+            assertTrue((e.message ?: "").contains("412"))
+        }
+    }
+
+    @Test
+    fun `search returns Error on 412`() = runTest {
+        server.enqueue(jsonResponse("""{"code":-412,"message":"请求被拦截","data":null}"""))
+        val r = repo.search("小说")
+        assertTrue(r is Result.Error)
+        assertTrue(((r as Result.Error).msg.contains("412")))
+    }
+
     private fun jsonResponse(body: String) = MockResponse()
         .setBody(body)
         .setResponseCode(200)

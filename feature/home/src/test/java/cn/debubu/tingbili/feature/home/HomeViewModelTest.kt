@@ -82,6 +82,10 @@ class HomeViewModelTest {
         override suspend fun view(bvid: String): ViewDto = viewResult
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
     }
 
     class FakePlayerHandle : PlayerHandle {
@@ -271,6 +275,10 @@ class HomeViewModelTest {
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         }
         val kws = listOf("A", "B", "C", "D")
         val source = HomePagingSource(BiliRepository(api), kws)
@@ -291,6 +299,10 @@ class HomeViewModelTest {
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         }
         val errRepo = BiliRepository(errorApi)
         val source = HomePagingSource(errRepo)
@@ -392,6 +404,44 @@ class HomeViewModelTest {
         vm.shuffleKeywords()
         advanceUntilIdle()
         assertEquals(true, vm.pagingStarted.first())
+    }
+
+    @Test
+    fun `HomePagingSource dedups bvids across pages`() = runTest {
+        // FakeBiliApi 对 page==1 不分关键词都返回同一批 BV：模拟“有声小说/有声书同池”重叠。
+        // 同一个 source 先后 load 第 1/2 页，第 2 页应被去重到空（nextKey 保留、可继续往后翻）。
+        val source = HomePagingSource(repo, listOf("有声小说", "有声书"))
+        val first = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(first is PagingSource.LoadResult.Page)
+        val page1 = first as PagingSource.LoadResult.Page<Int, Track>
+        assertEquals(2, page1.data.size)
+        val second = source.load(PagingSource.LoadParams.Append(key = 2, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(second is PagingSource.LoadResult.Page)
+        val page2 = second as PagingSource.LoadResult.Page<Int, Track>
+        assertEquals(0, page2.data.size)
+        assertEquals(3, page2.nextKey)
+    }
+
+    @Test
+    fun `HomePagingSource maps 412 to rate-limited Error`() = runTest {
+        val limitedApi = FakeBiliApi()
+        val limitedRepo = BiliRepository(object : BiliApi {
+            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto =
+                SearchDto(code = -412, message = "请求被拦截")
+            override suspend fun view(bvid: String): ViewDto = limitedApi.view(bvid)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = limitedApi.playUrl(bvid, cid, fnval)
+            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = limitedApi.subtitle(bvid, cid)
+            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
+        })
+        val source = HomePagingSource(limitedRepo)
+        val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(result is PagingSource.LoadResult.Error)
+        val err = (result as PagingSource.LoadResult.Error).throwable
+        assertTrue(err is cn.debubu.tingbili.data.bilibili.BiliRateLimitedException)
+        assertTrue((err.message ?: "").contains("412"))
     }
 }
 

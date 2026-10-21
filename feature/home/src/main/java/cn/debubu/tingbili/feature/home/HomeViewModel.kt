@@ -104,15 +104,23 @@ class HomeViewModel @Inject constructor(
     /** 下拉刷新计数：每次 +1 即随机重排关键词并重建推荐流 */
     private val _refreshTick = MutableStateFlow(0)
     private var lastKeywordOrder: List<String> = emptyList()
+    private var lastRefreshTickSeen = -1
+    private var lastKeywordSource: List<String>? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: StateFlow<PagingData<Track>> =
-        combine(prefs.homeKeywords, _refreshTick, _pagingStarted) { kws, _, started ->
-            // 随机重排，多词时尽量与上次不同，避免“刷了个寂寞”
-            var shuffled = kws.shuffled()
-            if (shuffled.size > 1 && shuffled == lastKeywordOrder) shuffled = kws.shuffled()
-            lastKeywordOrder = shuffled
-            shuffled to started
+        combine(prefs.homeKeywords, _refreshTick, _pagingStarted) { kws, tick, started ->
+            // 只在“下拉刷新/关键词变更”时重排；快照点“加载更多”只开闸不换词，
+            // 否则第 1 页关键词变了，翻出来的和快照对不上、还容易撞见重复。
+            if (tick != lastRefreshTickSeen || kws != lastKeywordSource || lastKeywordOrder.isEmpty()) {
+                // 随机重排，多词时尽量与上次不同，避免“刷了个寂寞”
+                var shuffled = kws.shuffled()
+                if (shuffled.size > 1 && shuffled == lastKeywordOrder) shuffled = kws.shuffled()
+                lastKeywordOrder = shuffled
+                lastRefreshTickSeen = tick
+                lastKeywordSource = kws
+            }
+            lastKeywordOrder to started
         }
             .flatMapLatest { (ordered, started) ->
                 if (!started) {
@@ -121,7 +129,17 @@ class HomeViewModel @Inject constructor(
                 } else {
                     // maxSize 显式有界：默认不清旧页（Track 很小但页多了也是堆），
                     // 200 条后自动丢远离视口的页，内存不随滑动涨。
-                    Pager(PagingConfig(pageSize = 20, enablePlaceholders = false, maxSize = 200)) {
+                    // prefetchDistance 收小：默认=pageSize 会提前很多触发 append，
+                    // 快速上滑时请求密度太高撞 B 站 412；8 条提前量足够顺滑。
+                    Pager(
+                        PagingConfig(
+                            pageSize = 20,
+                            prefetchDistance = 8,
+                            initialLoadSize = 20,
+                            enablePlaceholders = false,
+                            maxSize = 200
+                        )
+                    ) {
                         HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
                             saveSnapshot(tracks, orderedKeywords)
                         }

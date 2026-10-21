@@ -16,6 +16,9 @@ import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -30,14 +33,38 @@ class BiliRepository @Inject constructor(
     private val httpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
+    private val searchMutex = Mutex()
+    private var lastSearchAtMs = 0L
+
+    private suspend fun throttleSearch() {
+        searchMutex.withLock {
+            val now = System.currentTimeMillis()
+            val wait = SEARCH_MIN_INTERVAL_MS - (now - lastSearchAtMs)
+            if (wait > 0) delay(wait)
+            lastSearchAtMs = System.currentTimeMillis()
+        }
+    }
+
+    private fun checkSearchCode(dtoCode: Int, dtoMessage: String): String? {
+        if (dtoCode == 0) return null
+        if (dtoCode == 412 || dtoCode == -412) {
+            val detail = dtoMessage.ifBlank { "请求被拦截" }
+            throw BiliRateLimitedException("请求太频繁（412），稍后再试：$detail")
+        }
+        return dtoMessage.ifBlank { "search failed: code $dtoCode" }
+    }
 
     suspend fun search(keyword: String): Result<List<Track>> = try {
+        throttleSearch()
         val dto = api.search(keyword)
-        if (dto.code != 0) {
-            Result.Error(dto.message.ifBlank { "search failed: code ${dto.code}" })
+        val err = checkSearchCode(dto.code, dto.message)
+        if (err != null) {
+            Result.Error(err)
         } else {
             Result.Success(dto.toTracks())
         }
+    } catch (e: BiliRateLimitedException) {
+        Result.Error(e.message ?: "请求太频繁（412），稍后再试", e)
     } catch (e: Exception) {
         Result.Error(e.message ?: "search failed", e)
     }
@@ -48,17 +75,26 @@ class BiliRepository @Inject constructor(
      */
     suspend fun searchPage(keyword: String, page: Int = 1): List<Track> {
         if (keyword.isBlank()) return emptyList()
+        throttleSearch()
         val dto = api.search(keyword, page = page)
-        if (dto.code != 0) throw IllegalStateException(dto.message.ifBlank { "search failed: code ${dto.code}" })
+        val err = checkSearchCode(dto.code, dto.message)
+        if (err != null) throw IllegalStateException(err)
         return dto.toTracks()
     }
 
     /** 搜索分页 + 结果总数（搜索页结果计数条用；总数为接口返回的全量命中数） */
     suspend fun searchPageWithTotal(keyword: String, page: Int = 1): Pair<List<Track>, Int> {
         if (keyword.isBlank()) return emptyList<Track>() to 0
+        throttleSearch()
         val dto = api.search(keyword, page = page)
-        if (dto.code != 0) throw IllegalStateException(dto.message.ifBlank { "search failed: code ${dto.code}" })
+        val err = checkSearchCode(dto.code, dto.message)
+        if (err != null) throw IllegalStateException(err)
         return dto.toTracks() to (dto.data?.numResults ?: 0)
+    }
+
+    companion object {
+        /** 两次搜索最小间隔：压住快速上滑时的连续 append 请求，防 412。 */
+        const val SEARCH_MIN_INTERVAL_MS = 800L
     }
 
     suspend fun getView(bvid: String): Result<List<Track>> = try {
@@ -206,3 +242,6 @@ class BiliRepository @Inject constructor(
         }
     }
 }
+
+/** B 站搜索风控（412）：调用方应退避重试，不要连点。 */
+class BiliRateLimitedException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)

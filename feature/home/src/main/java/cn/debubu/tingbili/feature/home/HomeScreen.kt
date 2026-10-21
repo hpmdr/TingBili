@@ -55,6 +55,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
@@ -177,6 +178,14 @@ private fun SnapshotErrorBanner(
     message: String?,
     onRetry: () -> Unit
 ) {
+    // 412 时连点重试只会加重限流，按钮冷却 3s 掐一下。
+    var cooling by remember { mutableStateOf(false) }
+    LaunchedEffect(cooling) {
+        if (cooling) {
+            delay(3000)
+            cooling = false
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,7 +196,7 @@ private fun SnapshotErrorBanner(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "更新失败：${message ?: "请稍后重试"}，当前为上次推荐",
+            text = "更新失败：${friendlyHomeError(message)}，当前为上次推荐",
             color = MaterialTheme.colorScheme.onErrorContainer,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
@@ -195,7 +204,14 @@ private fun SnapshotErrorBanner(
             overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.width(8.dp))
-        Button(onClick = onRetry) { Text("重试") }
+        Button(
+            onClick = {
+                if (cooling) return@Button
+                cooling = true
+                onRetry()
+            },
+            enabled = !cooling
+        ) { Text(if (cooling) "稍候…" else "重试") }
     }
 }
 
@@ -384,6 +400,14 @@ private fun PagingError(
     message: String?,
     onRetry: () -> Unit
 ) {
+    // 同上：412 限流时防连点，3s 内只放行一次重试。
+    var cooling by remember { mutableStateOf(false) }
+    LaunchedEffect(cooling) {
+        if (cooling) {
+            delay(3000)
+            cooling = false
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -391,12 +415,28 @@ private fun PagingError(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "加载失败：${message ?: "请稍后重试"}",
+            text = "加载失败：${friendlyHomeError(message)}",
             color = MaterialTheme.colorScheme.error
         )
         Spacer(Modifier.height(8.dp))
-        Button(onClick = onRetry) { Text("重试") }
+        Button(
+            onClick = {
+                if (cooling) return@Button
+                cooling = true
+                onRetry()
+            },
+            enabled = !cooling
+        ) { Text(if (cooling) "稍候…" else "重试") }
     }
+}
+
+/** 412/风控文案转义：B 站原始 message 又长又吓人，转成一句话。 */
+private fun friendlyHomeError(raw: String?): String {
+    if (raw == null) return "请稍后重试"
+    if (raw.contains("412") || raw.contains("频繁") || raw.contains("拦截") || raw.contains("限流")) {
+        return "请求太频繁，B站限流了，稍等几秒再试"
+    }
+    return raw
 }
 
 @Composable
