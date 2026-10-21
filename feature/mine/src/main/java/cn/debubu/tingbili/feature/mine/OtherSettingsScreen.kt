@@ -24,6 +24,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,7 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
-/** 二级页：其他设置（图片格式 / 音频缓存） */
+/** 二级页：其他设置（图片格式 / 缓存管理） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OtherSettingsScreen(
@@ -47,12 +50,20 @@ fun OtherSettingsScreen(
     vm: OtherSettingsViewModel = hiltViewModel()
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
-    val cacheBytes by vm.cacheSizeBytes.collectAsStateWithLifecycle()
+    val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
+    val notice by vm.notice.collectAsStateWithLifecycle()
     var newKeyword by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { vm.refreshCacheSize() }
+    LaunchedEffect(Unit) { vm.refreshCacheStats() }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            snackbarHostState.showSnackbar(notice!!)
+            vm.consumeNotice()
+        }
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -64,7 +75,8 @@ fun OtherSettingsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -151,14 +163,32 @@ fun OtherSettingsScreen(
                 )
             }
 
-            // 音频缓存
+            // 缓存管理：音频 / 图片 / 字幕分别统计、分别清理
             Column {
-                Text("音频缓存", style = MaterialTheme.typography.bodyLarge)
+                Text("缓存管理", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "已缓存约 ${formatCacheSize(cacheBytes)} / ${cacheMaxMb}MB，上次播放的音频会本地缓存，二次播放秒开且省流量",
+                    "共占用约 ${formatCacheSize(stats.totalBytes)}（音频 ${formatCacheSize(stats.audioBytes)} · 图片 ${formatCacheSize(stats.imageBytes)} · 字幕 ${formatCacheSize(stats.subtitleBytes)}）",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(Modifier.height(8.dp))
+                CacheRow(
+                    label = "音频缓存 ${formatCacheSize(stats.audioBytes)} / ${cacheMaxMb}MB",
+                    desc = "上次播放的音频会本地缓存，二次播放秒开且省流量",
+                    onClear = { vm.clearAudioCache() }
+                )
+                Spacer(Modifier.height(8.dp))
+                CacheRow(
+                    label = "图片缓存（封面/头像） ${formatCacheSize(stats.imageBytes)}",
+                    desc = "看过的内容封面都在本地，离线秒显且省流量",
+                    onClear = { vm.clearImageCache() }
+                )
+                Spacer(Modifier.height(8.dp))
+                CacheRow(
+                    label = "字幕缓存 ${formatCacheSize(stats.subtitleBytes)}（约 ${stats.subtitleCount} 集）",
+                    desc = "只留最近 50 集，看过的字幕秒显",
+                    onClear = { vm.clearSubtitleCache() }
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,17 +202,40 @@ fun OtherSettingsScreen(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "调整上限后重启应用生效；调小后超量部分会在使用中按最近最少使用逐出。",
+                    "上方上限只管音频，调整后重启应用生效；调小后超量部分会在使用中按最近最少使用逐出。总数=音频+图片+字幕磁盘，直链等小量数据不计。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { vm.refreshCacheSize() }) { Text("刷新") }
-                    Button(onClick = { vm.clearCache() }) { Text("清空缓存") }
+                    Button(onClick = { vm.refreshCacheStats() }) { Text("刷新") }
+                    Button(onClick = { vm.clearAllCaches() }) { Text("全部清空") }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CacheRow(
+    label: String,
+    desc: String,
+    onClear: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = onClear) { Text("清理") }
     }
 }
 

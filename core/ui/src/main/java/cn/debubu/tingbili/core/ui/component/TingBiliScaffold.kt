@@ -9,11 +9,13 @@ import androidx.compose.runtime.Composable
 fun TingBiliScaffold(
     topBar: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
         topBar = topBar,
         bottomBar = bottomBar,
+        snackbarHost = snackbarHost,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         content = content
     )

@@ -48,4 +48,14 @@ interface SubtitleDiskDao {
 
     @Query("DELETE FROM SubtitleDiskEntity")
     suspend fun clear()
+
+    /** 精确统计用：最多 50 行，调用方按 UTF-8 字节累加（SQLite LENGTH 按字符计，中文会偏小）。 */
+    @Query("SELECT tracksJson, linesJson FROM SubtitleDiskEntity")
+    suspend fun rowSizes(): List<SubtitleRowSize>
 }
+
+/** [SubtitleDiskDao.rowSizes] 的投影：只取计大小需要的两列。 */
+data class SubtitleRowSize(
+    val tracksJson: String = "",
+    val linesJson: String = "",
+)
