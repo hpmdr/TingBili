@@ -72,7 +72,6 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
-import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 
@@ -438,19 +437,26 @@ private fun CenterState(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun SearchRow(track: Track, onClick: () -> Unit) {
     val imageFormat = LocalImageFormat.current
+    // 行图 116x72 按 2x 取 232x144，ListThumb 480 解码浪费 4 倍；URL 与时长文案缓存，不随父重组重复算
+    val coverUrl = remember(track.cover, imageFormat) {
+        track.cover.biliImage(232, 144, imageFormat)
+    }
+    val durationText = remember(track.durationMs) {
+        if (track.durationMs > 0L) formatDuration(track.durationMs) else null
+    }
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(8.dp)
     ) {
         Box {
             AsyncImage(
-                model = track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
+                model = coverUrl,
                 contentDescription = null,
                 modifier = Modifier.width(116.dp).height(72.dp).clip(RoundedCornerShape(10.dp)),
                 contentScale = ContentScale.Crop
             )
-            if (track.durationMs > 0L) {
+            if (durationText != null) {
                 Text(
-                    text = formatDuration(track.durationMs),
+                    text = durationText,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
                         .background(Color(0x99000000), RoundedCornerShape(4.dp))
                         .padding(horizontal = 5.dp, vertical = 1.dp),
