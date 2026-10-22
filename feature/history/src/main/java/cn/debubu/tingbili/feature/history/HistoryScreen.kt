@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,7 +112,15 @@ private fun HistoryRow(
     val bvTitle = track?.videoTitle?.takeIf { it.isNotBlank() }
         ?: track?.title?.takeIf { it.isNotBlank() }
         ?: entity.bvid
-    val chapterText = historyChapterLine(track, bvTitle)
+    // 行内字符串拼装（trim/startsWith/SimpleDateFormat）每帧都贵，key 变化才重算
+    val chapterText = remember(track, bvTitle) { historyChapterLine(track, bvTitle) }
+    val coverUrl = remember(track?.cover, imageFormat) {
+        track?.cover?.takeIf { it.isNotBlank() }?.biliImage(BiliImageVariant.ListThumb, imageFormat)
+    }
+    val dateText = remember(entity.updatedAt) { formatDate(entity.updatedAt) }
+    val progressText = remember(track?.pageIndex, entity.positionMs, track?.durationMs) {
+        "上次听到 " + playedProgressLabel(track?.pageIndex, entity.positionMs, track?.durationMs)
+    }
 
     Card(
         onClick = onResume,
@@ -127,9 +136,7 @@ private fun HistoryRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = track?.cover
-                    ?.takeIf { it.isNotBlank() }
-                    ?.biliImage(BiliImageVariant.ListThumb, imageFormat),
+                model = coverUrl,
                 contentDescription = null,
                 modifier = Modifier
                     .width(108.dp)
@@ -157,7 +164,7 @@ private fun HistoryRow(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = formatDate(entity.updatedAt),
+                        text = dateText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
@@ -165,8 +172,7 @@ private fun HistoryRow(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "上次听到 " +
-                        playedProgressLabel(track?.pageIndex, entity.positionMs, track?.durationMs),
+                    text = progressText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
