@@ -87,3 +87,15 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 5. `ThemeConfig + AppState` 拆 `MainViewModel`（UI 卡顿收尾时做）。
 
 > 本文件是结构评审，单点性能见 `docs/PERF_AUDIT.md`，两份配合看：先按本文件动结构，再按 PERF_AUDIT 逐项消 Top10，否则“历史 1s 写”这类根因会换个马甲回来。
+
+## 落地进度（2026-10-22 晚，master @1c058b7）
+
+对照架构 Top5：
+
+1. ✅ 拆 `AppDataModule`（`93713f0`）：`core:data/di`（Database/Preferences）+ `data:bilibili/di`（Network）新建，app 只留 AuthStore 绑定 + ScrollBus。
+2. ✅ `core/media` 解耦（`86e58e0`）：`PlayUrlResolver/CatalogResolver/ArtworkResolver` 接口 + `BiliMediaResolvers` 实现 + `ResolverModule` 绑定 + UA/Referer 走 `@Named`；`core/media` 零 `data.bilibili` 引用，165 单测 + 整包 + 真机播放全绿。
+3. ⬜ 队列真相唯一化：未动（风险最高，单独开刀）。
+4. ⬜ 缓存搬家：未动（playUrl 大 Map 仍在 DataStore，真机 prefs 已见百 KB 级 playurl 缓存）。
+5. 🟡 主题/状态：图片格式按页提供 done（`1c058b7`）；`ThemeConfig` 收敛 + 拆 `MainViewModel` 未动。
+
+明日建议顺序：先 P1-H1 同类小项（N 路 getView→按需/懒加载，HistoryViewModel 首当其冲）+ 分P key + mini/详情图片分档（都是小补丁，热身）；再开队列真相唯一化（大手术，单独验证）。

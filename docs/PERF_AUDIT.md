@@ -448,3 +448,20 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 10. **P2-M3 OkHttp 无超时缓存 + P2-I3 缓存主线程**：超时 10/15/20s + search/view 磁盘缓存 + stats/clear 切 IO。【小/防雪崩】
 
 验证：每项改完看 `Layout Inspector 重组计数`（目标：进度 tick 只刷进度条一行）+ `Android Studio Profiler 内存/网络` + 低端机滚列表帧率。Baseline Profile 上线后再跑一遍启动。
+
+## 落地进度（2026-10-22 晚，master @1c058b7，共 26 个提交）
+
+对照总 Top10 逐项销账（✅=已上机验证，🟡=部分，⬜=未动）：
+
+1. ✅ 历史 10s 节流 + DAO 按需化（`1b25426` + `d96738d` + `742941b`/`8dfc5b5`/`a466a9d`）：poll 只改内存；暂停/seek 即时刷；详情只订本 BV、歌单只订本单 BV、今日数改 DB COUNT。注：切歌瞬间仍等下一 tick（≤10s），可接受。
+2. ✅ 播放页拆三层（`a2cd153`）：track/prog/lyric 各收各，真机播/停/字幕正常。
+3. ✅ 底栏槽位隔离（`2e6402c`）：500ms tick 只重组 MiniPlayerSlot，4 个 Tab 不动。注：槽内仍是整态订阅，下一步可再细拆 progress。
+4. ⬜ N 路 getView：`HistoryViewModel.loadVideoInfo` 仍按 distinct bvid 全拉，未动（明天首选）。
+5. ✅ 搜索补 key + Paging 对齐 + 412 退避（`11286a0`/`f226c45`/`04f2784`）。
+6. 🟡 图片：搜索行 232 档 + 三处 remember 缓存 done；mini 128/播放 640/详情 720 分档 + `memoryCacheKey` 未动。
+7. 🟡 主题：`remember(scheme)`（`d48932e`）+ 图片格式按页提供（`1c058b7`）done；HSV 拖动 debounce 未动。
+8. ⬜ 分P无 key + 整秒进度：详情/歌单 `itemsIndexed` key 未补。
+9. ✅ 卡片 URL/时长组合内算：search/home/history 三处 remember done。
+10. ✅ 超时 + 缓存切 IO（`712e3b7`/`6ee0525`）；search/view 磁盘缓存未动。
+
+另：`isMainTabDestination` 收敛（`a2d3d6a`）、通知权限延后（`8b3e8ee`）、Slider 松手提交（`71e0002`）、5 处旧 fake 补齐（门禁恢复全绿，165 单测 0 失败）。
