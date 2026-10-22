@@ -449,9 +449,15 @@ class PlayerManager @Inject constructor(
         }
 
     fun pause() {
+        // 先对表再停：内存 position 最多滞后一个 poll 周期，直接落盘会丢半秒
+        if (transport.isPlaying) {
+            _state.update { it.copy(positionMs = transport.currentPosition) }
+        }
         transport.pause()
         _state.update { it.copy(isPlaying = false) }
         persistPosition(_state.value.positionMs)
+        // 暂停即时刷一次历史：节流 10s 下，退出/切后台不再丢最后一段
+        effectiveScope().launch { saveHistorySnapshot(force = true) }
     }
 
     // ── 睡眠定时（内存态，进程死即失效；触发=pause，自带落盘进度） ──
@@ -572,6 +578,8 @@ class PlayerManager @Inject constructor(
         transport.seekTo(clamped)
         _state.update { it.copy(positionMs = clamped) }
         persistPosition(clamped)
+        // seek 落点即时刷一次历史，进度页“上次听到”立刻对齐
+        effectiveScope().launch { saveHistorySnapshot(force = true) }
     }
 
     fun seekBy(deltaMs: Long) {
@@ -624,36 +632,47 @@ class PlayerManager @Inject constructor(
         effectiveScope().launch { play(queue, prevIdx) }
     }
 
+    /**
+     * 历史落盘快照：写 Room 全表订阅的源头。
+     * - 常态节流 [HISTORY_SAVE_INTERVAL_MS]，播放器 1s 写是全 App 1Hz 抖动的根因；
+     * - 切歌/seek/暂停走 [force] 即时写，保证退出/切后台不丢最后一秒。
+     * force 写用内存态 position（seek 刚落点 transport 还没跟上），不参与累计收听。
+     */
+    private suspend fun saveHistorySnapshot(force: Boolean = false) {
+        val track = _state.value.currentTrack ?: return
+        if (!force && !transport.isPlaying) return
+        val pos = if (force) _state.value.positionMs else transport.currentPosition
+        // 换集后重载该条目已有的累计收听时长
+        val key = track.bvid to track.cid
+        if (key != lastListenKey) {
+            listenAccumMs = historyDao.get(track.bvid, track.cid)?.listenDurationMs ?: 0L
+            lastListenKey = key
+            lastTickPos = pos
+        } else if (!force) {
+            // 累计收听：仅统计正常播放推进（排除 seek 跳变/换集），粒度约节流间隔
+            val delta = pos - lastTickPos
+            if (delta in 1..(HISTORY_SAVE_INTERVAL_MS + 2000L)) listenAccumMs += delta
+            lastTickPos = pos
+        }
+        historyDao.save(
+            HistoryEntity(
+                bvid = track.bvid,
+                cid = track.cid,
+                positionMs = pos,
+                updatedAt = System.currentTimeMillis(),
+                listenDurationMs = listenAccumMs
+            )
+        )
+        // DataStore 的 lastPosition 并入历史节流写：poll 只改内存，不再 500ms 写一次文件
+        prefs.setLastPosition(pos)
+    }
+
     private fun startHistoryThrottle() {
         historyJob?.cancel()
         historyJob = effectiveScope().launch {
             while (true) {
-                delay(1000L)
-                val track = _state.value.currentTrack ?: continue
-                if (!transport.isPlaying) continue
-                val pos = transport.currentPosition
-                // 换集后重载该条目已有的累计收听时长
-                val key = track.bvid to track.cid
-                if (key != lastListenKey) {
-                    listenAccumMs = historyDao.get(track.bvid, track.cid)?.listenDurationMs ?: 0L
-                    lastListenKey = key
-                    lastTickPos = pos
-                }
-                // 累计收听：仅统计正常播放推进（排除 seek 跳变/换集），粒度 ~1s
-                val delta = pos - lastTickPos
-                if (delta in 1..2000L) listenAccumMs += delta
-                lastTickPos = pos
-                historyDao.save(
-                    HistoryEntity(
-                        bvid = track.bvid,
-                        cid = track.cid,
-                        positionMs = pos,
-                        updatedAt = System.currentTimeMillis(),
-                        listenDurationMs = listenAccumMs
-                    )
-                )
-                // 同步更新 DataStore 里的 lastPosition，供 UI 恢复进度环使用
-                prefs.setLastPosition(pos)
+                delay(HISTORY_SAVE_INTERVAL_MS)
+                saveHistorySnapshot()
             }
         }
     }
@@ -662,8 +681,9 @@ class PlayerManager @Inject constructor(
         positionPollJob?.cancel()
         positionPollJob = effectiveScope().launch {
             while (true) {
-                delay(500L)
+                delay(POSITION_POLL_INTERVAL_MS)
                 if (transport.isPlaying) {
+                    // 纯内存态更新：持久化并入历史节流写，这里不再碰 DataStore
                     _state.update {
                         it.copy(
                             positionMs = transport.currentPosition,
@@ -671,8 +691,6 @@ class PlayerManager @Inject constructor(
                             isPlaying = true,
                         )
                     }
-                    // 轻量持久化进度，避免仅依赖 history 1s 节流
-                    prefs.setLastPosition(transport.currentPosition)
                 }
             }
         }
@@ -687,6 +705,10 @@ class PlayerManager @Inject constructor(
     private var urlRefreshRetry = 0
     private var urlRefreshJob: Job? = null
     private companion object {
+        /** 历史落盘节流：10s 写一次 Room，1s 写是全 App 1Hz 抖动的根因 */
+        const val HISTORY_SAVE_INTERVAL_MS = 10_000L
+        /** 进度轮询：纯内存态更新 UI，不碰磁盘 */
+        const val POSITION_POLL_INTERVAL_MS = 500L
         /** 章尾判定余量：距结束不足此时长即视为播完 */
         const val CHAPTER_END_MARGIN_MS = 1500L
         const val MAX_URL_REFRESH_RETRY = 2

@@ -334,7 +334,7 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `history throttle saves after 1s`() = runTest {
+    fun `history throttle saves after 10s`() = runTest {
         playerManager.testScope = this
 
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
@@ -342,11 +342,31 @@ class PlayerManagerTest {
         playerManager.play(tracks, 0)
         // fakePlayer.isPlaying true after play
         fakePlayer.setCurrentPosition(12345L)
-        // advance virtual time by 1100ms -> history should save once
-        advanceTimeBy(1100L)
+        // 节流 10s：推进 9s 不写，满 10s 写一次（全 App 1Hz 根因治理）
+        advanceTimeBy(9_000L)
+        assertTrue(fakeHistory.saved.isEmpty())
+        advanceTimeBy(1_100L)
         assertTrue(fakeHistory.saved.isNotEmpty())
         assertEquals("BV1", fakeHistory.saved.first().bvid)
         assertEquals(12345L, fakeHistory.saved.first().positionMs)
+        playerManager.release()
+    }
+
+    @Test
+    fun `pause flushes history immediately`() = runTest {
+        playerManager.testScope = this
+
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
+        fakePlayer.setCurrentPosition(5000L)
+        playerManager.play(tracks, 0)
+        runCurrent()
+        fakeHistory.saved.clear()
+        fakePlayer.setCurrentPosition(5000L)
+        playerManager.pause()
+        runCurrent()
+        // 暂停即时刷：不等 10s 节流，直接落盘
+        assertTrue(fakeHistory.saved.isNotEmpty())
+        assertEquals(5000L, fakeHistory.saved.first().positionMs)
         playerManager.release()
     }
 
