@@ -6,15 +6,12 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.datastore.CachedPlayUrl
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
-import cn.debubu.tingbili.data.bilibili.BiliRepository
-import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,7 +36,7 @@ import kotlinx.coroutines.sync.withPermit
 
 /**
  * Queue owner + playback controller. Single source of truth for UI.
- * Audio-only: builds MediaItems from BiliRepository.getPlayUrl, sets ExoPlayer.
+ * Audio-only: builds MediaItems via PlayUrlResolver, sets ExoPlayer.
  * History throttle 1s — periodic save while playing.
  * Step seek respects PreferencesRepository.stepSec.
  * 传输层为 PlayerHandle（生产经 MediaController），ExoPlayer 唯一释放权在 Service。
@@ -49,7 +46,9 @@ class PlayerManager @Inject constructor(
     private val transport: PlayerHandle,
     private val historyDao: HistoryDao,
     private val prefs: PreferencesRepository,
-    private val biliRepository: BiliRepository,
+    private val playUrls: PlayUrlResolver,
+    private val catalog: CatalogResolver,
+    private val artwork: ArtworkResolver,
     @ApplicationContext private val appContext: Context,
 ) {
     private val _state = MutableStateFlow(PlaybackState())
@@ -148,10 +147,7 @@ class PlayerManager @Inject constructor(
                     async {
                         runCatching {
                             semaphore.withPermit {
-                                val url = when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
-                                    is Result.Success -> r.data.takeIf { it.isNotBlank() }
-                                    is Result.Error -> null
-                                }
+                                val url = playUrls.resolve(track.bvid, track.cid)?.takeIf { it.isNotBlank() }
                                 if (url != null) track to url else null
                             }
                         }.getOrNull()
@@ -179,7 +175,7 @@ class PlayerManager @Inject constructor(
                 MediaMetadata.Builder()
                     .setTitle(title)
                     .setArtist(author)
-                    .setArtworkUri(cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
+                    .setArtworkUri(artwork.artwork(cover, imageFormat))
                     .build()
             )
             .build()
@@ -306,7 +302,7 @@ class PlayerManager @Inject constructor(
         }
 
     /**
-     * Play queue starting at [index]. Builds MediaItems via BiliRepository.getPlayUrl (audio-only),
+     * Play queue starting at [index]. Builds MediaItems via PlayUrlResolver (audio-only),
      * calls transport.setMediaItems, prepare, play. Launches history save throttle 1s.
      * 加载期间 isLoading=true 且互斥，防止重复点击。
      */
@@ -436,17 +432,14 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    /** cid=0（搜索结果）时经 view() 解析第一个分P 的真实 cid */
+    /** cid=0（搜索结果）时经目录解析第一个分P 的真实 cid */
     private suspend fun resolveCid(track: Track): Track =
-        when (val v = biliRepository.getView(track.bvid)) {
-            is Result.Success -> v.data.firstOrNull()?.let { first ->
-                track.copy(
-                    cid = first.cid,
-                    durationMs = first.durationMs.takeIf { it > 0L } ?: track.durationMs,
-                )
-            } ?: track
-            is Result.Error -> track
-        }
+        catalog.tracksOf(track.bvid).firstOrNull()?.let { first ->
+            track.copy(
+                cid = first.cid,
+                durationMs = first.durationMs.takeIf { it > 0L } ?: track.durationMs,
+            )
+        } ?: track
 
     fun pause() {
         // 先对表再停：内存 position 最多滞后一个 poll 周期，直接落盘会丢半秒
@@ -722,19 +715,15 @@ class PlayerManager @Inject constructor(
             val track = _state.value.currentTrack ?: return@launch
             if (!transport.isPlaying) return@launch
             val pos = transport.currentPosition
-            when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
-                is Result.Success -> {
-                    val newUrl = r.data
-                    if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
+            // 解析失败（null/空）沿用旧 URI：下次错误时再重试
+            val newUrl = playUrls.resolve(track.bvid, track.cid)
+            if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
                         effectiveScope().launch {
                             prefs.putPlayUrls(mapOf("${track.bvid}:${track.cid}" to CachedPlayUrl(newUrl)))
                         }
                         val newItem = track.toMediaItem(newUrl, prefs.imageFormat.first())
                         transport.replaceMediaItem(currentIndex, newItem)
                     }
-                }
-                is Result.Error -> { /* 下次错误时再重试 */ }
-            }
         }
     }
 
@@ -800,10 +789,9 @@ class PlayerManager @Inject constructor(
                         return@launch
                     }
                     val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
-                    when (val r = biliRepository.getPlayUrl(track.bvid, track.cid)) {
-                        is Result.Success -> {
-                            val newUrl = r.data
-                            if (newUrl.isNullOrBlank()) {
+                    // 解析失败（null/空）与旧 Result.Error 同义：报刷新失败，下次错误再重试
+                    val newUrl = playUrls.resolve(track.bvid, track.cid)
+                    if (newUrl.isNullOrBlank()) {
                                 _state.update { it.copy(isLoading = false, errorMessage = "音源刷新失败") }
                                 return@launch
                             }
@@ -816,7 +804,7 @@ class PlayerManager @Inject constructor(
                                     MediaMetadata.Builder()
                                         .setTitle(track.title)
                                         .setArtist(track.author)
-                                        .setArtworkUri(track.cover.takeIf { it.isNotBlank() }?.biliImage(480, 480, imageFormat)?.let(android.net.Uri::parse))
+                                        .setArtworkUri(artwork.artwork(track.cover, imageFormat))
                                         .build()
                                 ).build()
                             val idx = currentIndex
@@ -834,11 +822,6 @@ class PlayerManager @Inject constructor(
                                 _state.update { it.copy(isLoading = false, errorMessage = "刷新失败") }
                             }
                         }
-                        is Result.Error -> {
-                            _state.update { it.copy(isLoading = false, errorMessage = r.msg) }
-                        }
-                    }
-                }
             }
         })
     }

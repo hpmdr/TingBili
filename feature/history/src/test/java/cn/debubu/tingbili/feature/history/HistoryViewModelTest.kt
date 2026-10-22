@@ -177,7 +177,8 @@ class HistoryViewModelTest {
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
-        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, repo, context)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, resolvers, resolvers, resolvers, context)
     }
 
     @After

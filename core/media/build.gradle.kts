@@ -31,7 +31,6 @@ android {
 
 dependencies {
     implementation(project(":core:data"))
-    implementation(project(":data:bilibili"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.datastore.preferences)
     implementation(libs.media3.exoplayer)

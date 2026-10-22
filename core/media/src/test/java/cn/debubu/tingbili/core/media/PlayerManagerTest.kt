@@ -9,14 +9,8 @@ import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
+import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
-import cn.debubu.tingbili.data.bilibili.BiliApi
-import cn.debubu.tingbili.data.bilibili.BiliRepository
-import cn.debubu.tingbili.data.bilibili.dto.PlayUrlData
-import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
-import cn.debubu.tingbili.data.bilibili.dto.SearchDto
-import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
-import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -101,31 +95,23 @@ class PlayerManagerTest {
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
 
-    class FakeBiliApi : BiliApi {
-        override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
-        override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
-            return PlayUrlDto(
-                code = 0,
-                message = "",
-                data = PlayUrlData(
-                    dash = cn.debubu.tingbili.data.bilibili.dto.DashData(
-                        audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "http://example.com/audio.mp3"))
-                    )
-                )
-            )
+    class FakeMediaResolvers : PlayUrlResolver, CatalogResolver, ArtworkResolver {
+        var nextUrl: String? = "http://example.com/audio.mp3"
+        var urlSequence: List<String?>? = null
+        var resolveCalls = 0
+        override suspend fun resolve(bvid: String, cid: Long): String? {
+            resolveCalls++
+            val seq = urlSequence
+            return if (seq != null) seq.getOrElse(resolveCalls - 1) { seq.last() } else nextUrl
         }
-        override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
-        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
-        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
-        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
+        override suspend fun tracksOf(bvid: String): List<Track> = emptyList()
+        override fun artwork(cover: String, format: ImageFormat, width: Int, height: Int): android.net.Uri? = null
     }
 
     private lateinit var fakePlayer: FakePlayerHandle
     private lateinit var fakeHistory: FakeHistoryDao
     private lateinit var prefs: PreferencesRepository
-    private lateinit var biliRepo: BiliRepository
+    private lateinit var fakeResolvers: FakeMediaResolvers
     private lateinit var playerManager: PlayerManager
 
     @Before
@@ -141,8 +127,8 @@ class PlayerManagerTest {
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
-        biliRepo = BiliRepository(FakeBiliApi())
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, biliRepo, context)
+        fakeResolvers = FakeMediaResolvers()
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, context)
     }
 
     @Test
@@ -441,22 +427,12 @@ class PlayerManagerTest {
     fun `play with empty result sets error and not loading`() = runTest {
         playerManager.testScope = this
         // Fake API returns empty playUrl if cid==-1 (simulate error)
-        val fakeApi = object : BiliApi {
-            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
-            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
-                PlayUrlDto(code = -404, message = "not found", data = null)
-            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
-        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
-        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
-        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
-        }
+        val fakeApi = FakeMediaResolvers().also { it.nextUrl = null }
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val errPrefs = PreferencesRepository(ds)
-        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, BiliRepository(fakeApi), context)
+        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, context)
         errManager.testScope = this
         errManager.play(listOf(Track("BVX", 999, "t", "a", "", 1000, null)), 0)
         runCurrent()
@@ -469,26 +445,14 @@ class PlayerManagerTest {
     @Test
     fun `url expiry 403 triggers refresh and replaces mediaItem`() = runTest {
         playerManager.testScope = this
-        var callCount = 0
-        val fakeApi = object : BiliApi {
-            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
-            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
-                callCount++
-                val url = if (callCount == 1) "http://example.com/audio1.mp3" else "http://example.com/audio2.mp3"
-                return PlayUrlDto(code = 0, message = "", data = PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = url)))))
-            }
-            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
-        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
-        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
-        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
+        val fakeApi = FakeMediaResolvers().also {
+            it.urlSequence = listOf("http://example.com/audio1.mp3", "http://example.com/audio2.mp3")
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val refreshPrefs = PreferencesRepository(ds)
-        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, BiliRepository(fakeApi), context)
+        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, context)
         m.testScope = this
         m.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
         runCurrent()

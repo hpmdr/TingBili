@@ -22,6 +22,7 @@ android {
 
 dependencies {
     implementation(project(":core:data"))
+    implementation(project(":core:media"))
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)
     implementation(libs.okhttp)

@@ -15,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import javax.inject.Named
 
 /**
  * B 站网络栈归 data:bilibili 所有（之前挤在 :app 的 AppDataModule）。
@@ -75,4 +76,15 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideBiliApi(retrofit: Retrofit): BiliApi = retrofit.create(BiliApi::class.java)
+
+    /** 播放器 HTTP 头：UA/Referer 是 B 站反盗链要求，core 只管用值、不管来源。 */
+    @Provides
+    @Singleton
+    @Named("biliUserAgent")
+    fun provideBiliUserAgent(): String = WbiSigner.BROWSER_UA
+
+    @Provides
+    @Singleton
+    @Named("biliReferer")
+    fun provideBiliReferer(): String = WbiSigner.REFERER
 }

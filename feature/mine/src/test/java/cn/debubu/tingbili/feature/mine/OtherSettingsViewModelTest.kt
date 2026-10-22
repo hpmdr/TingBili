@@ -140,7 +140,8 @@ class OtherSettingsViewModelTest {
             StandaloneDatabaseProvider(context)
         )
         fakeManager = FakeCacheManager()
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, BiliRepository(FakeBiliApi()), context)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(BiliRepository(FakeBiliApi()))
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, context)
     }
 
     @After

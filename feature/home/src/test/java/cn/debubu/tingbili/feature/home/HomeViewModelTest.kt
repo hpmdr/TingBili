@@ -199,7 +199,8 @@ class HomeViewModelTest {
         repo = BiliRepository(fakeApi)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo, context)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, context)
         playlistDao = FakePlaylistDao()
         snapshotDao = FakeHomeSnapshotDao()
     }

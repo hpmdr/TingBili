@@ -213,7 +213,8 @@ class PlaylistViewModelTest {
             ) { ctx.preferencesDataStoreFile("test_playlist_prefs_${System.nanoTime()}") }
         )
         val repo = BiliRepository(FakeBiliApi())
-        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, repo, ctx)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, ctx)
     }
 
     @After

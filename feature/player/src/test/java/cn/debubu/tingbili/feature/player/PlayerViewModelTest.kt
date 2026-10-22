@@ -126,7 +126,8 @@ class PlayerViewModelTest {
                 produceFile = { context.preferencesDataStoreFile("player_test_prefs") }
             )
         )
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, repo, context)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, context)
         authStore = FakeAuthStore()
         auth = AuthRepository(testJson, authStore)
     }
