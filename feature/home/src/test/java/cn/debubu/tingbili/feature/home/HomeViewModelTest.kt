@@ -170,6 +170,7 @@ class HomeViewModelTest {
             val idx = playlists.indexOfFirst { it.id == playlistId }
             if (idx >= 0) playlists[idx] = playlists[idx].copy(cover = cover)
         }
+        override suspend fun countTracks(): Int = tracks.size
         fun addedCount() = tracks.size
     }
 
