@@ -445,6 +445,22 @@ private fun TrackGridCard(
     onClick: () -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
+    // 网格列宽 156dp 按 3x 取 ListThumb 刚好；URL/时长/副标题缓存，不随父重组重复拼串
+    val coverUrl = remember(track.cover, imageFormat) {
+        track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat)
+    }
+    val durationText = remember(track.durationMs) {
+        if (track.durationMs > 0L) formatDuration(track.durationMs) else null
+    }
+    val subtitleText = remember(track.author, track.pageCount) {
+        buildString {
+            if (track.author.isNotBlank()) append("UP: ${track.author}")
+            if (track.pageCount > 1) {
+                if (isNotEmpty()) append(" · ")
+                append("${track.pageCount}P")
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -453,7 +469,7 @@ private fun TrackGridCard(
     ) {
         Box {
             AsyncImage(
-                model = track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
+                model = coverUrl,
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -461,9 +477,9 @@ private fun TrackGridCard(
                     .clip(RoundedCornerShape(10.dp)),
                 contentScale = ContentScale.Crop
             )
-            if (track.durationMs > 0L) {
+            if (durationText != null) {
                 Text(
-                    text = formatDuration(track.durationMs),
+                    text = durationText,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(6.dp)
@@ -484,13 +500,7 @@ private fun TrackGridCard(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = buildString {
-                if (track.author.isNotBlank()) append("UP: ${track.author}")
-                if (track.pageCount > 1) {
-                    if (isNotEmpty()) append(" · ")
-                    append("${track.pageCount}P")
-                }
-            },
+            text = subtitleText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
