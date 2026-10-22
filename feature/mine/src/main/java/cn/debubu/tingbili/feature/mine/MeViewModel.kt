@@ -58,15 +58,13 @@ class MeViewModel @Inject constructor(
     /** 本地累计收听时长（ms），无需登录 */
     val totalListenMs: StateFlow<Long> = historyDao.observeTotalListenMs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
-    val historyTodayCount: StateFlow<Int> = historyDao.observeAll()
-        .map { list ->
-            val cal = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            }
-            val todayStart = cal.timeInMillis
-            list.count { it.updatedAt >= todayStart }
-        }
+    /** 今日零点（VM 存续期只算一次，跨天重进页面即刷新；DB 侧 COUNT，不拉全表） */
+    private val todayStart: Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val historyTodayCount: StateFlow<Int> = historyDao.observeTodayCount(todayStart)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     private val _cacheBytes = MutableStateFlow(0L)
