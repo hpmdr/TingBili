@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -27,6 +28,8 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
