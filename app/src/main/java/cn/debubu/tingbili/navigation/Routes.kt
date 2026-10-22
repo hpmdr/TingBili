@@ -1,5 +1,8 @@
 package cn.debubu.tingbili.navigation
 
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
 import kotlinx.serialization.Serializable
 
 /** 主页 Tab 容器（带底栏） */
@@ -71,3 +74,14 @@ fun isMainTabRoute(route: Any?): Boolean = when (route) {
     is HomeRoute, is PlaylistRoute, is HistoryRoute, is MeRoute, is MainTabsRoute -> true
     else -> false
 }
+
+/** 主页 Tab 的 destination 判定（底栏/迷你条显隐用）：4 个 Tab + 主容器都算主页，
+ * 与 [isMainTabRoute] 同源，改 Tab 时两处一起改，不要在调用方手写 hasRoute 散装判断。 */
+fun isMainTabDestination(destination: androidx.navigation.NavDestination?): Boolean =
+    destination?.hierarchy?.any {
+        it.hasRoute<HomeRoute>() ||
+            it.hasRoute<PlaylistRoute>() ||
+            it.hasRoute<HistoryRoute>() ||
+            it.hasRoute<MeRoute>() ||
+            it.hasRoute<MainTabsRoute>()
+    } == true

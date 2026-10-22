@@ -40,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
@@ -141,13 +139,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
-    val inMainTabs = destination?.hierarchy?.any {
-        it.hasRoute(cn.debubu.tingbili.navigation.HomeRoute::class) ||
-        it.hasRoute(cn.debubu.tingbili.navigation.PlaylistRoute::class) ||
-        it.hasRoute(cn.debubu.tingbili.navigation.HistoryRoute::class) ||
-        it.hasRoute(cn.debubu.tingbili.navigation.MeRoute::class) ||
-        it.hasRoute(MainTabsRoute::class)
-    } ?: true
+    val inMainTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
 
     CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
