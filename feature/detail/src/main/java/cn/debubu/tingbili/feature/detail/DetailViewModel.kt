@@ -75,8 +75,8 @@ class DetailViewModel @Inject constructor(
     /** 正在等起播的那一行索引 */
     val pendingIndex: StateFlow<Int?> = _pendingIndex.asStateFlow()
 
-    /** "bvid:cid" -> 播放记录，分P 列表显示「上次听到」用 */
-    val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeAll()
+    /** "bvid:cid" -> 播放记录（只订阅本 BV，播放器每秒写全表时不再全量 associateBy） */
+    val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeByBvid(bvid)
         .map { list -> list.associateBy { "${it.bvid}:${it.cid}" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
