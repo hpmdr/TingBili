@@ -23,6 +23,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -63,10 +66,13 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column {
-                Text("前进 / 后退步长: $step 秒", style = MaterialTheme.typography.bodyLarge)
+                // 拖动只改本地预览，松手再落盘：否则每帧一次 DataStore 全量重写
+                var sliderValue by remember(step) { mutableFloatStateOf(step.toFloat()) }
+                Text("前进 / 后退步长: ${sliderValue.toInt()} 秒", style = MaterialTheme.typography.bodyLarge)
                 Slider(
-                    value = step.toFloat(),
-                    onValueChange = { vm.setStep(it.toInt()) },
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = { vm.setStep(sliderValue.toInt()) },
                     valueRange = 5f..60f,
                     steps = 10,
                     modifier = Modifier.fillMaxWidth()
