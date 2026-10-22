@@ -94,6 +94,9 @@ class PlayerManagerTest {
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(map.values.toList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(map.values.sumOf { it.listenDurationMs })
+        override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid == bvid })
+        override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid in bvids })
+        override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(map.values.count { it.updatedAt >= todayStart })
         override suspend fun delete(bvid: String, cid: Long) { map.remove(bvid to cid) }
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
@@ -113,6 +116,10 @@ class PlayerManagerTest {
             )
         }
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
     }
 
     private lateinit var fakePlayer: FakePlayerHandle
@@ -420,6 +427,10 @@ class PlayerManagerTest {
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
                 PlayUrlDto(code = -404, message = "not found", data = null)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
@@ -448,6 +459,10 @@ class PlayerManagerTest {
                 return PlayUrlDto(code = 0, message = "", data = PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = url)))))
             }
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")

@@ -89,6 +89,8 @@ class PlaylistViewModelTest {
 
         override suspend fun getPlaylists(): List<PlaylistEntity> = playlists.toList()
 
+        override suspend fun countTracks(): Int = tracks.size
+
         override suspend fun removeTrack(playlistId: Long, bvid: String, cid: Long) {
             tracks.removeIf { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
         }
@@ -174,6 +176,9 @@ class PlaylistViewModelTest {
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
+        override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
         override suspend fun delete(bvid: String, cid: Long) {}
         override suspend fun clearAll() {}
     }
@@ -184,6 +189,10 @@ class PlaylistViewModelTest {
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
             PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
     }
 
     private lateinit var dao: FakePlaylistDao

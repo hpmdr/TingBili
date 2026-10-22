@@ -13,6 +13,7 @@ import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
 import cn.debubu.tingbili.core.data.db.SubtitleDiskEntity
+import cn.debubu.tingbili.core.data.db.SubtitleRowSize
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -179,5 +180,6 @@ private class FakeSubtitleDiskDao : SubtitleDiskDao {
     }
     override suspend fun clear() = map.clear()
     override suspend fun deleteByPrefix(prefix: String) { map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) } }
+    override suspend fun rowSizes(): List<SubtitleRowSize> = map.values.map { SubtitleRowSize(it.tracksJson, it.linesJson) }
     fun size(): Int = map.size
 }

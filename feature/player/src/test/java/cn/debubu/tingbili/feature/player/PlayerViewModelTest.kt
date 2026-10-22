@@ -63,6 +63,10 @@ class PlayerViewModelTest {
             delay(10_000)
             return SubtitleDto()
         }
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+        override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
     }
 
     class FakePlayerHandle : PlayerHandle {
@@ -90,6 +94,9 @@ class PlayerViewModelTest {
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
+        override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
         override suspend fun delete(bvid: String, cid: Long) {}
         override suspend fun clearAll() {}
     }
@@ -201,6 +208,10 @@ class PlayerViewModelTest {
                 if (fail) throw RuntimeException("cdn 抽风")
                 return SubtitleDto()
             }
+            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
             fun callCount() = calls
         }
         val cache = SubtitleCache(BiliRepository(failingApi), FakeSubtitleDiskDao())
@@ -298,4 +309,5 @@ private class FakeSubtitleDiskDao(
     }
     override suspend fun clear() = map.clear()
     override suspend fun deleteByPrefix(prefix: String) { map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) } }
+    override suspend fun rowSizes(): List<cn.debubu.tingbili.core.data.db.SubtitleRowSize> = map.values.map { cn.debubu.tingbili.core.data.db.SubtitleRowSize(it.tracksJson, it.linesJson) }
 }

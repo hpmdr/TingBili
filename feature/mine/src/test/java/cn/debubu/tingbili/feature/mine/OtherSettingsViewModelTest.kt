@@ -104,6 +104,9 @@ class OtherSettingsViewModelTest {
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
+        override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
+        override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
         override suspend fun delete(bvid: String, cid: Long) {}
         override suspend fun clearAll() {}
     }

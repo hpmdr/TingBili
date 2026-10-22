@@ -31,6 +31,18 @@ interface HistoryDao {
     @Query("SELECT * FROM HistoryEntity ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<HistoryEntity>>
 
+    /** 详情/播放按 BV 订阅：播放器每秒写全表时，不再让单页跟着全量 associateBy */
+    @Query("SELECT * FROM HistoryEntity WHERE bvid=:bvid")
+    fun observeByBvid(bvid: String): Flow<List<HistoryEntity>>
+
+    /** 歌单按多 BV 订阅：只收本单相关 BV，避免全表扫描 */
+    @Query("SELECT * FROM HistoryEntity WHERE bvid IN (:bvids)")
+    fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>>
+
+    /** 我的页今日收听条数：DB 侧 COUNT，不拉全表 */
+    @Query("SELECT COUNT(*) FROM HistoryEntity WHERE updatedAt>=:todayStart")
+    fun observeTodayCount(todayStart: Long): Flow<Int>
+
     @Query("SELECT COALESCE(SUM(listenDurationMs), 0) FROM HistoryEntity")
     fun observeTotalListenMs(): Flow<Long>
 
