@@ -386,7 +386,10 @@ private fun SearchResultBody(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(count = paging.itemCount) { index ->
+                items(
+                    count = paging.itemCount,
+                    key = { index -> paging.peek(index)?.let { "${it.bvid}:${it.cid}" } ?: "placeholder-$index" }
+                ) { index ->
                     val track = paging[index]
                     if (track != null) {
                         SearchRow(track = track, onClick = { onTrackClick(track) })
