@@ -99,6 +99,11 @@ object AppDataModule {
         authRepository: AuthRepository,
     ): OkHttpClient =
         OkHttpClient.Builder()
+            // 超时兜底：无超时时 412/弱网会 hang 住 load 协程堆积
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .addInterceptor(
                 // 登录态 Cookie 优先（配额更高、风控更松），游客模式回落 buvid3/4
                 WbiInterceptor(wbiSigner, cookieProvider = {
