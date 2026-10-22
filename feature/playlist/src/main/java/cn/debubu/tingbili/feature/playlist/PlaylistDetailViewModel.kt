@@ -17,7 +17,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -53,8 +57,15 @@ class PlaylistDetailViewModel @Inject constructor(
     val tracks: StateFlow<List<PlaylistTrackEntity>> =
         dao.observeTracks(playlistId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** "bvid:cid" -> 该集的播放记录，用于列表显示“上次听到 P{n} · 时间” */
-    val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeAll()
+    /** "bvid:cid" -> 该集的播放记录（只订阅本单 BV，空单直接空 Map，防 Room IN() 空集崩） */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val progress: StateFlow<Map<String, HistoryEntity>> = tracks
+        .map { list -> list.map { it.bvid }.distinct() }
+        .distinctUntilChanged()
+        .flatMapLatest { bvids ->
+            if (bvids.isEmpty()) flowOf(emptyList())
+            else historyDao.observeByBvids(bvids)
+        }
         .map { list -> list.associateBy { "${it.bvid}:${it.cid}" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
