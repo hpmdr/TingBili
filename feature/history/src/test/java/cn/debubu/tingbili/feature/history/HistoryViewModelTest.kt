@@ -139,6 +139,15 @@ class HistoryViewModelTest {
             )
         }
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long) =
+            cn.debubu.tingbili.data.bilibili.dto.FavFolderDto(code = 0)
+        override suspend fun favMedias(
+            mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String
+        ) = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto(code = 0)
+        override suspend fun toview(pn: Int, ps: Int) =
+            cn.debubu.tingbili.data.bilibili.dto.ToviewDto(code = 0)
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long) =
+            cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto(code = 0)
     }
 
     private lateinit var fakePlayer: FakePlayerHandle
