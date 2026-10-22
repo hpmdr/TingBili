@@ -103,15 +103,6 @@ fun BottomNavWithCenterPlayer(
     visibility: MiniPlayerVisibility = rememberMiniPlayerVisibility(),
 ) {
     val playerManager = viewModel.playerManager
-    val state by playerManager.state.collectAsStateWithLifecycle()
-    val progress = if (state.durationMs > 0L) {
-        (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val cover = state.currentTrack?.cover ?: ""
-    val isPlaying = state.isPlaying
-    val isLoading = state.isLoading
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
@@ -124,26 +115,14 @@ fun BottomNavWithCenterPlayer(
     val itemColors = NavigationBarItemDefaults.colors()
     // 推荐 tab 双击回顶（onClick lambda 非组合作用域，helper 必须在外层调）
     val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
-    val track = state.currentTrack
-
-    val trackKey = track?.let { "${it.bvid}:${it.cid}" }
-    LaunchedEffect(trackKey) { visibility.onTrackChanged(trackKey) }
 
     Column {
-        if (track != null && trackKey != null) {
-            MiniPlayerBar(
-                track = track,
-                isPlaying = isPlaying,
-                isLoading = isLoading,
-                onToggle = { playerManager.toggle() },
-                onOpen = {
-                    navController.navigate(PlayerRoute) { launchSingleTop = true }
-                },
-                progress = progress,
-                visible = visibility.isVisible(trackKey),
-                onDismiss = { visibility.dismiss(trackKey) },
-            )
-        }
+        // 进度 tick（500ms）只重组这个槽位，底栏 4 个 Tab 不再跟着抖
+        MiniPlayerSlot(
+            playerManager = playerManager,
+            navController = navController,
+            visibility = visibility,
+        )
         NavigationBar {
         NavigationBarItem(
             selected = isHomeSelected,
@@ -219,4 +198,39 @@ fun BottomNavWithCenterPlayer(
         )
         }
     }
+}
+
+/**
+ * mini 条独立槽位：整 [PlaybackState] 订阅下沉到这里。
+ * position 每 500ms 推一次，之前订阅在底栏顶层，4 个 Tab 图标每秒重测；
+ * 现在 tick 只重组这一个槽位。
+ */
+@Composable
+private fun MiniPlayerSlot(
+    playerManager: PlayerManager,
+    navController: NavController,
+    visibility: MiniPlayerVisibility,
+) {
+    val state by playerManager.state.collectAsStateWithLifecycle()
+    val track = state.currentTrack
+    val trackKey = track?.let { "${it.bvid}:${it.cid}" }
+    LaunchedEffect(trackKey) { visibility.onTrackChanged(trackKey) }
+    if (track == null || trackKey == null) return
+    val progress = if (state.durationMs > 0L) {
+        (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    MiniPlayerBar(
+        track = track,
+        isPlaying = state.isPlaying,
+        isLoading = state.isLoading,
+        onToggle = { playerManager.toggle() },
+        onOpen = {
+            navController.navigate(PlayerRoute) { launchSingleTop = true }
+        },
+        progress = progress,
+        visible = visibility.isVisible(trackKey),
+        onDismiss = { visibility.dismiss(trackKey) },
+    )
 }
