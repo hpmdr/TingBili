@@ -55,7 +55,15 @@ class SearchViewModel @Inject constructor(
     // 数据层常驻：与 HomeViewModel 同理，进详情再回来秒回、无重载
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: StateFlow<PagingData<Track>> = _keyword.flatMapLatest { kw ->
-        Pager(PagingConfig(pageSize = 20, enablePlaceholders = false)) {
+        Pager(
+            PagingConfig(
+                pageSize = 20,
+                prefetchDistance = 8,
+                initialLoadSize = 20,
+                maxSize = 200,
+                enablePlaceholders = false
+            )
+        ) {
             SearchPagingSource(repo, kw, onTotalLoaded = { _totalCount.value = it })
         }.flow.cachedIn(viewModelScope)
     }
