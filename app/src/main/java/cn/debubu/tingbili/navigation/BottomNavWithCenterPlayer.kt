@@ -118,11 +118,14 @@ fun BottomNavWithCenterPlayer(
 
     Column {
         // 进度 tick（500ms）只重组这个槽位，底栏 4 个 Tab 不再跟着抖
-        MiniPlayerSlot(
-            playerManager = playerManager,
-            navController = navController,
-            visibility = visibility,
-        )
+        // 图片格式只包 mini 条：切格式不连带底栏 Tab 重组
+        ImageFormatScope(viewModel) {
+            MiniPlayerSlot(
+                playerManager = playerManager,
+                navController = navController,
+                visibility = visibility,
+            )
+        }
         NavigationBar {
         NavigationBarItem(
             selected = isHomeSelected,

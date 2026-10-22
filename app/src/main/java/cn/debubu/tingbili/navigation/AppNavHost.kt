@@ -34,7 +34,8 @@ fun AppRootNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     /** 冷启动首 Tab：MainActivity 按本地收藏有无决定，默认推荐（预览/旧入口兼容） */
-    startTab: Any = HomeRoute
+    startTab: Any = HomeRoute,
+    mainViewModel: MainViewModel = hiltViewModel(),
 ) {
     NavHost(
         navController = navController,
@@ -44,15 +45,21 @@ fun AppRootNavHost(
         // 主页 Tab 容器（带底栏，见 MainTabsScaffold）
         navigation<MainTabsRoute>(startDestination = startTab) {
             composable<HomeRoute> {
-                HomeScreen(
-                    onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                    onSearchClick = { navController.navigate(SearchRoute) }
-                )
+                ImageFormatScope(mainViewModel) {
+                    HomeScreen(
+                        onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                        onSearchClick = { navController.navigate(SearchRoute) }
+                    )
+                }
             }
             composable<PlaylistRoute> {
-                PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
+                ImageFormatScope(mainViewModel) {
+                    PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
+                }
             }
-            composable<HistoryRoute> { HistoryScreen() }
+            composable<HistoryRoute> {
+                ImageFormatScope(mainViewModel) { HistoryScreen() }
+            }
             composable<MeRoute> {
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
@@ -114,19 +121,25 @@ fun AppRootNavHost(
             )
         }
         composable<SearchRoute> {
-            SearchScreen(
-                onBack = { navController.popBackStack() },
-                onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
-            )
+            ImageFormatScope(mainViewModel) {
+                SearchScreen(
+                    onBack = { navController.popBackStack() },
+                    onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
+                )
+            }
         }
         composable<VideoDetailRoute> {
-            DetailScreen(
-                onBack = { navController.popBackStack() },
-                onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
-            )
+            ImageFormatScope(mainViewModel) {
+                DetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
+                )
+            }
         }
         composable<PlaylistDetailRoute> {
-            PlaylistDetailScreen(onBack = { navController.popBackStack() })
+            ImageFormatScope(mainViewModel) {
+                PlaylistDetailScreen(onBack = { navController.popBackStack() })
+            }
         }
         composable<PlayerRoute> { backStackEntry ->
             // 播放页 VM 挂到 Tabs 容器条目上：播着的时候退多少次、进多少次都是同一个 VM，
@@ -136,13 +149,15 @@ fun AppRootNavHost(
                 navController.getBackStackEntry(MainTabsRoute)
             }
             val vm: PlayerViewModel = hiltViewModel(tabsEntry)
-            PlayerScreen(
+            ImageFormatScope(mainViewModel) {
+                PlayerScreen(
                 vm = vm,
                 onBack = { navController.popBackStack() },
                 onLoginClick = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 onDetailClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
                 onSettingsClick = { navController.navigate(SettingsRoute) },
             )
+            }
         }
     }
 }

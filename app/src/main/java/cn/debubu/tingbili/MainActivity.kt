@@ -30,7 +30,6 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +43,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
-import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
 import cn.debubu.tingbili.navigation.AppRootNavHost
 import cn.debubu.tingbili.navigation.BottomNavWithCenterPlayer
@@ -138,7 +136,6 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     // null = 首 Tab 还没定：什么都不画，系统启动屏继续盖着
     val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value ?: return
     val navController = rememberNavController()
-    val imageFormat by mainViewModel.imageFormat.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
@@ -151,7 +148,6 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     val destination = navBackStackEntry?.destination
     val inMainTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
 
-    CompositionLocalProvider(LocalImageFormat provides imageFormat) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：主页 Tab 带底栏 + 贴底 mini 条（滚动联动隐藏，只收条不收栏）；独立页全屏
         val miniPlayerVisibility = cn.debubu.tingbili.navigation.rememberMiniPlayerVisibility()
@@ -167,6 +163,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                 AppRootNavHost(
                     navController = navController,
                     startTab = startTab,
+                    mainViewModel = mainViewModel,
                     modifier = Modifier.padding(
                         start = innerPadding.calculateStartPadding(layoutDirection),
                         end = innerPadding.calculateEndPadding(layoutDirection),
@@ -176,16 +173,15 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             }
         } else {
             // 独立全屏页：无底栏
-            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
+            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = mainViewModel, modifier = Modifier.fillMaxSize())
         }
     } else {
         // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
         if (inMainTabs) {
             cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController, startTab = startTab)
         } else {
-            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
+            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = mainViewModel, modifier = Modifier.fillMaxSize())
         }
-    }
     }
 }
 

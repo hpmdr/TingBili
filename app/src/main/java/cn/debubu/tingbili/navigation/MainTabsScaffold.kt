@@ -70,7 +70,7 @@ fun MainTabsScaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
             bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
         ) { innerPadding ->
-            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.padding(innerPadding))
+            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.padding(innerPadding))
         }
     } else {
         NavigationSuiteScaffold(
@@ -142,7 +142,7 @@ fun MainTabsScaffold(
             layoutType = layoutType
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
                 val playerManager = viewModel.playerManager
                 val state by playerManager.state.collectAsStateWithLifecycle()
                 val track = state.currentTrack
@@ -155,20 +155,22 @@ fun MainTabsScaffold(
                     0f
                 }
                 if (track != null && trackKey != null) {
-                    MiniPlayerBar(
-                        track = track,
-                        isPlaying = state.isPlaying,
-                        isLoading = state.isLoading,
-                        onToggle = { playerManager.toggle() },
-                        onOpen = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp)
-                            .width(320.dp),
-                        progress = overlayProgress,
-                        visible = dismissedKey != trackKey,
-                        onDismiss = { dismissedKey = trackKey },
-                    )
+                    ImageFormatScope(viewModel) {
+                        MiniPlayerBar(
+                            track = track,
+                            isPlaying = state.isPlaying,
+                            isLoading = state.isLoading,
+                            onToggle = { playerManager.toggle() },
+                            onOpen = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                                .width(320.dp),
+                            progress = overlayProgress,
+                            visible = dismissedKey != trackKey,
+                            onDismiss = { dismissedKey = trackKey },
+                        )
+                    }
                 }
             }
         }
