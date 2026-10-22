@@ -9,6 +9,10 @@ import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchData
+import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
+import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
+import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
+import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchItem
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
@@ -169,6 +173,19 @@ class SearchViewModelTest {
 
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto =
             SubtitleDto(code = 0)
+
+        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): FavFolderDto =
+            FavFolderDto(code = 0)
+
+        override suspend fun favMedias(
+            mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String
+        ): FavDetailDto = FavDetailDto(code = 0)
+
+        override suspend fun toview(pn: Int, ps: Int): ToviewDto =
+            ToviewDto(code = 0)
+
+        override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): BiliHistoryDto =
+            BiliHistoryDto(code = 0)
     }
 }
 
