@@ -108,6 +108,10 @@ interface PlaylistDao {
     )
     fun observePlaylistSummaries(): Flow<List<PlaylistSummary>>
 
+    /** 启动 Tab 决策用：本地收藏里有没有内容（空收藏夹不算） */
+    @Query("SELECT COUNT(*) FROM PlaylistTrackEntity")
+    suspend fun countTracks(): Int
+
     @Query("SELECT * FROM PlaylistEntity ORDER BY createdAt DESC")
     suspend fun getPlaylists(): List<PlaylistEntity>
 

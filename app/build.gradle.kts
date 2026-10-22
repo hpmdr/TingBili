@@ -111,6 +111,7 @@ dependencies {
     implementation(project(":feature:detail"))
     implementation(project(":feature:search"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)

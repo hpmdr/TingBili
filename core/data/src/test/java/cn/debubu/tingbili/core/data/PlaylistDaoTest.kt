@@ -78,4 +78,27 @@ class PlaylistDaoTest {
         assertEquals(0L, emptySummary.totalDurationMs)
         db.close()
     }
+
+    @Test
+    fun `countTracks ignores empty playlists`() = runTest {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(ctx, TingBiliDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val dao = db.playlistDao()
+        dao.insert(PlaylistEntity(name = "空收藏"))
+        assertEquals(0, dao.countTracks())
+        val pid = dao.insert(PlaylistEntity(name = "听书"))
+        dao.addTrack(
+            PlaylistTrackEntity(
+                playlistId = pid,
+                bvid = "BV1",
+                cid = 1,
+                title = "P1",
+                order = 0
+            )
+        )
+        assertEquals(1, dao.countTracks())
+        db.close()
+    }
 }

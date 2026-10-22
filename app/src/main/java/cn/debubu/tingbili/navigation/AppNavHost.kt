@@ -32,7 +32,9 @@ import cn.debubu.tingbili.feature.mine.SettingsScreen
 @Composable
 fun AppRootNavHost(
     navController: NavHostController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 冷启动首 Tab：MainActivity 按本地收藏有无决定，默认推荐（预览/旧入口兼容） */
+    startTab: Any = HomeRoute
 ) {
     NavHost(
         navController = navController,
@@ -40,7 +42,7 @@ fun AppRootNavHost(
         modifier = modifier
     ) {
         // 主页 Tab 容器（带底栏，见 MainTabsScaffold）
-        navigation<MainTabsRoute>(startDestination = HomeRoute) {
+        navigation<MainTabsRoute>(startDestination = startTab) {
             composable<HomeRoute> {
                 HomeScreen(
                     onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },

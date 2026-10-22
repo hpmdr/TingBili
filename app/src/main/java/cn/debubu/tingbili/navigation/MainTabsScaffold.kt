@@ -42,7 +42,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 @Composable
 fun MainTabsScaffold(
     navController: NavHostController,
-    viewModel: MainViewModel = hiltViewModel()
+    viewModel: MainViewModel = hiltViewModel(),
+    startTab: Any = HomeRoute
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
@@ -69,7 +70,7 @@ fun MainTabsScaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
             bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
         ) { innerPadding ->
-            AppRootNavHost(navController = navController, modifier = Modifier.padding(innerPadding))
+            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.padding(innerPadding))
         }
     } else {
         NavigationSuiteScaffold(
@@ -141,7 +142,7 @@ fun MainTabsScaffold(
             layoutType = layoutType
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
                 val playerManager = viewModel.playerManager
                 val state by playerManager.state.collectAsStateWithLifecycle()
                 val track = state.currentTrack

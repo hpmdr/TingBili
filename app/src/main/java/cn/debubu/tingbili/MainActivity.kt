@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -36,7 +38,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -68,11 +69,17 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var playbackConnection: PlaybackConnection
 
+    // Activity 作用域：setContent 里的 hiltViewModel() 拿到的是同一个实例
+    private val mainViewModel: MainViewModel by viewModels()
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 先装启动屏（super 之前），决策完成前不撤：第一帧直接落在正确 Tab，无跳变、无白屏
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashScreen.setKeepOnScreenCondition { mainViewModel.startTab.value == null }
         playbackConnection.connect()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -93,7 +100,6 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         setContent {
-            val mainViewModel: MainViewModel = hiltViewModel()
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val customThemeColor by mainViewModel.customThemeColor.collectAsStateWithLifecycle()
             val darkMode by mainViewModel.darkMode.collectAsStateWithLifecycle()
@@ -121,6 +127,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
+    // null = 首 Tab 还没定：什么都不画，系统启动屏继续盖着
+    val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value ?: return
     val navController = rememberNavController()
     val imageFormat by mainViewModel.imageFormat.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
@@ -156,6 +164,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                 val layoutDirection = LocalLayoutDirection.current
                 AppRootNavHost(
                     navController = navController,
+                    startTab = startTab,
                     modifier = Modifier.padding(
                         start = innerPadding.calculateStartPadding(layoutDirection),
                         end = innerPadding.calculateEndPadding(layoutDirection),
@@ -165,14 +174,14 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             }
         } else {
             // 独立全屏页：无底栏
-            AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
+            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
         }
     } else {
         // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
         if (inMainTabs) {
-            cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController)
+            cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController, startTab = startTab)
         } else {
-            AppRootNavHost(navController = navController, modifier = Modifier.fillMaxSize())
+            AppRootNavHost(navController = navController, startTab = startTab, modifier = Modifier.fillMaxSize())
         }
     }
     }
