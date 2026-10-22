@@ -60,7 +60,7 @@ fun HistoryScreen(
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(
-                title = "历史记录",
+                title = "本地历史记录",
                 subtitle = if (list.isNotEmpty()) "共 ${list.size} 条播放记录" else null,
                 actions = {
                     if (list.isNotEmpty()) {

@@ -57,7 +57,7 @@ fun PlaylistScreen(
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(
-                title = "收藏",
+                title = "本地收藏",
                 subtitle = if (playlists.isNotEmpty()) "共 ${playlists.size} 个收藏夹" else null
             )
         }
