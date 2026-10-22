@@ -164,6 +164,107 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 低频：曲目/队列/播放态/步进/倍速。position 每 500ms 变一次，
+     * 但 distinct 后仅实质变化才下发——封面/标题/控制区不再跟 tick 重组。
+     * （uiState 保留给单测与事件函数，屏幕不再收它。）
+     */
+    data class TrackUiState(
+        val track: cn.debubu.tingbili.core.data.model.Track? = null,
+        val queue: List<cn.debubu.tingbili.core.data.model.Track> = emptyList(),
+        val currentIndex: Int = -1,
+        val isPlaying: Boolean = false,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
+        val sourceTitle: String? = null,
+        val speed: Float = 1f,
+        val repeatMode: Int = 0,
+        val stepSec: Int = 15,
+    )
+
+    val trackUi: StateFlow<TrackUiState> = combine(player.state, prefs.stepSec) { p, stepSec ->
+        TrackUiState(
+            track = p.currentTrack,
+            queue = p.queue,
+            currentIndex = p.currentIndex,
+            isPlaying = p.isPlaying,
+            isLoading = p.isLoading,
+            errorMessage = p.errorMessage,
+            sourceTitle = p.sourceTitle,
+            speed = p.speed,
+            repeatMode = p.repeatMode,
+            stepSec = stepSec,
+        )
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrackUiState())
+
+    /**
+     * 高频：进度三件套 + 睡眠倒计时。500ms 一推，只有进度条/辅助栏订阅，
+     * 不再带着封面/歌词整页重组。
+     */
+    data class ProgressUiState(
+        val positionMs: Long = 0L,
+        val bufferedPositionMs: Long = 0L,
+        val durationMs: Long = 0L,
+        val isLoading: Boolean = false,
+        val sleepRemainSec: Int? = null,
+        val sleepTotalSec: Int? = null,
+        val sleepFinishChapter: Boolean = false,
+        val sleepEndOfChapter: Boolean = false,
+    )
+
+    val progressUi: StateFlow<ProgressUiState> = player.state
+        .map { p ->
+            ProgressUiState(
+                positionMs = p.positionMs,
+                bufferedPositionMs = p.bufferedPositionMs,
+                durationMs = p.durationMs,
+                isLoading = p.isLoading,
+                sleepRemainSec = p.sleepRemainSec,
+                sleepTotalSec = p.sleepTotalSec,
+                sleepFinishChapter = p.sleepFinishChapter,
+                sleepEndOfChapter = p.sleepEndOfChapter,
+            )
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProgressUiState())
+
+    /**
+     * 中频：歌词区。position 每 tick 都参与算行号（二分），
+     * 但 distinct 后只在行号/字幕态变化时下发——歌词按行刷，不按 tick 刷。
+     */
+    data class LyricUiState(
+        val lyrics: List<LyricLine> = emptyList(),
+        val currentLyricIndex: Int = -1,
+        val subtitleLoadState: SubtitleLoadState = SubtitleLoadState.Loading,
+        val subtitleLabel: String? = null,
+        val subtitleIsAi: Boolean = false,
+        val subtitleTracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack> = emptyList(),
+        val subtitleIndex: Int = 0,
+        val subtitleScale: Float = 1f,
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val lyricUi: StateFlow<LyricUiState> = combine(
+        player.state.map { it.positionMs }.distinctUntilChanged(),
+        subtitleFlow,
+        prefs.subtitleScale,
+    ) { positionMs, sub, subtitleScale ->
+        val lyrics = sub.lines
+        val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(positionMs)
+        LyricUiState(
+            lyrics = lyrics,
+            currentLyricIndex = idx,
+            subtitleLoadState = sub.status,
+            subtitleLabel = sub.label,
+            subtitleIsAi = sub.isAi,
+            subtitleTracks = sub.tracks,
+            subtitleIndex = sub.index,
+            subtitleScale = subtitleScale,
+        )
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricUiState())
+
     /** 睡眠定时快捷选项（设置页可改，默认 30/60/90/120） */
     val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec, prefs.subtitleScale) { p, sub, stepSec, subtitleScale ->
         val lyrics = sub.lines

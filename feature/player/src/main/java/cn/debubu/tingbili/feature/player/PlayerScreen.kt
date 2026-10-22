@@ -115,7 +115,9 @@ fun PlayerScreen(
 ) {
     val imageFormat = LocalImageFormat.current
     val context = LocalContext.current
-    val s by vm.uiState.collectAsStateWithLifecycle()
+    val trackUi by vm.trackUi.collectAsStateWithLifecycle()
+    val progUi by vm.progressUi.collectAsStateWithLifecycle()
+    val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
@@ -125,7 +127,7 @@ fun PlayerScreen(
         }
     }
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
-    val headerTitle = playerHeaderTitle(s.track)
+    val headerTitle = playerHeaderTitle(trackUi.track)
 
     var lyricFullscreen by rememberSaveable { mutableStateOf(false) }
     // 全屏字幕时拦截返回：先退回封面态，再按一次才退出播放页
@@ -153,7 +155,7 @@ fun PlayerScreen(
 
         if (!lyricFullscreen) {
             AsyncImage(
-                model = s.track?.cover
+                model = trackUi.track?.cover
                     ?.takeIf { it.isNotBlank() }
                     ?.biliImage(BiliImageVariant.SquareCover, imageFormat),
                 contentDescription = null,
@@ -169,7 +171,7 @@ fun PlayerScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = chapterLabel(s.track?.title, s.track?.pageIndex, s.track?.pageCount ?: 1),
+                text = chapterLabel(trackUi.track?.title, trackUi.track?.pageIndex, trackUi.track?.pageCount ?: 1),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
@@ -179,7 +181,7 @@ fun PlayerScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = s.track?.author.orEmpty(),
+                text = trackUi.track?.author.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -189,7 +191,7 @@ fun PlayerScreen(
             FullscreenLyricsHeader(onBackToCover = { lyricFullscreen = false })
         }
 
-        s.errorMessage?.let { errorMsg ->
+        trackUi.errorMessage?.let { errorMsg ->
             Spacer(Modifier.height(8.dp))
             Text(
                 text = errorMsg,
@@ -199,7 +201,7 @@ fun PlayerScreen(
             )
         }
 
-        if (s.isLoading) {
+        if (trackUi.isLoading) {
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -222,12 +224,12 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 MiniLyricCard(
-                    lyrics = s.lyrics,
-                    currentIndex = s.currentLyricIndex,
-                    status = s.subtitleLoadState,
-                    fontScale = s.subtitleScale,
+                    lyrics = lyrUi.lyrics,
+                    currentIndex = lyrUi.currentLyricIndex,
+                    status = lyrUi.subtitleLoadState,
+                    fontScale = lyrUi.subtitleScale,
                     onCardClick = {
-                        when (s.subtitleLoadState) {
+                        when (lyrUi.subtitleLoadState) {
                             SubtitleLoadState.Ready -> lyricFullscreen = true
                             SubtitleLoadState.Empty -> android.widget.Toast.makeText(
                                 context, "暂无字幕", android.widget.Toast.LENGTH_SHORT
@@ -246,18 +248,18 @@ fun PlayerScreen(
                     .fillMaxWidth(),
             ) {
                 FullscreenLyricsList(
-                    state = s,
+                    state = lyrUi,
                     onSeekLyric = vm::seekToLyric,
-                    isLoading = s.isLoading,
+                    isLoading = trackUi.isLoading,
                 )
             }
         }
 
         PlaybackProgressBar(
-            positionMs = s.positionMs,
-            bufferedPositionMs = s.bufferedPositionMs,
-            durationMs = s.durationMs,
-            enabled = !s.isLoading,
+            positionMs = progUi.positionMs,
+            bufferedPositionMs = progUi.bufferedPositionMs,
+            durationMs = progUi.durationMs,
+            enabled = !trackUi.isLoading,
             onSeek = vm::seekTo,
         )
 
@@ -268,7 +270,7 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { vm.previous() }, enabled = !s.isLoading) {
+            IconButton(onClick = { vm.previous() }, enabled = !trackUi.isLoading) {
                 Icon(
                     Icons.Default.SkipPrevious,
                     contentDescription = "上一首",
@@ -276,15 +278,15 @@ fun PlayerScreen(
                 )
             }
 
-            IconButton(onClick = { vm.skipBackward() }, enabled = !s.isLoading) {
+            IconButton(onClick = { vm.skipBackward() }, enabled = !trackUi.isLoading) {
                 SkipIcon(
-                    seconds = s.stepSec,
+                    seconds = trackUi.stepSec,
                     forward = false,
-                    contentDescription = "后退${s.stepSec}秒",
+                    contentDescription = "后退${trackUi.stepSec}秒",
                 )
             }
 
-            if (s.isLoading) {
+            if (trackUi.isLoading) {
                 Box(
                     modifier = Modifier.size(64.dp),
                     contentAlignment = Alignment.Center,
@@ -297,22 +299,22 @@ fun PlayerScreen(
                     modifier = Modifier.size(64.dp),
                 ) {
                     Icon(
-                        imageVector = if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (s.isPlaying) "暂停" else "播放",
+                        imageVector = if (trackUi.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (trackUi.isPlaying) "暂停" else "播放",
                         modifier = Modifier.size(34.dp),
                     )
                 }
             }
 
-            IconButton(onClick = { vm.skipForward() }, enabled = !s.isLoading) {
+            IconButton(onClick = { vm.skipForward() }, enabled = !trackUi.isLoading) {
                 SkipIcon(
-                    seconds = s.stepSec,
+                    seconds = trackUi.stepSec,
                     forward = true,
-                    contentDescription = "前进${s.stepSec}秒",
+                    contentDescription = "前进${trackUi.stepSec}秒",
                 )
             }
 
-            IconButton(onClick = { vm.next() }, enabled = !s.isLoading) {
+            IconButton(onClick = { vm.next() }, enabled = !trackUi.isLoading) {
                 Icon(
                     Icons.Default.SkipNext,
                     contentDescription = "下一首",
@@ -325,10 +327,10 @@ fun PlayerScreen(
 
         // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 倍速
         PlayerAuxBar(
-            sleepLabel = sleepLabel(s.sleepRemainSec, s.sleepEndOfChapter),
-            sleepActive = s.sleepRemainSec != null || s.sleepEndOfChapter,
-            showSubtitleEntry = s.subtitleTracks.size > 1,
-            speedLabel = if (s.speed == 1f) "倍速" else "${s.speed}x",
+            sleepLabel = sleepLabel(progUi.sleepRemainSec, progUi.sleepEndOfChapter),
+            sleepActive = progUi.sleepRemainSec != null || progUi.sleepEndOfChapter,
+            showSubtitleEntry = lyrUi.subtitleTracks.size > 1,
+            speedLabel = if (trackUi.speed == 1f) "倍速" else "${trackUi.speed}x",
             onTimerClick = { showTimerSheet = true },
             onSubtitleClick = { showSubtitleSheet = true },
             onChapterClick = { showChapterSheet = true },
@@ -340,12 +342,12 @@ fun PlayerScreen(
 
     if (showTimerSheet) {
         SleepTimerSheet(
-            remainSec = s.sleepRemainSec,
-            totalMin = s.sleepTotalSec?.div(60),
-            finishChapter = s.sleepFinishChapter,
+            remainSec = progUi.sleepRemainSec,
+            totalMin = progUi.sleepTotalSec?.div(60),
+            finishChapter = progUi.sleepFinishChapter,
             finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
             lastMin = vm.sleepLastMin.collectAsStateWithLifecycle().value,
-            endOfChapter = s.sleepEndOfChapter,
+            endOfChapter = progUi.sleepEndOfChapter,
             onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
             onToggleFinish = { vm.setSleepFinishChapter(it) },
             onCancel = { vm.cancelSleepTimer() },
@@ -354,8 +356,8 @@ fun PlayerScreen(
     }
     if (showChapterSheet) {
         ChapterSheet(
-            queue = s.queue,
-            currentIndex = s.currentIndex,
+            queue = trackUi.queue,
+            currentIndex = trackUi.currentIndex,
             onSelect = {
                 vm.playAt(it)
                 showChapterSheet = false
@@ -365,8 +367,8 @@ fun PlayerScreen(
     }
     if (showSubtitleSheet) {
         SubtitleSheet(
-            tracks = s.subtitleTracks,
-            selectedIndex = s.subtitleIndex,
+            tracks = lyrUi.subtitleTracks,
+            selectedIndex = lyrUi.subtitleIndex,
             onSelect = {
                 vm.selectSubtitle(it)
                 showSubtitleSheet = false
@@ -379,7 +381,7 @@ fun PlayerScreen(
             refreshing = isRefreshing,
             onRefresh = { vm.refreshBv() },
             onDetail = {
-                s.track?.bvid?.takeIf { it.isNotBlank() }?.let(onDetailClick)
+                trackUi.track?.bvid?.takeIf { it.isNotBlank() }?.let(onDetailClick)
                 showMoreSheet = false
             },
             onSettings = {
@@ -916,7 +918,7 @@ private fun FullscreenLyricsHeader(onBackToCover: () -> Unit) {
 /** 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随 + 点行跳转，末尾带 AI 标注 */
 @Composable
 private fun FullscreenLyricsList(
-    state: PlayerUiState,
+    state: PlayerViewModel.LyricUiState,
     onSeekLyric: (cn.debubu.tingbili.data.bilibili.model.LyricLine) -> Unit,
     isLoading: Boolean,
 ) {
