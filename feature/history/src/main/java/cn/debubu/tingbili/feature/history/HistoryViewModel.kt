@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
@@ -49,19 +51,22 @@ class HistoryViewModel @Inject constructor(
     /** 正在等起播的那条记录，键为 "bvid:cid" */
     val pendingKey: StateFlow<String?> = _pendingKey.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            history.collect { list ->
-                list.map { it.bvid }.distinct().forEach { bvid -> loadVideoInfo(bvid) }
-            }
-        }
-    }
+    /** 详情并发上限：进页瞬间 60 个 BV 不会同时打出去，超限的排队 */
+    private val videoInfoSemaphore = Semaphore(4)
 
-    private suspend fun loadVideoInfo(bvid: String) {
-        if (_videoInfo.value.containsKey(bvid) || !inflight.add(bvid)) return
-        when (val result = repo.getView(bvid)) {
-            is Result.Success -> _videoInfo.update { it + (bvid to result.data) }
-            is Result.Error -> inflight.remove(bvid) // 失败时允许下次重试
+    /**
+     * 可见才拉：由列表行进入组合时触发（LaunchedEffect per bvid）。
+     * 之前是 init 里全量 distinct 拉，进页瞬间 N 个 view 请求直接撞 412。
+     */
+    fun prefetch(bvid: String) {
+        if (bvid.isBlank() || _videoInfo.value.containsKey(bvid) || !inflight.add(bvid)) return
+        viewModelScope.launch {
+            videoInfoSemaphore.withPermit {
+                when (val result = repo.getView(bvid)) {
+                    is Result.Success -> _videoInfo.update { it + (bvid to result.data) }
+                    is Result.Error -> inflight.remove(bvid) // 失败时允许下次重试
+                }
+            }
         }
     }
 

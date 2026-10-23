@@ -130,7 +130,11 @@ class HistoryViewModelTest {
             )
         )
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
-        override suspend fun view(bvid: String): ViewDto = viewResult
+        var viewCalls = 0
+        override suspend fun view(bvid: String): ViewDto {
+            viewCalls++
+            return viewResult
+        }
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
             return PlayUrlDto(
                 code = 0,
@@ -205,6 +209,26 @@ class HistoryViewModelTest {
             // 留着它们就永不返回（表现为 100% CPU 卡死）。放 finally 保证断言失败时也不会挂住。
             playerManager.release()
         }
+    }
+
+    @Test
+    fun `video info loads lazily on prefetch, not on history emit`() = runTest(dispatcher) {
+        val vm = HistoryViewModel(fakeDao, playerManager, repo)
+        fakeDao.save(HistoryEntity("BV1", 1, 1000, 1L))
+        fakeDao.save(HistoryEntity("BV2", 2, 2000, 2L))
+        runCurrent()
+        // 进页只收历史：不自动发 view，全量拉的风暴根源
+        assertEquals(0, fakeApi.viewCalls)
+        assertTrue(vm.videoInfo.value.isEmpty())
+        vm.prefetch("BV1")
+        runCurrent()
+        assertEquals(1, fakeApi.viewCalls)
+        assertEquals(listOf("BV1"), vm.videoInfo.value.keys.sorted())
+        // 同一 BV 重复 prefetch 去重，不再发请求
+        vm.prefetch("BV1")
+        vm.prefetch("BV1")
+        runCurrent()
+        assertEquals(1, fakeApi.viewCalls)
     }
 
     @Test

@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -85,6 +86,8 @@ fun HistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(list, key = { "${it.bvid}:${it.cid}" }) { item ->
+                    // 可见才拉：行进入组合才发 view 请求，进页不再 N 路齐发
+                    LaunchedEffect(item.bvid) { vm.prefetch(item.bvid) }
                     val track = info[item.bvid].orEmpty().firstOrNull { it.cid == item.cid }
                     HistoryRow(
                         entity = item,
