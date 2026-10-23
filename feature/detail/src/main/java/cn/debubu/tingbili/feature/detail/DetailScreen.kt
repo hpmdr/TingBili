@@ -300,7 +300,7 @@ private fun DetailContent(
                 Text(text = "分P列表 (共${tracks.size}P)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
             }
-            itemsIndexed(tracks) { idx, t ->
+            itemsIndexed(tracks, key = { _, t -> "${t.bvid}:${t.cid}" }) { idx, t ->
                 val isPending = startingPlay && pendingIndex == idx
                 val focused = focus?.index == idx
                 val playing = playingTrack?.takeIf { it.key == "${t.bvid}:${t.cid}" }
