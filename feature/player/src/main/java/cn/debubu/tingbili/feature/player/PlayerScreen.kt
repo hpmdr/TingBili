@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -187,8 +186,6 @@ fun PlayerScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        } else {
-            FullscreenLyricsHeader(onBackToCover = { lyricFullscreen = false })
         }
 
         trackUi.errorMessage?.let { errorMsg ->
@@ -896,23 +893,6 @@ private fun MiniLyricCard(
             }
         }
     }
-}
-
-@Composable
-private fun FullscreenLyricsHeader(onBackToCover: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = "全屏字幕",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(onClick = onBackToCover) { Text("切回封面") }
-    }
-    Spacer(Modifier.height(8.dp))
 }
 
 /** 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随 + 点行跳转，末尾带 AI 标注 */
