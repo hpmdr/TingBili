@@ -286,6 +286,23 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `refreshBv works without uiState collectors`() = runTest(dispatcher) {
+        // 回归：屏幕改收三层分流后 uiState 无生产订阅者，事件函数若读 uiState.value
+        // 会拿到 track=null 的初值而静默 return（真机点刷新毫无反应）
+        loginAndRebuildAuth()
+        val track = demoTrack()
+        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        player.restoreLastPlayback()
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        // 故意不 collect vm.uiState：SlowSubtitleApi.view 回空 data → 走 Error 分支
+        runCurrent()
+        vm.refreshBv()
+        runCurrent()
+        advanceTimeBy(200)
+        assertEquals("刷新失败，已保留旧数据", vm.message.value)
+    }
+
+    @Test
     fun `subtitle scale defaults persists and clamps`() = runTest(dispatcher) {
         assertEquals(1f, prefs.subtitleScale.first())
         prefs.setSubtitleScale(1.15f)
