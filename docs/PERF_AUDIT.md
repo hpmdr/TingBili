@@ -546,3 +546,9 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
   - `PlayerViewModel.subtitleFlow`：内层 `flow{cached()/store()}` 加 `flowOn(subtitleIo)`——之前每次切歌都在主线程做 Room 读 + 万行 JSON 解码（最大 73KB），低端机开播页一顿。
   - 可测试性：`subtitleIo` 经 `PlayerModule @Named("subtitleIo")` 提供（默认 `Dispatchers.IO`，Hilt 2.60 默认参数需显式 binding，已验证编译）；单测 6 处直传 `StandardTestDispatcher`，虚拟时间确定性不变。教训：`flowOn(真实线程)` 会逃逸 `runTest` 虚拟时间，`withTimeout` 包 `first` 在 runTest 里用的是虚拟时钟——等真实线程=必超时；正确姿势是注入调度器。
 - 验证：`:app:` Hilt 编译 + `:app:`/`:feature:player:`/`:feature:home:` 单测全绿；真机播放页实时字幕 4 行 정상，`0:44/1:28:30` 进度正常。
+## 收官（2026-10-23，master @a72b3d9）
+
+- 本轮审计+修复正式封存：P0/P1/P2 诊断冻结，PERF Top10 10/10 销账，ARCH Top5 实质收官（两项长期暂缓有数据/评估 backing）。
+- 核对：18 个引用提交全存在，`testDebugUnitTest` 189/189 全绿，真机 4 轮回归（播放/暂停/字幕/滚动/mini条/队列恢复/黑条）全过，工作区干净。
+- 后续动代码只增文末落地进度，不改正文；新基建（Baseline Profile）另开任务，见新会话。
+
