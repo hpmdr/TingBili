@@ -1218,7 +1218,7 @@ private fun ChapterSheet(
                 .heightIn(max = 420.dp)
                 .padding(bottom = 32.dp),
         ) {
-            itemsIndexed(items = queue) { idx, track ->
+            itemsIndexed(items = queue, key = { _, track -> "${track.bvid}:${track.cid}" }) { idx, track ->
                 val selected = idx == currentIndex
                 ListItem(
                     headlineContent = {
