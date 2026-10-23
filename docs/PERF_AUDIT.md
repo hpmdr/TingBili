@@ -473,3 +473,8 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 - ✅ 图片分档收尾（`a081549`）：播放封面 640 档；B 站收藏/空间列表原图改按尺寸裁剪（192x120 / ListThumb）。`memoryCacheKey` 未做：需等 Coil ImageLoader 统一调参，记入 `core:cache` 模块时一起做。
 - ✅ 队列真相第一步（`5b25864`）：refreshQueue 拆纯 plan + 不断播手术 + 双尾合一，24 单测钉住行为，真机刷新链路回归通过。
 - ✅ 播放器拆分回填坑（`47226a8` + `509f182`）：拆订阅后 `playAt/refreshBv/cycleSpeed` 误读无人订阅的 `uiState` 导致静默 return；改读常热 `player.state`，回归单测反向验证（旧代码必挂 1 个），真机章节 P1→P5 跳播验证通过。
+
+## 落地进度（2026-10-23 中午，master @3b3b573）
+
+- ✅ 缓存搬家第一步（`3b3b573`）：playUrl 大 Map 迁出 DataStore → Room `PlayUrlCacheEntity`（v9 + `MIGRATION_8_9`）；PlayerManager 经 `PlayUrlCacheDao` 读写 + 启动一次性搬运旧 JSON（读完删键）；prefs 旧读写 API 已删。真机验证：prefs 文件 19KB 且无 `playurl_cache_json` 键，播放/暂停/字幕正常。171 单测全绿（含新增 `PlayUrlCacheDaoTest` 4 例）。
+- 剩下：HomeSnapshot 单行 60 条 JSON、Subtitle 万行 linesJson 仍在 Room TEXT 里（读多写少，暂缓；动则加文件缓存）。
