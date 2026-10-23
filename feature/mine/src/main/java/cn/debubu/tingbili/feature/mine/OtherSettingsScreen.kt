@@ -54,6 +54,7 @@ fun OtherSettingsScreen(
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
+    val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     var newKeyword by remember { mutableStateOf("") }
@@ -186,6 +187,26 @@ fun OtherSettingsScreen(
                     Switch(
                         checked = audioHwDecode,
                         onCheckedChange = { vm.setAudioHwDecode(it) }
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("DSP 音频卸载（省电）")
+                        Text(
+                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后下一首生效。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = audioOffload,
+                        onCheckedChange = { vm.setAudioOffload(it) }
                     )
                 }
             }

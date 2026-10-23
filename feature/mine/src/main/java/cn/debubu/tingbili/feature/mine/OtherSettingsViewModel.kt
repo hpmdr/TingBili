@@ -33,6 +33,13 @@ class OtherSettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
 
+    /** DSP 音频卸载开关（默认关；切换后下一首生效） */
+    val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false
+    )
+
     /** 音频优先硬解开关（默认开；切换后下一首生效） */
     val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
         viewModelScope,
@@ -155,6 +162,10 @@ class OtherSettingsViewModel @Inject constructor(
 
     fun setAudioHwDecode(v: Boolean) {
         viewModelScope.launch { prefs.setAudioHwDecode(v) }
+    }
+
+    fun setAudioOffload(v: Boolean) {
+        viewModelScope.launch { prefs.setAudioOffload(v) }
     }
 }
 
