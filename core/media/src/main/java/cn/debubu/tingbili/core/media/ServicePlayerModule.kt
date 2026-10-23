@@ -7,6 +7,7 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dagger.Module
@@ -51,7 +52,10 @@ object ServicePlayerModule {
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-        return ExoPlayer.Builder(context)
+        // 解码器经 PreferHardwareAudioDecoderSelector 重排：有硬解优先硬解，
+    // 失败自动回落软解（ExoPlayer 按序尝试，兜底逻辑不变）。
+    val renderersFactory = DefaultRenderersFactory(context).setMediaCodecSelector(PreferHardwareAudioDecoderSelector)
+    return ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
             .apply {

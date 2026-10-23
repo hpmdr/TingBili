@@ -86,6 +86,10 @@ class PlayerManager @Inject constructor(
             restoreLastPlayback()
             restoreSleepTimer()
         }
+        // 硬解开关实时镜像：解码器每次建实例都查最新值，切换后下一首生效，无需重建播放器
+        scope.launch {
+            prefs.audioHwDecode.collect { PreferHardwareAudioDecoderSelector.preferHardware = it }
+        }
         // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
         scope.launch {
             try {

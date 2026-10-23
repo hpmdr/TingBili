@@ -43,6 +43,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
     /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
     val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
+    /** 音频优先硬解（设置页开关，默认开；关闭则沿用系统默认选型） */
+    val audioHwDecode: Flow<Boolean> = ds.data.map { it[AUDIO_HW_DECODE] ?: true }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
@@ -207,6 +209,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
      * 一次性搬运：读出旧 DataStore playurl 大 Map 并删键，供 PlayerManager 启动时迁入 Room。
      * 新写入一律走 Room，此函数在旧数据搬空后即为 no-op；下个版本可删。
      */
+    suspend fun setAudioHwDecode(v: Boolean) {
+        ds.edit { it[AUDIO_HW_DECODE] = v }
+    }
+
     suspend fun drainPlayUrlCache(): Map<String, CachedPlayUrl> {
         var out: Map<String, CachedPlayUrl> = emptyMap()
         ds.edit { prefs ->
@@ -261,6 +267,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val SPEED = floatPreferencesKey("speed")
         val SUBTITLE_SCALE = floatPreferencesKey("subtitle_scale")
+        val AUDIO_HW_DECODE = androidx.datastore.preferences.core.booleanPreferencesKey("audio_hw_decode")
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
         val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
         val SLEEP_DEADLINE_MS = androidx.datastore.preferences.core.longPreferencesKey("sleep_deadline_ms")

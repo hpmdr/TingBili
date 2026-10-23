@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +53,7 @@ fun OtherSettingsScreen(
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
+    val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     var newKeyword by remember { mutableStateOf("") }
@@ -161,6 +163,31 @@ fun OtherSettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
+            }
+
+            // 音频解码
+            Column {
+                Text("音频解码", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("优先硬件解码")
+                        Text(
+                            "硬解更省电；机型不支持或硬解失败时自动回落软解。切换后下一首生效。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = audioHwDecode,
+                        onCheckedChange = { vm.setAudioHwDecode(it) }
+                    )
+                }
             }
 
             // 缓存管理：音频 / 图片 / 字幕分别统计、分别清理
