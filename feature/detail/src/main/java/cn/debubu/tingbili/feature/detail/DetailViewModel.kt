@@ -35,6 +35,8 @@ sealed interface DetailUiState {
  * 相关推荐区状态：与详情主内容独立加载，失败不影响主内容展示。
  */
 sealed interface RelatedUiState {
+    /** 从未加载过：相关推荐是懒加载，用户首次切到该 Tab 时才请求 */
+    data object Idle : RelatedUiState
     data object Loading : RelatedUiState
     data class Success(val tracks: List<Track>) : RelatedUiState
     data class Error(val message: String) : RelatedUiState
@@ -64,7 +66,7 @@ class DetailViewModel @Inject constructor(
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
 
-    private val _related = MutableStateFlow<RelatedUiState>(RelatedUiState.Loading)
+    private val _related = MutableStateFlow<RelatedUiState>(RelatedUiState.Idle)
     val related: StateFlow<RelatedUiState> = _related.asStateFlow()
 
     private val _isFavorited = MutableStateFlow(false)
@@ -121,7 +123,6 @@ class DetailViewModel @Inject constructor(
 
     init {
         load()
-        loadRelated()
         observeFavorite()
     }
 
@@ -144,6 +145,14 @@ class DetailViewModel @Inject constructor(
                 is Result.Error -> _state.value = DetailUiState.Error(result.msg ?: "加载失败")
             }
         }
+    }
+
+    /**
+     * 相关推荐懒加载：只在从未加载过时请求。切回 Tab / 重组 / 旋转恢复都不会重复请求，
+     * 出错停在 Error 由推荐区重试按钮显式重拉。
+     */
+    fun ensureRelatedLoaded() {
+        if (_related.value is RelatedUiState.Idle) loadRelated()
     }
 
     fun loadRelated() {

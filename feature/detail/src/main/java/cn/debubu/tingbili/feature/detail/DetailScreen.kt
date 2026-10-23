@@ -157,6 +157,7 @@ fun DetailScreen(
                         related = related,
                         selectedTab = selectedTab,
                         onTabSelected = { selectedTab = it },
+                        onEnsureRelated = { viewModel.ensureRelatedLoaded() },
                         listState = listState,
                         onVideoClick = onVideoClick,
                         onRetryRelated = { viewModel.loadRelated() },
@@ -189,6 +190,7 @@ private fun DetailContent(
     related: RelatedUiState,
     selectedTab: Int,
     onTabSelected: (Int) -> Unit,
+    onEnsureRelated: () -> Unit,
     listState: LazyListState,
     onPlayAll: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -219,6 +221,9 @@ private fun DetailContent(
             if ((stat?.coin ?: 0) > 0) append(" · ${formatCount(stat!!.coin)} 投币")
             if ((stat?.favorite ?: 0) > 0) append(" · ${formatCount(stat!!.favorite)} 收藏")
         }
+    }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) onEnsureRelated()
     }
     val tabScope = rememberCoroutineScope()
     // TabRow 吸顶 header 在整列里的下标：封面/标题/UP/统计/按钮 5 个固定项，有简介再 +1
@@ -427,6 +432,8 @@ private fun DetailContent(
             }
         } else {
             when (val r = related) {
+            // Idle 只在“Tab 已选中但加载回调还没跑”的一帧出现，与 Loading 同样展示转圈
+            is RelatedUiState.Idle,
             is RelatedUiState.Loading -> {
                 item {
                     Box(

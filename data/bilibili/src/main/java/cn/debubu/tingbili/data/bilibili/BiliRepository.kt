@@ -161,7 +161,8 @@ class BiliRepository @Inject constructor(
     }
 
     /**
-     * 相关推荐：与 view 并行调用，失败不阻塞详情主内容（调用方在推荐区单独展示重试）。
+     * 相关推荐（懒加载：详情 VM 只在用户首次切到推荐 Tab 时调这里）。
+     * 失败不阻塞详情主内容（调用方在推荐区单独展示重试）。
      * 接口无分页，一次约 10~20 条；过滤掉当前视频自己。
      */
     suspend fun getRelated(bvid: String): Result<List<Track>> = try {
