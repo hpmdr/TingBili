@@ -264,4 +264,46 @@ class BiliRepositoryTest {
         val r = repo.getPlayUrl("BV1xx", 1001)
         assertTrue(r is Result.Error)
     }
+
+    private fun viewBody(bvid: String) =
+        """{"code":0,"data":{"bvid":"$bvid","title":"T","pic":"https://cover","owner":{"name":"u"},"pages":[{"cid":1,"page":1,"part":"P1","duration":60}],"duration":60}}"""
+
+    @Test
+    fun `getView memoizes success within TTL`() = runTest {
+        server.enqueue(
+            jsonResponse(viewBody("BV9"))
+        )
+        assertTrue(repo.getView("BV9") is Result.Success)
+        assertTrue(repo.getView("BV9") is Result.Success)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `getView does not cache errors`() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"code":-412,"message":"limited","data":null}""")
+                .setResponseCode(200).addHeader("Content-Type", "application/json")
+        )
+        server.enqueue(
+            jsonResponse(viewBody("BV8"))
+        )
+        assertTrue(repo.getView("BV8") is Result.Error)
+        assertTrue(repo.getView("BV8") is Result.Success)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `getViewDetail forceRefresh bypasses memo`() = runTest {
+        server.enqueue(
+            jsonResponse(viewBody("BV7"))
+        )
+        server.enqueue(
+            jsonResponse(viewBody("BV7"))
+        )
+        assertTrue(repo.getViewDetail("BV7") is Result.Success)
+        assertTrue(repo.getViewDetail("BV7") is Result.Success)
+        assertEquals(1, server.requestCount)
+        assertTrue(repo.getViewDetail("BV7", forceRefresh = true) is Result.Success)
+        assertEquals(2, server.requestCount)
+    }
 }

@@ -385,7 +385,8 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                when (val r = repo.getViewDetail(cur.bvid)) {
+                // 显式刷新跳过 view memo，直取 B 站最新分P
+                when (val r = repo.getViewDetail(cur.bvid, forceRefresh = true)) {
                     is Result.Error -> _message.value = "刷新失败，已保留旧数据"
                     is Result.Success -> {
                         val res = player.refreshQueue(r.data.toTracks(), r.data.title)

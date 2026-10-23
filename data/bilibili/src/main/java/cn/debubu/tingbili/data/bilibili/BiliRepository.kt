@@ -95,36 +95,69 @@ class BiliRepository @Inject constructor(
     companion object {
         /** 两次搜索最小间隔：压住快速上滑时的连续 append 请求，防 412。 */
         const val SEARCH_MIN_INTERVAL_MS = 800L
+        /** view / viewDetail 内存 memo TTL：回退/重进详情、历史 N 路回访直接命中，只缓存成功态 */
+        const val VIEW_MEMO_TTL_MS = 300_000L
     }
 
-    suspend fun getView(bvid: String): Result<List<Track>> = try {
-        val dto = api.view(bvid)
-        if (dto.code != 0) {
-            Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
-        } else {
-            val tracks = dto.toTracks()
-            Result.Success(tracks)
+    private data class ViewEntry(val tracks: List<Track>, val fetchedAtMs: Long)
+    private data class DetailEntry(val data: ViewData, val fetchedAtMs: Long)
+    private val viewMutex = Mutex()
+    private val viewCache = mutableMapOf<String, ViewEntry>()
+    private val detailCache = mutableMapOf<String, DetailEntry>()
+
+    suspend fun getView(bvid: String): Result<List<Track>> {
+        if (bvid.isNotBlank()) {
+            viewMutex.withLock {
+                viewCache[bvid]?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < VIEW_MEMO_TTL_MS }
+                    ?.let { return Result.Success(it.tracks) }
+            }
         }
-    } catch (e: Exception) {
-        Result.Error(e.message ?: "view failed", e)
+        return try {
+            val dto = api.view(bvid)
+            if (dto.code != 0) {
+                Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
+            } else {
+                val tracks = dto.toTracks()
+                if (bvid.isNotBlank()) {
+                    viewMutex.withLock { viewCache[bvid] = ViewEntry(tracks, System.currentTimeMillis()) }
+                }
+                Result.Success(tracks)
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "view failed", e)
+        }
     }
 
-    /** 详情页：返回完整 ViewData（含简介/UP主/统计/分P），调用方自行转 Track */
-    suspend fun getViewDetail(bvid: String): Result<ViewData> = try {
-        val dto = api.view(bvid)
-        if (dto.code != 0 || dto.data == null) {
-            Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
-        } else {
-            val data = dto.data
-            // 封面/头像可能是 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
-            val normalized = data.copy(
-                pic = data.pic.normalizeBiliImageUrl(),
-                owner = data.owner?.copy(face = data.owner.face.normalizeBiliImageUrl())
-            )
-            Result.Success(normalized)
+    /**
+     * 详情页：返回完整 ViewData（含简介/UP主/统计/分P），调用方自行转 Track。
+     * 成功态内存 memo 5min；[forceRefresh] 给“刷新当前内容”用，跳过缓存直取最新。
+     */
+    suspend fun getViewDetail(bvid: String, forceRefresh: Boolean = false): Result<ViewData> {
+        if (!forceRefresh && bvid.isNotBlank()) {
+            viewMutex.withLock {
+                detailCache[bvid]?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < VIEW_MEMO_TTL_MS }
+                    ?.let { return Result.Success(it.data) }
+            }
         }
-    } catch (e: Exception) {
-        Result.Error(e.message ?: "view failed", e)
+        return try {
+            val dto = api.view(bvid)
+            if (dto.code != 0 || dto.data == null) {
+                Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
+            } else {
+                val data = dto.data
+                // 封面/头像可能是 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
+                val normalized = data.copy(
+                    pic = data.pic.normalizeBiliImageUrl(),
+                    owner = data.owner?.copy(face = data.owner.face.normalizeBiliImageUrl())
+                )
+                if (bvid.isNotBlank()) {
+                    viewMutex.withLock { detailCache[bvid] = DetailEntry(normalized, System.currentTimeMillis()) }
+                }
+                Result.Success(normalized)
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "view failed", e)
+        }
     }
 
     suspend fun getPlayUrl(bvid: String, cid: Long): Result<String> = try {
