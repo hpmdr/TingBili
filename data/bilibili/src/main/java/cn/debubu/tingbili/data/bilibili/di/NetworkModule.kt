@@ -2,9 +2,9 @@ package cn.debubu.tingbili.data.bilibili.di
 
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BuvidProvider
+import cn.debubu.tingbili.data.bilibili.CookieHeaderProvider
 import cn.debubu.tingbili.data.bilibili.WbiInterceptor
 import cn.debubu.tingbili.data.bilibili.WbiSigner
-import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,8 +41,7 @@ object NetworkModule {
     @Singleton
     fun provideOkHttp(
         wbiSigner: WbiSigner,
-        buvidProvider: BuvidProvider,
-        authRepository: AuthRepository,
+        cookieHeaders: CookieHeaderProvider,
     ): OkHttpClient =
         OkHttpClient.Builder()
             // 超时兜底：无超时时 412/弱网会 hang 住 load 协程堆积
@@ -52,15 +51,7 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .addInterceptor(
                 // 登录态 Cookie 优先（配额更高、风控更松），游客模式回落 buvid3/4
-                WbiInterceptor(wbiSigner, cookieProvider = {
-                    val session = authRepository.sessionFlow.value?.toCookieHeader()
-                    val buvid = buvidProvider.cookie()
-                    listOfNotNull(session, buvid)
-                        .map { it.trim().trim(';') }
-                        .filter { it.isNotBlank() }
-                        .joinToString("; ")
-                        .ifBlank { null }
-                })
+                WbiInterceptor(wbiSigner, cookieProvider = cookieHeaders::get)
             )
             .build()
 

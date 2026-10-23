@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit
  *
  * 进程内缓存；获取失败返回 null（不注入 Cookie，不阻塞请求）。
  */
-class BuvidProvider(
+// open 供单测替身覆盖 cookie()（线上走 spi 网络，单测不碰网）
+open class BuvidProvider(
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val spiUrl: String = "https://api.bilibili.com/x/frontend/finger/spi",
 ) {
@@ -32,7 +33,7 @@ class BuvidProvider(
     private val lock = Any()
 
     /** 返回 "buvid3=...; buvid4=..." 形式的 Cookie 值；获取失败返回 null */
-    fun cookie(): String? {
+    open fun cookie(): String? {
         cachedCookie?.let { return it }
         synchronized(lock) {
             cachedCookie?.let { return it }
