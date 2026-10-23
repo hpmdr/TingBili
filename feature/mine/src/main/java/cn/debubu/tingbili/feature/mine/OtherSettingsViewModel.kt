@@ -40,11 +40,11 @@ class OtherSettingsViewModel @Inject constructor(
         false
     )
 
-    /** 音频优先硬解开关（默认开；切换后下一首生效） */
+    /** 音频优先硬解开关（默认关；切换后下一首生效） */
     val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        true
+        false
     )
 
     /** 首页推荐词（设置页可增减，至少保留一个） */
