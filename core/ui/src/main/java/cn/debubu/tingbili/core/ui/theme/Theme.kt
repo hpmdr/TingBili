@@ -33,7 +33,7 @@ fun TingBiliTheme(
     val scheme = remember(themeMode, darkTheme, customThemeColorArgb) {
         when {
             themeMode == ThemeMode.SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                if (darkTheme) applyAmoledBlack(dynamicDarkColorScheme(context)) else dynamicLightColorScheme(context)
             }
             themeMode == ThemeMode.CUSTOM -> brandedColorScheme(Color(customThemeColorArgb), darkTheme)
             else -> brandedColorScheme(Color(PreferencesRepository.DEFAULT_THEME_COLOR), darkTheme)
@@ -61,7 +61,7 @@ internal fun brandedColorScheme(seed: Color, dark: Boolean): ColorScheme {
     }
     val tertiary = blend(primary, Color(0xFF53B8FF), 0.28f)
 
-    return base.copy(
+    val branded = base.copy(
         primary = primary,
         onPrimary = onPrimary,
         primaryContainer = primaryContainer,
@@ -74,6 +74,27 @@ internal fun brandedColorScheme(seed: Color, dark: Boolean): ColorScheme {
         onTertiary = contentColor(tertiary),
         surfaceTint = primary,
         inversePrimary = primary
+    )
+    // OLED 纯黑：深色下背景/表面全压到黑系，像素不发光，深夜不晃眼
+    return if (dark) applyAmoledBlack(branded) else branded
+}
+
+/**
+ * AMOLED 纯黑覆盖：只动背景/表面层级，不动 primary/功能色。
+ * background/surface 归零为纯黑，容器按层级给 0A/12/1A/24，保证卡片/弹窗仍有层次。
+ */
+internal fun applyAmoledBlack(scheme: ColorScheme): ColorScheme {
+    return scheme.copy(
+        background = Color.Black,
+        surface = Color.Black,
+        surfaceDim = Color.Black,
+        surfaceBright = Color(0xFF1A1A1A),
+        surfaceContainerLowest = Color.Black,
+        surfaceContainerLow = Color(0xFF0A0A0A),
+        surfaceContainer = Color(0xFF121212),
+        surfaceContainerHigh = Color(0xFF1A1A1A),
+        surfaceContainerHighest = Color(0xFF242424),
+        surfaceVariant = Color(0xFF121212)
     )
 }
 
