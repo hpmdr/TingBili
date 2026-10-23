@@ -70,7 +70,7 @@ fun MainTabsScaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
             bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
         ) { innerPadding ->
-            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.padding(innerPadding))
+            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize().padding(innerPadding))
         }
     } else {
         NavigationSuiteScaffold(

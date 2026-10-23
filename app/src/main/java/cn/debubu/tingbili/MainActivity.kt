@@ -164,11 +164,15 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                     navController = navController,
                     startTab = startTab,
                     mainViewModel = mainViewModel,
-                    modifier = Modifier.padding(
-                        start = innerPadding.calculateStartPadding(layoutDirection),
-                        end = innerPadding.calculateEndPadding(layoutDirection),
-                        bottom = innerPadding.calculateBottomPadding()
-                    )
+                    // fillMaxSize 在先：mini 条收起导致 innerPadding.bottom 变小时，
+                    // 内容仍填满多出的空间，不露 Scaffold 底色黑条
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = innerPadding.calculateStartPadding(layoutDirection),
+                            end = innerPadding.calculateEndPadding(layoutDirection),
+                            bottom = innerPadding.calculateBottomPadding()
+                        )
                 )
             }
         } else {
