@@ -90,10 +90,6 @@ class PlayerManager @Inject constructor(
         scope.launch {
             prefs.audioHwDecode.collect { PreferHardwareAudioDecoderSelector.preferHardware = it }
         }
-        // DSP offload 开关实时镜像：经传输层下发 ExoPlayer，切换后下一首生效
-        scope.launch {
-            prefs.audioOffload.collect { transport.setAudioOffloadEnabled(it) }
-        }
         // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
         scope.launch {
             try {

@@ -26,8 +26,6 @@ interface PlayerHandle {
     fun seekTo(positionMs: Long)
     fun seekTo(mediaItemIndex: Int, positionMs: Long) { seekTo(positionMs) }
     fun setPlaybackSpeed(speed: Float)
-    /** DSP 音频卸载开关：经 MediaController 下发 ExoPlayer；条件不满足时自动回落不断播。 */
-    fun setAudioOffloadEnabled(enabled: Boolean)
     fun addListener(listener: Player.Listener)
     fun release()
 }

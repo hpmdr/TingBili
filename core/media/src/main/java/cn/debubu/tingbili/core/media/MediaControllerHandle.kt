@@ -2,7 +2,6 @@ package cn.debubu.tingbili.core.media
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionParameters
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,22 +47,6 @@ class MediaControllerHandle @Inject constructor(
     override fun pause() { controller()?.pause() }
     override fun seekTo(positionMs: Long) { controller()?.seekTo(positionMs) }
     override fun setPlaybackSpeed(speed: Float) { controller()?.setPlaybackSpeed(speed) }
-    override fun setAudioOffloadEnabled(enabled: Boolean) {
-        val controller = controller() ?: return
-        // ENABLED 为尽力而为：无缝要求开（章节衔接不断），变速不支持（变速时自动回落不断播）。
-        val offload = if (enabled) {
-            TrackSelectionParameters.AudioOffloadPreferences.Builder()
-                .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
-                .setIsGaplessSupportRequired(true)
-                .setIsSpeedChangeSupportRequired(false)
-                .build()
-        } else {
-            TrackSelectionParameters.AudioOffloadPreferences.DEFAULT
-        }
-        controller.setTrackSelectionParameters(
-            controller.trackSelectionParameters.buildUpon().setAudioOffloadPreferences(offload).build()
-        )
-    }
     override fun addListener(listener: Player.Listener) = connection.addListener(listener)
     override fun release() { /* 唯一释放权在 Service，此处为空 */ }
 }

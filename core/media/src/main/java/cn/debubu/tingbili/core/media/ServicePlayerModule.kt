@@ -7,10 +7,13 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dagger.Module
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ServiceComponent
@@ -34,6 +37,7 @@ object ServicePlayerModule {
     fun providePlaybackPlayer(
         @ApplicationContext context: Context,
         cache: SimpleCache,
+        prefs: cn.debubu.tingbili.core.data.datastore.PreferencesRepository,
         @Named("biliUserAgent") userAgent: String,
         @Named("biliReferer") referer: String,
     ): Player {
@@ -54,11 +58,28 @@ object ServicePlayerModule {
 
         // 解码器经 PreferHardwareAudioDecoderSelector 重排：有硬解优先硬解，
     // 失败自动回落软解（ExoPlayer 按序尝试，兜底逻辑不变）。
+    // DSP offload 只能在创建时下发（MediaController 无对应会话命令，运行时下发到不了 Service）。
+    // DataStore 首读走磁盘（约数十毫秒），随 Service 创建一次性同步读，注释开关=重启 App 生效。
+    val offloadOn = runBlocking { prefs.audioOffload.first() }
+    val offload = if (offloadOn) {
+        // ENABLED 尽力而为：无缝要求开（章节衔接不断），变速不支持（变速时自动回落不断播）。
+        TrackSelectionParameters.AudioOffloadPreferences.Builder()
+            .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+            .setIsGaplessSupportRequired(true)
+            .setIsSpeedChangeSupportRequired(false)
+            .build()
+    } else {
+        TrackSelectionParameters.AudioOffloadPreferences.DEFAULT
+    }
+    val trackParams = TrackSelectionParameters.DEFAULT.buildUpon()
+        .setAudioOffloadPreferences(offload).build()
     val renderersFactory = DefaultRenderersFactory(context).setMediaCodecSelector(PreferHardwareAudioDecoderSelector)
     return ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
             .apply {
+                // offload 意愿必须在 prepare 前下发：决定音轨走 DSP 还是 AP 解码
+                setTrackSelectionParameters(trackParams)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA)

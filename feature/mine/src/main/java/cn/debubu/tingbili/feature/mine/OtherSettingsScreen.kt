@@ -198,7 +198,7 @@ fun OtherSettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("DSP 音频卸载（省电）")
                         Text(
-                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后下一首生效。",
+                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后重启 App 生效。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.secondary
                         )

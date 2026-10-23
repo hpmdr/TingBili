@@ -78,7 +78,6 @@ class PlayerManagerTest {
         override fun setPlaybackSpeed(speed: Float) { capturedSpeed = speed }
         override fun addListener(listener: Player.Listener) { storedListener = listener }
         override fun release() {}
-        override fun setAudioOffloadEnabled(enabled: Boolean) {}
         // shadow duration field duplication fix — delegate
     }
 

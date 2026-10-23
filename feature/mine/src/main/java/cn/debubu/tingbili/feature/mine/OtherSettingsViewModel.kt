@@ -33,7 +33,7 @@ class OtherSettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
 
-    /** DSP 音频卸载开关（默认关；切换后下一首生效） */
+    /** DSP 音频卸载开关（默认关；切换后重启 App 生效） */
     val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),

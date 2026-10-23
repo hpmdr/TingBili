@@ -114,7 +114,6 @@ class HomeViewModelTest {
         override fun setPlaybackSpeed(speed: Float) {}
         override fun addListener(listener: Player.Listener) {}
         override fun release() {}
-        override fun setAudioOffloadEnabled(enabled: Boolean) {}
     }
 
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
