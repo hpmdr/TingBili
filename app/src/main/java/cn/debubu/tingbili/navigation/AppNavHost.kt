@@ -40,11 +40,28 @@ fun AppRootNavHost(
     NavHost(
         navController = navController,
         startDestination = MainTabsRoute,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = SharedAxisXEnter,
+        exitTransition = SharedAxisXExit,
+        popEnterTransition = SharedAxisXPopEnter,
+        popExitTransition = SharedAxisXPopExit,
+        predictivePopEnterTransition = PredictiveSharedAxisXPopEnter,
+        predictivePopExitTransition = PredictiveSharedAxisXPopExit,
     ) {
         // 主页 Tab 容器（带底栏，见 MainTabsScaffold）
-        navigation<MainTabsRoute>(startDestination = startTab) {
-            composable<HomeRoute> {
+        navigation<MainTabsRoute>(
+            startDestination = startTab,
+            enterTransition = SharedAxisXEnter,
+            exitTransition = SharedAxisXExit,
+            popEnterTransition = SharedAxisXPopEnter,
+            popExitTransition = SharedAxisXPopExit,
+        ) {
+            composable<HomeRoute>(
+                enterTransition = TabFadeEnter,
+                exitTransition = TabFadeExit,
+                popEnterTransition = TabFadeEnter,
+                popExitTransition = TabFadeExit,
+            ) {
                 ImageFormatScope(mainViewModel) {
                     HomeScreen(
                         onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
@@ -52,15 +69,30 @@ fun AppRootNavHost(
                     )
                 }
             }
-            composable<PlaylistRoute> {
+            composable<PlaylistRoute>(
+                enterTransition = TabFadeEnter,
+                exitTransition = TabFadeExit,
+                popEnterTransition = TabFadeEnter,
+                popExitTransition = TabFadeExit,
+            ) {
                 ImageFormatScope(mainViewModel) {
                     PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
                 }
             }
-            composable<HistoryRoute> {
+            composable<HistoryRoute>(
+                enterTransition = TabFadeEnter,
+                exitTransition = TabFadeExit,
+                popEnterTransition = TabFadeEnter,
+                popExitTransition = TabFadeExit,
+            ) {
                 ImageFormatScope(mainViewModel) { HistoryScreen() }
             }
-            composable<MeRoute> {
+            composable<MeRoute>(
+                enterTransition = TabFadeEnter,
+                exitTransition = TabFadeExit,
+                popEnterTransition = TabFadeEnter,
+                popExitTransition = TabFadeExit,
+            ) {
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
@@ -141,7 +173,12 @@ fun AppRootNavHost(
                 PlaylistDetailScreen(onBack = { navController.popBackStack() })
             }
         }
-        composable<PlayerRoute> { backStackEntry ->
+        composable<PlayerRoute>(
+            enterTransition = PlayerEnter,
+            exitTransition = PlayerExit,
+            popEnterTransition = PlayerPopEnter,
+            popExitTransition = PlayerPopExit,
+        ) { backStackEntry ->
             // 播放页 VM 挂到 Tabs 容器条目上：播着的时候退多少次、进多少次都是同一个 VM，
             // 状态（进度/歌词/字幕选择）不断，uiState 也不重建。Tabs 条目与应用前台同寿，
             // 进程起来它就在，退出应用才销毁；空闲时 VM 只剩轻量流，无实质占用。
