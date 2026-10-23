@@ -265,7 +265,10 @@ class PlayerViewModel @Inject constructor(
     }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricUiState())
 
-    /** 睡眠定时快捷选项（设置页可改，默认 30/60/90/120） */
+    /**
+     * 全量聚合（单测与旧调用兼容用）：生产屏幕改收 trackUi/progressUi/lyricUi，
+     * 此处无生产订阅者；事件函数一律读 player.state，禁止回退到 uiState.value。
+     */
     val uiState: StateFlow<PlayerUiState> = combine(player.state, subtitleFlow, prefs.stepSec, prefs.subtitleScale) { p, sub, stepSec, subtitleScale ->
         val lyrics = sub.lines
         val idx = if (lyrics.isEmpty()) -1 else LyricState(lyrics).indexFor(p.positionMs)
@@ -324,11 +327,11 @@ class PlayerViewModel @Inject constructor(
         selectedSubtitleIndex.value = index
     }
 
-    /** 章节点播 */
+    /** 章节点播（读常热的 player.state：uiState 自屏幕改收三层流后已无生产订阅者，读它会拿到过期初值） */
     fun playAt(index: Int) {
-        val q = uiState.value.queue
-        if (index !in q.indices) return
-        viewModelScope.launch { player.play(q, index, uiState.value.sourceTitle) }
+        val s = player.state.value
+        if (index !in s.queue.indices) return
+        viewModelScope.launch { player.play(s.queue, index, s.sourceTitle) }
     }
 
     /** “到点后播完本章再停”默认开关（持久化，下次弹窗沿用） */
@@ -373,8 +376,9 @@ class PlayerViewModel @Inject constructor(
      */
     fun refreshBv() {
         if (_isRefreshing.value) return
-        val cur = uiState.value.track ?: return
-        if (uiState.value.isLoading) {
+        // 同上：读 player.state 而非 uiState，避免无订阅者时的过期初值导致静默 return
+        val cur = player.state.value.currentTrack ?: return
+        if (player.state.value.isLoading) {
             _message.value = "正在加载，稍后再试"
             return
         }
@@ -404,7 +408,7 @@ class PlayerViewModel @Inject constructor(
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
     fun cycleSpeed() {
         val steps = listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f)
-        val cur = uiState.value.speed
+        val cur = player.state.value.speed
         val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
         viewModelScope.launch { player.setSpeed(next) }
     }
