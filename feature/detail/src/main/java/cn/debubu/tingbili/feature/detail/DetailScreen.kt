@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -173,6 +174,29 @@ private fun DetailContent(
     onPlayPage: (Int) -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
+    // 头部重活只随 video 变：progress 每秒推，组合内 SDF/format 每秒跑纯属浪费
+    val coverUrl = remember(video.pic, imageFormat) {
+        video.pic.takeIf { it.isNotBlank() }?.biliImage(BiliImageVariant.DetailHero, imageFormat)
+    }
+    val subLine = remember(video.tname, video.pubdate) {
+        buildString {
+            if (video.tname.isNotBlank()) append(video.tname)
+            if (video.pubdate > 0) {
+                if (isNotEmpty()) append(" · ")
+                append(formatDate(video.pubdate * 1000))
+            }
+        }
+    }
+    val statLine = remember(video.stat) {
+        buildString {
+            val stat = video.stat
+            append("${formatCount(stat?.view ?: 0)} 播放")
+            if ((stat?.danmaku ?: 0) > 0) append(" · ${formatCount(stat!!.danmaku)} 弹幕")
+            if ((stat?.like ?: 0) > 0) append(" · ${formatCount(stat!!.like)} 点赞")
+            if ((stat?.coin ?: 0) > 0) append(" · ${formatCount(stat!!.coin)} 投币")
+            if ((stat?.favorite ?: 0) > 0) append(" · ${formatCount(stat!!.favorite)} 收藏")
+        }
+    }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -180,8 +204,7 @@ private fun DetailContent(
     ) {
         item {
             AsyncImage(
-                model = video.pic.takeIf { it.isNotBlank() }
-                    ?.biliImage(BiliImageVariant.DetailHero, imageFormat),
+                model = coverUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
@@ -218,13 +241,7 @@ private fun DetailContent(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = buildString {
-                            if (video.tname.isNotBlank()) append(video.tname)
-                            if (video.pubdate > 0) {
-                                if (isNotEmpty()) append(" · ")
-                                append(formatDate(video.pubdate * 1000))
-                            }
-                        },
+                        text = subLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -234,14 +251,7 @@ private fun DetailContent(
         item {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = buildString {
-                    val stat = video.stat
-                    append("${formatCount(stat?.view ?: 0)} 播放")
-                    if ((stat?.danmaku ?: 0) > 0) append(" · ${formatCount(stat!!.danmaku)} 弹幕")
-                    if ((stat?.like ?: 0) > 0) append(" · ${formatCount(stat!!.like)} 点赞")
-                    if ((stat?.coin ?: 0) > 0) append(" · ${formatCount(stat!!.coin)} 投币")
-                    if ((stat?.favorite ?: 0) > 0) append(" · ${formatCount(stat!!.favorite)} 收藏")
-                },
+                text = statLine,
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
                 maxLines = 1,
