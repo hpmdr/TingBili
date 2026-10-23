@@ -149,43 +149,42 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     val inMainTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
-        // 手机：主页 Tab 带底栏 + 贴底 mini 条（滚动联动隐藏，只收条不收栏）；独立页全屏
+        // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
+        // 注意：NavHost 绝不能放在 inMainTabs 的 if/else 两分支里各调一次——
+        // 那样每次进出二级页都会重建 NavHost，内部 AnimatedContent 丢掉旧状态，
+        // 转场动画会被直接跳过（之前“看不到动画”就是这个原因）。
         val miniPlayerVisibility = cn.debubu.tingbili.navigation.rememberMiniPlayerVisibility()
-        if (inMainTabs) {
-            Scaffold(
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(miniPlayerVisibility.connection),
+            bottomBar = {
+                if (inMainTabs) {
+                    BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility)
+                }
+            }
+        ) { innerPadding ->
+            // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
+            val layoutDirection = LocalLayoutDirection.current
+            AppRootNavHost(
+                navController = navController,
+                startTab = startTab,
+                mainViewModel = mainViewModel,
+                // fillMaxSize 在先：mini 条收起导致 innerPadding.bottom 变小时，
+                // 内容仍填满多出的空间，不露 Scaffold 底色黑条
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(miniPlayerVisibility.connection),
-                bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
-            ) { innerPadding ->
-                // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
-                val layoutDirection = LocalLayoutDirection.current
-                AppRootNavHost(
-                    navController = navController,
-                    startTab = startTab,
-                    mainViewModel = mainViewModel,
-                    // fillMaxSize 在先：mini 条收起导致 innerPadding.bottom 变小时，
-                    // 内容仍填满多出的空间，不露 Scaffold 底色黑条
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            start = innerPadding.calculateStartPadding(layoutDirection),
-                            end = innerPadding.calculateEndPadding(layoutDirection),
-                            bottom = innerPadding.calculateBottomPadding()
-                        )
-                )
-            }
-        } else {
-            // 独立全屏页：无底栏
-            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = mainViewModel, modifier = Modifier.fillMaxSize())
+                    .padding(
+                        start = innerPadding.calculateStartPadding(layoutDirection),
+                        end = innerPadding.calculateEndPadding(layoutDirection),
+                        bottom = innerPadding.calculateBottomPadding()
+                    )
+            )
         }
     } else {
-        // 平板：NavigationRail + 悬浮 mini，仅主页 Tab 显示
-        if (inMainTabs) {
-            cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController, startTab = startTab)
-        } else {
-            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = mainViewModel, modifier = Modifier.fillMaxSize())
-        }
+        // 平板：壳常驻（Rail/悬浮 mini 只在主页 Tab 显示，壳内部按目的地切换），
+        // NavHost 调用点唯一，进出二级页不重建，转场才跑得起来
+        cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController, startTab = startTab)
     }
 }
 

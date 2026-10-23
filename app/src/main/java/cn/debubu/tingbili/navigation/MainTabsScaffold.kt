@@ -65,16 +65,23 @@ fun MainTabsScaffold(
     val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
 
     val miniPlayerVisibility = rememberMiniPlayerVisibility()
+    // 壳常驻、NavHost 调用点唯一：在 tab 与独立页之间导航时不重建，转场动画才跑得起来
+    val inTabs = isMainTabDestination(destination)
     if (layoutType == NavigationSuiteType.NavigationBar) {
         Scaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
-            bottomBar = { BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility) }
+            bottomBar = {
+                if (inTabs) {
+                    BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility)
+                }
+            }
         ) { innerPadding ->
             AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize().padding(innerPadding))
         }
     } else {
         NavigationSuiteScaffold(
             navigationSuiteItems = {
+                if (inTabs) {
                 item(
                     selected = isHomeSelected,
                     onClick = homeTabClick,
@@ -138,8 +145,9 @@ fun MainTabsScaffold(
                     colors = itemColors,
                     label = { Text("我的") }
                 )
+                }
             },
-            layoutType = layoutType
+            layoutType = if (inTabs) layoutType else NavigationSuiteType.None
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
@@ -154,7 +162,7 @@ fun MainTabsScaffold(
                 } else {
                     0f
                 }
-                if (track != null && trackKey != null) {
+                if (inTabs && track != null && trackKey != null) {
                     ImageFormatScope(viewModel) {
                         MiniPlayerBar(
                             track = track,
