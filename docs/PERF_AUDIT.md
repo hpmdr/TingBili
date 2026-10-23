@@ -1,4 +1,4 @@
-# TingBili 性能审计报告（已封版，450行）
+# TingBili 性能审计报告（已封版，正文审计章节冻结，文末落地进度随做随记）
 
 > 方法：静态代码审查为主，不改业务。只读 `app/src`、`core`、`data`、`feature` 源码 + `gradle/libs.versions.toml` + 构建配置。
 > 规范：路由只在 `Routes.kt` 定义；`feature` 互不依赖；UI 用 `collectAsStateWithLifecycle()` 收 `StateFlow`；Room 升级手写 Migration。
@@ -433,6 +433,12 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 - `proguard-rules.pro` 只 keep 自家 `@Serializable`，R8 几乎零代价，好。release 若未开 `shrinkResources/minify` 则开；`baselineProfiles` 无模块，建议加 `:benchmark` + 启动/滚动 Baseline Profile，中端机启动 15-20% 提升。
 - Room `MIGRATION_1_2...7_8` 全手写，好；`fallbackToDestructiveMigrationOnDowngrade` 仅降级破坏，可接受。
 - `gradle.properties Xmx2g/parallel=false` 是构建侧，不影响线上性能，不展开。
+
+## 统一动手顺序（两份文档的关系）
+
+- 先结构后单点：先按 `docs/ARCH_REVIEW.md` 落地顺序（Top5）动结构，再按本文总 Top10 逐项消单点，否则“历史 1s 写”这类根因会换个马甲回来。
+- 两份无实质冲突：ARCH 管“道”（分层/真相源/缓存归属），本文管“术”（订阅粒度/key/线程/图片分档）。
+- 动手前先看本文文末“明确不做”清单（memoryCacheKey/HSV 防抖/ThemeConfig 单流/锁拆分/文件缓存），有真机数据或反向验证 backing，无新理由勿重开。
 
 ## 总 Top10（按收益/成本排序，照此优化）
 
