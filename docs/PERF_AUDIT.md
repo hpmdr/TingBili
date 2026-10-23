@@ -531,3 +531,12 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 10. ✅ 超时 + 缓存切 IO（`712e3b7`/`6ee052c`）+ view memo（`40148a0`）+ Cookie 头缓存（`97b1f25`）+ 快照 IO（`77483cc`）：磁盘缓存由 memo 替代（防 412 中毒）。
 
 架构 Top5 对 master @3274a75 刷新：1✅拆 AppDataModule 2✅解耦 media/bilibili 3✅队列真相（plan 纯函数 + Room 单行快照 v10，纯队列表长期暂缓）4🟡缓存搬家（playUrl/队列快照 done；HomeSnapshot/Subtitle 待评估见下）5🟡主题（按页提供 done，拆分暂缓）。
+
+## 落地进度（2026-10-23 下午，缓存搬家收尾 @7473281，真机数据拍板）
+
+- 真机 DB 实测（`run-as cat` 拉库本地查）：`HomeSnapshotEntity` 1 行 4.4KB；`SubtitleDiskEntity` 5 行共 200KB（最大单集 73KB，50 集上限约几 MB）；`PlayUrlCache` 56 行 39KB。结论：**Room 完全够用，不必搬文件缓存**（ARCH 之前“暂缓”是对的，数据证实了）。
+- 做的事（线程修正，收益实在）：
+  - `HomeViewModel.saveSnapshot`：60 条 Track JSON 编码 + Room 写从主线程改 `Dispatchers.IO`（回调起于 Paging append，滚动中别占主线程）。
+  - `PlayerViewModel.subtitleFlow`：内层 `flow{cached()/store()}` 加 `flowOn(subtitleIo)`——之前每次切歌都在主线程做 Room 读 + 万行 JSON 解码（最大 73KB），低端机开播页一顿。
+  - 可测试性：`subtitleIo` 经 `PlayerModule @Named("subtitleIo")` 提供（默认 `Dispatchers.IO`，Hilt 2.60 默认参数需显式 binding，已验证编译）；单测 6 处直传 `StandardTestDispatcher`，虚拟时间确定性不变。教训：`flowOn(真实线程)` 会逃逸 `runTest` 虚拟时间，`withTimeout` 包 `first` 在 runTest 里用的是虚拟时钟——等真实线程=必超时；正确姿势是注入调度器。
+- 验证：`:app:` Hilt 编译 + `:app:`/`:feature:player:`/`:feature:home:` 单测全绿；真机播放页实时字幕 4 行 정상，`0:44/1:28:30` 进度正常。

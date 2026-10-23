@@ -117,3 +117,7 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 
 - 队列真相（第 3 项）完成度：transport 时间线唯一写入者不变；元数据队列落 Room 单行快照（原子 Upsert，消灭 DataStore 三键分写错位）。纯 Room 播放队列表（长期）暂缓：当前快照已满足崩溃恢复。
 - ThemeConfig/AppState 拆分（第 5 项）评估结论：暂缓。理由：订阅已全粒度化（4 个独立 StateFlow + `remember(scheme)`），单 ThemeConfig 流省不掉任何一次重组；导航态已收敛到 `isMainTabRoute/isMainTabDestination`。拆分只剩文件美学价值，改 6 处调用方的 churn 不值。
+## 落地进度（2026-10-23 下午，缓存搬家结论 @7473281）
+
+- 第 4 项（缓存搬家）关闭：真机数据 `HomeSnapshot 4.4KB / Subtitle 200KB(50集上限几MB) / PlayUrl 39KB`——Room 现状合理，**文件缓存不做**；只修两处主线程 JSON/IO（见 PERF_AUDIT 当日条目）。`AppCacheManager` stats 已在 IO，无需 `core:cache` 模块。
+- 剩余结构项：队列真相长期（纯 Room 队列表）暂缓；ThemeConfig/AppState 拆分暂缓（已评估无收益）。架构 Top5 实质收官，剩下按 PERF Top10 消尾即可。
