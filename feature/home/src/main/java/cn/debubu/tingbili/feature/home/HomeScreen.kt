@@ -111,7 +111,9 @@ fun HomeScreen(
             },
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         )
-        if (paging.loadState.refresh is LoadState.Loading && (paging.itemCount > 0 || showSnapshot)) {
+        // 和下拉圈圈互斥：用户主动下拉时只露圈圈（官方手势反馈），后台自动刷新时只露顶条；
+        // 任何时刻只留一个 loading 样式
+        if (!isRefreshing && paging.loadState.refresh is LoadState.Loading && (paging.itemCount > 0 || showSnapshot)) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
         // 有快照兜底时，刷新失败不弹整屏错误，只露横幅（保列表）；无快照才走 Paging 整屏态。
