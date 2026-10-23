@@ -170,7 +170,7 @@ fun PlayerScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = chapterLabel(trackUi.track?.title, trackUi.track?.pageIndex, trackUi.track?.pageCount ?: 1),
+                text = playerChapterLabel(trackUi.track),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
@@ -180,7 +180,7 @@ fun PlayerScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = trackUi.track?.author.orEmpty(),
+                text = trackUi.track?.author?.takeIf { it.isNotBlank() }?.let { "UP主 · $it" }.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

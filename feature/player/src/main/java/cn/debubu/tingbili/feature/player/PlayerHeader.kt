@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.feature.player
 
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.ui.chapterLabel
 
 /**
  * 播放页顶栏标题：优先 BV 合集名（[Track.videoTitle]），退化到分 P 名。
@@ -12,3 +13,16 @@ internal fun playerHeaderTitle(track: Track?): String =
     track?.videoTitle?.takeIf { it.isNotBlank() }
         ?: track?.title?.takeIf { it.isNotBlank() }
         ?: "未播放"
+
+/**
+ * 封面下方章节行：分 P 序号已知时加“本集”前缀（`本集 P1 · M 1-30`），
+ * 让用户一眼看懂这是正在听的这一集；单集/序号未知时与 [chapterLabel] 一致。
+ * 只看序号不看总数：整单播放时队列 track 的 pageCount 常是默认值，
+ * 但“上次听到 P1”这种文案本就只认序号，这里保持一致。
+ */
+internal fun playerChapterLabel(track: Track?): String {
+    val name = track?.title?.takeIf { it.isNotBlank() } ?: return "未播放"
+    val pageIndex = track.pageIndex
+    return if (pageIndex != null && pageIndex > 0) "本集 P$pageIndex · $name"
+    else chapterLabel(name, pageIndex, track.pageCount)
+}
