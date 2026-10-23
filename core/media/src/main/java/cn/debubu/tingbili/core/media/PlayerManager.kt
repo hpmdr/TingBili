@@ -205,38 +205,24 @@ class PlayerManager @Inject constructor(
                 _state.update { it.copy(queue = newTracks, currentIndex = -1, currentTrack = null, sourceTitle = title) }
                 return QueueRefreshResult(0, 0, 0)
             }
-            fun Track.key() = bvid to cid
-            val newKeys = newTracks.map { it.key() }.toSet()
-            val oldKeys = old.map { it.key() }.toSet()
-            val playing = old[currentIndex]
-            // 最终队列：新顺序；在播被删则在原下标处保留
-            val final = newTracks.toMutableList()
-            if (playing.key() !in newKeys) final.add(currentIndex.coerceIn(0, final.size), playing)
-            val removed = old.count { it.key() !in newKeys && it.key() != playing.key() }
-            val updated = final.count { f -> old.find { it.key() == f.key() }?.let { it != f } == true }
+            val plan = computeRefreshPlan(old, currentIndex, newTracks)
             val transportOk = try {
                 transport.mediaItemCount == old.size
             } catch (_: Exception) {
                 false
             }
+            var added = 0
             if (transportOk) {
                 // 删：倒序，只动非在播；删到当前下标之前的要同步挪 cur
-                var cur = currentIndex
-                old.indices.sortedDescending()
-                    .filter { i -> i != currentIndex && old[i].key() !in newKeys }
-                    .forEach { i ->
-                        try {
-                            transport.removeMediaItem(i)
-                        } catch (_: Exception) {
-                        }
-                        if (i < cur) cur--
+                plan.deletions.forEach { i ->
+                    try {
+                        transport.removeMediaItem(i)
+                    } catch (_: Exception) {
                     }
+                }
                 // 增/改：按最终顺序走一遍（B 站分 P 只增删不重排，走位必然对齐；
                 // 万一重排，对不上就停手：UI 照新，transport 不再动，绝不插出重复项）
-                val mirror = old.filterIndexed { i, t -> i == currentIndex || t.key() in newKeys }.toMutableList()
-                var tPlay = cur
-                val addedTracks = final.filter { it.key() !in mirror.map { m -> m.key() }.toSet() }
-                val urlMap = resolveUrls(addedTracks)
+                val urlMap = resolveUrls(plan.addedTracks)
                 val imageFormat = prefs.imageFormat.first()
                 val urlCache = try {
                     prefs.playUrlCache.first()
@@ -244,62 +230,127 @@ class PlayerManager @Inject constructor(
                     emptyMap()
                 }
                 val nowMs = System.currentTimeMillis()
-                var added = 0
-                for ((i, item) in final.withIndex()) {
-                    val m = mirror.getOrNull(i)
-                    if (m != null && m.key() == item.key()) {
-                        if (m != item && i != tPlay) {
-                            val url = urlCache["${item.bvid}:${item.cid}"]
-                                ?.takeIf { it.isFresh(nowMs) }?.url
-                            if (url != null) {
-                                try {
-                                    transport.replaceMediaItem(i, item.toMediaItem(url, imageFormat))
-                                } catch (_: Exception) {
-                                }
-                            }
-                        }
-                        continue
-                    }
-                    if (mirror.any { it.key() == item.key() }) break // 重排：停手保平安
-                    val url = urlMap[item] ?: continue // 新增解析失败：UI 和 transport 都跳过该集
-                    try {
-                        transport.addMediaItem(i, item.toMediaItem(url, imageFormat))
-                    } catch (_: Exception) {
-                        continue
-                    }
-                    mirror.add(i, item)
-                    if (i <= tPlay) tPlay++
-                    added++
-                }
-                val finalIdx = final.indexOfFirst { it.key() == playing.key() }.takeIf { it >= 0 } ?: tPlay
-                queue = final
-                currentIndex = finalIdx
-                _state.update {
-                    it.copy(
-                        queue = final,
-                        currentIndex = finalIdx,
-                        currentTrack = final.getOrNull(finalIdx),
-                        sourceTitle = title,
-                    )
-                }
-                persistQueue()
-                return QueueRefreshResult(added, removed, updated)
+                added = spliceTransport(plan, urlMap, urlCache, imageFormat, nowMs)
             }
-            // transport 对不上：只更新 UI
-            val finalIdx = final.indexOfFirst { it.key() == playing.key() }.takeIf { it >= 0 } ?: 0
-            queue = final
-            currentIndex = finalIdx
+            // transport 对不上时只更新 UI（added 按新增 key 数报数，保持旧语义）
+            queue = plan.final
+            currentIndex = plan.playingFinalIdx
             _state.update {
                 it.copy(
-                    queue = final,
-                    currentIndex = finalIdx,
-                    currentTrack = final.getOrNull(finalIdx),
+                    queue = plan.final,
+                    currentIndex = plan.playingFinalIdx,
+                    currentTrack = plan.final.getOrNull(plan.playingFinalIdx),
                     sourceTitle = title,
                 )
             }
             persistQueue()
-            return QueueRefreshResult(final.count { it.key() !in oldKeys }, removed, updated)
+            return QueueRefreshResult(
+                if (transportOk) added else plan.addedIfNoTransport,
+                plan.removed,
+                plan.updated,
+            )
         }
+
+    private fun Track.key() = bvid to cid
+
+    /**
+     * 刷新计划的纯计算：不碰 transport/IO。输入旧队列 + 在播下标 + 新列表，
+     * 算出最终队列/在播落点/增删改计数/待删旧下标/删后 transport 期望顺序。
+     * 在播被删则原位保留（拍板语义），播完再消失。
+     */
+    private fun computeRefreshPlan(
+        old: List<Track>,
+        currentIndex: Int,
+        newTracks: List<Track>,
+    ): RefreshPlan {
+        val newKeys = newTracks.map { it.key() }.toSet()
+        val oldKeys = old.map { it.key() }.toSet()
+        val playing = old[currentIndex]
+        // 最终队列：新顺序；在播被删则在原下标处保留
+        val final = newTracks.toMutableList()
+        if (playing.key() !in newKeys) final.add(currentIndex.coerceIn(0, final.size), playing)
+        val removed = old.count { it.key() !in newKeys && it.key() != playing.key() }
+        val updated = final.count { f -> old.find { it.key() == f.key() }?.let { it != f } == true }
+        // 待删旧下标（倒序，不含在播项）；删完后 transport 顺序 == base
+        val deletions = old.indices.sortedDescending()
+            .filter { i -> i != currentIndex && old[i].key() !in newKeys }
+        val base = old.filterIndexed { i, t -> i == currentIndex || t.key() in newKeys }
+        // 新增项（base 里没有的）：调用方批量解析 playurl
+        val addedTracks = final.filter { f -> base.none { it.key() == f.key() } }
+        val addedIfNoTransport = final.count { it.key() !in oldKeys }
+        val playingFinalIdx = final.indexOfFirst { it.key() == playing.key() }
+        return RefreshPlan(
+            final = final,
+            playingFinalIdx = playingFinalIdx,
+            removed = removed,
+            updated = updated,
+            deletions = deletions,
+            base = base,
+            addedTracks = addedTracks,
+            addedIfNoTransport = addedIfNoTransport,
+            playingTransportIdx = currentIndex - deletions.count { it < currentIndex },
+        )
+    }
+
+    private data class RefreshPlan(
+        val final: List<Track>,
+        /** 在播项在 final 中的下标（恒 >= 0：在播被删也会被加回） */
+        val playingFinalIdx: Int,
+        val removed: Int,
+        val updated: Int,
+        val deletions: List<Int>,
+        /** 删完后 transport 的期望顺序（immutable，splice 内不再边走边改语义） */
+        val base: List<Track>,
+        val addedTracks: List<Track>,
+        /** transport 对不上时的 added 口径（新增 key 数，与旧 fallback 分支一致） */
+        val addedIfNoTransport: Int,
+        /** 在播项在删后 transport 中的下标（删到之前的项要同步挪） */
+        val playingTransportIdx: Int,
+    )
+
+    /**
+     * transport 不断播手术：按最终顺序走一遍，base 对齐则原位 replace 元数据
+     * （在播项不动，换 uri 会打断当前播放），新增项插空，返回实际插入数。
+     * 重排（某项在 base 里但位置对不上）直接停手：UI 照新，transport 不再动。
+     */
+    private suspend fun spliceTransport(
+        plan: RefreshPlan,
+        urlMap: Map<Track, String>,
+        urlCache: Map<String, CachedPlayUrl>,
+        imageFormat: ImageFormat,
+        nowMs: Long,
+    ): Int {
+        val expected = plan.base.toMutableList()
+        var playIdx = plan.playingTransportIdx
+        var added = 0
+        for ((i, item) in plan.final.withIndex()) {
+            val m = expected.getOrNull(i)
+            if (m != null && m.key() == item.key()) {
+                if (m != item && i != playIdx) {
+                    val url = urlCache["${item.bvid}:${item.cid}"]
+                        ?.takeIf { it.isFresh(nowMs) }?.url
+                    if (url != null) {
+                        try {
+                            transport.replaceMediaItem(i, item.toMediaItem(url, imageFormat))
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                continue
+            }
+            if (expected.any { it.key() == item.key() }) break // 重排：停手保平安
+            val url = urlMap[item] ?: continue // 新增解析失败：UI 和 transport 都跳过该集
+            try {
+                transport.addMediaItem(i, item.toMediaItem(url, imageFormat))
+            } catch (_: Exception) {
+                continue
+            }
+            expected.add(i, item)
+            if (i <= playIdx) playIdx++
+            added++
+        }
+        return added
+    }
 
     /**
      * Play queue starting at [index]. Builds MediaItems via PlayUrlResolver (audio-only),
