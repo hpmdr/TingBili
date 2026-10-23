@@ -88,6 +88,20 @@ class PlayerViewModelTest {
         override fun release() {}
     }
 
+    class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
+        val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
+            rows.forEach { map[it.key] = it }
+        }
+        override suspend fun pruneExpired(cutoffMs: Long) {
+            map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
+        }
+        override suspend fun pruneOverflow(keep: Int) {
+            map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = null
@@ -127,7 +141,7 @@ class PlayerViewModelTest {
             )
         )
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, context)
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), context)
         authStore = FakeAuthStore()
         auth = AuthRepository(testJson, authStore)
     }

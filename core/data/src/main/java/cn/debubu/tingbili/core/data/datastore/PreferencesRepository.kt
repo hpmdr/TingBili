@@ -171,37 +171,22 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L) }
     }
 
-    /** playurl 缓存：key="$bvid:$cid"，冷启动/切集先读这里，命中即秒开 */
-    val playUrlCache: Flow<Map<String, CachedPlayUrl>> = ds.data.map { prefs ->
-        prefs[PLAYURL_CACHE_JSON]?.let { json ->
-            try {
+    /**
+     * 一次性搬运：读出旧 DataStore playurl 大 Map 并删键，供 PlayerManager 启动时迁入 Room。
+     * 新写入一律走 Room，此函数在旧数据搬空后即为 no-op；下个版本可删。
+     */
+    suspend fun drainPlayUrlCache(): Map<String, CachedPlayUrl> {
+        var out: Map<String, CachedPlayUrl> = emptyMap()
+        ds.edit { prefs ->
+            val json = prefs[PLAYURL_CACHE_JSON] ?: return@edit
+            out = try {
                 Json.decodeFromString(MapSerializer(String.serializer(), CachedPlayUrl.serializer()), json)
             } catch (_: Exception) {
                 emptyMap()
             }
-        } ?: emptyMap()
-    }
-
-    /** 合并写入并淘汰：去过期、超上限去最旧，单次 edit 完成 */
-    suspend fun putPlayUrls(entries: Map<String, CachedPlayUrl>, nowMs: Long = System.currentTimeMillis()) {
-        if (entries.isEmpty()) return
-        ds.edit { prefs ->
-            val cur = (prefs[PLAYURL_CACHE_JSON]?.let { json ->
-                try {
-                    Json.decodeFromString(MapSerializer(String.serializer(), CachedPlayUrl.serializer()), json)
-                } catch (_: Exception) {
-                    emptyMap()
-                }
-            } ?: emptyMap()).toMutableMap()
-            cur.putAll(entries)
-            val cutoff = nowMs - CachedPlayUrl.PLAYURL_CACHE_TTL_MS
-            val pruned = cur.filterValues { it.fetchedAtMs >= cutoff }
-                .entries.sortedBy { it.value.fetchedAtMs }.takeLast(MAX_PLAYURL_CACHE)
-                .associate { it.key to it.value }
-            prefs[PLAYURL_CACHE_JSON] = Json.encodeToString(
-                MapSerializer(String.serializer(), CachedPlayUrl.serializer()), pruned
-            )
+            prefs.remove(PLAYURL_CACHE_JSON)
         }
+        return out
     }
 
     suspend fun clearLastPlayback() {
@@ -274,6 +259,5 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")
         val LAST_SOURCE_TITLE = stringPreferencesKey("last_source_title")
         val PLAYURL_CACHE_JSON = stringPreferencesKey("playurl_cache_json")
-        const val MAX_PLAYURL_CACHE = 300
     }
 }

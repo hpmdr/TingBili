@@ -7,7 +7,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
-import cn.debubu.tingbili.core.data.datastore.CachedPlayUrl
+import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
+import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -49,6 +50,7 @@ class PlayerManager @Inject constructor(
     private val playUrls: PlayUrlResolver,
     private val catalog: CatalogResolver,
     private val artwork: ArtworkResolver,
+    private val playUrlCache: PlayUrlCacheDao,
     @ApplicationContext private val appContext: Context,
 ) {
     private val _state = MutableStateFlow(PlaybackState())
@@ -75,6 +77,16 @@ class PlayerManager @Inject constructor(
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch { restoreLastPlayback() }
+        // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
+        scope.launch {
+            try {
+                val legacy = prefs.drainPlayUrlCache()
+                if (legacy.isNotEmpty()) {
+                    playUrlCache.putAll(legacy.map { (k, v) -> PlayUrlCacheEntity(k, v.url, v.fetchedAtMs) })
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
@@ -130,7 +142,7 @@ class PlayerManager @Inject constructor(
         if (tracks.isEmpty()) return emptyMap()
         val nowMs = System.currentTimeMillis()
         val urlCache = try {
-            prefs.playUrlCache.first()
+            playUrlCache.getAll().associateBy { it.key }
         } catch (_: Exception) {
             emptyMap()
         }
@@ -155,10 +167,11 @@ class PlayerManager @Inject constructor(
                 }.awaitAll().filterNotNull()
             }
             if (fetched.isNotEmpty()) {
-                prefs.putPlayUrls(
-                    fetched.associate { (t, u) -> "${t.bvid}:${t.cid}" to CachedPlayUrl(u, nowMs) },
-                    nowMs,
+                playUrlCache.putAll(
+                    fetched.map { (t, u) -> PlayUrlCacheEntity("${t.bvid}:${t.cid}", u, nowMs) }
                 )
+                playUrlCache.pruneExpired(nowMs - PlayUrlCacheEntity.TTL_MS)
+                playUrlCache.pruneOverflow(PlayUrlCacheEntity.MAX_ENTRIES)
                 fetched.forEach { (t, u) -> out[t] = u }
             }
         }
@@ -225,7 +238,7 @@ class PlayerManager @Inject constructor(
                 val urlMap = resolveUrls(plan.addedTracks)
                 val imageFormat = prefs.imageFormat.first()
                 val urlCache = try {
-                    prefs.playUrlCache.first()
+                    playUrlCache.getAll().associateBy { it.key }
                 } catch (_: Exception) {
                     emptyMap()
                 }
@@ -316,7 +329,7 @@ class PlayerManager @Inject constructor(
     private suspend fun spliceTransport(
         plan: RefreshPlan,
         urlMap: Map<Track, String>,
-        urlCache: Map<String, CachedPlayUrl>,
+        urlCache: Map<String, PlayUrlCacheEntity>,
         imageFormat: ImageFormat,
         nowMs: Long,
     ): Int {
@@ -770,7 +783,7 @@ class PlayerManager @Inject constructor(
             val newUrl = playUrls.resolve(track.bvid, track.cid)
             if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
                         effectiveScope().launch {
-                            prefs.putPlayUrls(mapOf("${track.bvid}:${track.cid}" to CachedPlayUrl(newUrl)))
+                            playUrlCache.putAll(listOf(PlayUrlCacheEntity("${track.bvid}:${track.cid}", newUrl, System.currentTimeMillis())))
                         }
                         val newItem = track.toMediaItem(newUrl, prefs.imageFormat.first())
                         transport.replaceMediaItem(currentIndex, newItem)
@@ -861,7 +874,7 @@ class PlayerManager @Inject constructor(
                             val idx = currentIndex
                             if (idx in queue.indices) {
                                 effectiveScope().launch {
-                                    prefs.putPlayUrls(mapOf("${track.bvid}:${track.cid}" to CachedPlayUrl(newUrl)))
+                                    playUrlCache.putAll(listOf(PlayUrlCacheEntity("${track.bvid}:${track.cid}", newUrl, System.currentTimeMillis())))
                                 }
                                 transport.replaceMediaItem(idx, newItem)
                                 transport.prepare()

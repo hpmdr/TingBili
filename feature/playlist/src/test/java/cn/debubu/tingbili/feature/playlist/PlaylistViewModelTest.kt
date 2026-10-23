@@ -51,6 +51,20 @@ class PlaylistViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
 
+    class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
+        val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
+            rows.forEach { map[it.key] = it }
+        }
+        override suspend fun pruneExpired(cutoffMs: Long) {
+            map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
+        }
+        override suspend fun pruneOverflow(keep: Int) {
+            map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
+        }
+    }
+
     class FakePlaylistDao : PlaylistDao {
         private var idSeq = 1L
         private val playlists = mutableListOf<PlaylistEntity>()
@@ -214,7 +228,7 @@ class PlaylistViewModelTest {
         )
         val repo = BiliRepository(FakeBiliApi())
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
-        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, ctx)
+        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), ctx)
     }
 
     @After

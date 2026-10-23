@@ -80,6 +80,20 @@ class PlayerManagerTest {
         // shadow duration field duplication fix — delegate
     }
 
+    class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
+        val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
+            rows.forEach { map[it.key] = it }
+        }
+        override suspend fun pruneExpired(cutoffMs: Long) {
+            map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
+        }
+        override suspend fun pruneOverflow(keep: Int) {
+            map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         val saved = mutableListOf<HistoryEntity>()
         private val map = mutableMapOf<Pair<String, Long>, HistoryEntity>()
@@ -128,7 +142,7 @@ class PlayerManagerTest {
         )
         prefs = PreferencesRepository(dataStore)
         fakeResolvers = FakeMediaResolvers()
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, context)
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), context)
     }
 
     @Test
@@ -432,7 +446,7 @@ class PlayerManagerTest {
         val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val errPrefs = PreferencesRepository(ds)
-        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, context)
+        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), context)
         errManager.testScope = this
         errManager.play(listOf(Track("BVX", 999, "t", "a", "", 1000, null)), 0)
         runCurrent()
@@ -452,7 +466,7 @@ class PlayerManagerTest {
         val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val refreshPrefs = PreferencesRepository(ds)
-        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, context)
+        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), context)
         m.testScope = this
         m.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
         runCurrent()
