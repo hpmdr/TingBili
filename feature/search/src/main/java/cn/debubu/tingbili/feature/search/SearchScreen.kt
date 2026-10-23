@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,10 +95,18 @@ fun SearchScreen(
     val view = LocalView.current
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
+    // 同一条目只自动聚焦一次：去详情页时本组合被销毁，返回是重建，
+    // LaunchedEffect(Unit) 会重跑；用随条目保存的标记防止回来抢焦点弹键盘。
+    // rememberSaveable 跟 NavBackStackEntry 走：返回是同一条目（不聚焦），
+    // 从首页重新进是新条目（正常聚焦）。
+    var focusedOnce by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboard?.show()
+        if (!focusedOnce) {
+            focusedOnce = true
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
     }
 
     fun doSearch(query: String) {
