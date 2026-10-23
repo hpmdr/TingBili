@@ -1,9 +1,11 @@
 package cn.debubu.tingbili.core.media
 
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
@@ -34,6 +36,26 @@ class TingBiliPlaybackService : MediaSessionService() {
             )
             (player as ExoPlayer).setHandleAudioBecomingNoisy(true)
             (player as ExoPlayer).setWakeMode(C.WAKE_MODE_NETWORK)
+            // 可观测性：offload 是否真正接管 + 实际解码器名（logcat 搜 TingBiliAudio）
+            (player as ExoPlayer).addAudioOffloadListener(object : ExoPlayer.AudioOffloadListener {
+                override fun onSleepingForOffloadChanged(sleepingForOffload: Boolean) {
+                    Log.i("TingBiliAudio", "sleepingForOffload=$sleepingForOffload")
+                }
+
+                override fun onOffloadedPlayback(offloadedPlayback: Boolean) {
+                    Log.i("TingBiliAudio", "offloadedPlayback=$offloadedPlayback")
+                }
+            })
+            (player as ExoPlayer).addAnalyticsListener(object : AnalyticsListener {
+                override fun onAudioDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializationDurationMs: Long,
+                    initializationError: Long,
+                ) {
+                    Log.i("TingBiliAudio", "audioDecoder=$decoderName")
+                }
+            })
         }
         mediaSession = MediaSession.Builder(this, player).build()
     }

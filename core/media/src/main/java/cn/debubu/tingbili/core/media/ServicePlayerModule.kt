@@ -11,6 +11,7 @@ import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import android.util.Log
 import dagger.Module
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -61,6 +62,8 @@ object ServicePlayerModule {
     // DSP offload 只能在创建时下发（MediaController 无对应会话命令，运行时下发到不了 Service）。
     // DataStore 首读走磁盘（约数十毫秒），随 Service 创建一次性同步读，注释开关=重启 App 生效。
     val offloadOn = runBlocking { prefs.audioOffload.first() }
+    // 可观测性：release 包验证 offload 意愿是否落到 ExoPlayer（logcat 搜 TingBiliAudio）
+    Log.i("TingBiliAudio", "audioOffload pref=$offloadOn")
     val offload = if (offloadOn) {
         // ENABLED 尽力而为：无缝要求开（章节衔接不断），变速不支持（变速时自动回落不断播）。
         TrackSelectionParameters.AudioOffloadPreferences.Builder()
