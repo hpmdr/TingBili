@@ -77,13 +77,17 @@ fun HomeScreen(
     val snapshotGridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
+    // SWR：Paging 尚无数据但有快照时，先秒开快照，后台刷新到了再切到 Paging。
+    val showSnapshot = paging.itemCount == 0 && !snapshot.isNullOrEmpty()
+    // 回顶只滚可见的那个：不可见的 Grid 虽未组合（不占内存），滚它白费一帧主线程
+    val scrollTop: suspend () -> Unit = {
+        if (showSnapshot) snapshotGridState.animateScrollToItem(0)
+        else gridState.animateScrollToItem(0)
+    }
     // 推荐 tab 双击回顶（底栏/Rail 经总线发事件；标题双击走直连，两路都到这）
     val scrollTopTick by vm.scrollTopTick.collectAsStateWithLifecycle()
     LaunchedEffect(scrollTopTick) {
-        if (scrollTopTick > 0) {
-            gridState.animateScrollToItem(0)
-            snapshotGridState.animateScrollToItem(0)
-        }
+        if (scrollTopTick > 0) scrollTop()
     }
 
     // 下拉指示器只跟随用户主动刷新；初始加载走全屏转圈，不抢戏
@@ -92,8 +96,6 @@ fun HomeScreen(
         if (refreshState !is LoadState.Loading) isRefreshing = false
     }
 
-    // SWR：Paging 尚无数据但有快照时，先秒开快照，后台刷新到了再切到 Paging。
-    val showSnapshot = paging.itemCount == 0 && !snapshot.isNullOrEmpty()
 
     Column(
         modifier = Modifier
@@ -105,10 +107,7 @@ fun HomeScreen(
             keywords = homeKeywords,
             // 双击标题回顶部：下拉刷新处同款（两个 grid 哪个可见回哪个）
             onTitleDoubleClick = {
-                scope.launch {
-                    gridState.animateScrollToItem(0)
-                    snapshotGridState.animateScrollToItem(0)
-                }
+                scope.launch { scrollTop() }
             },
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         )
