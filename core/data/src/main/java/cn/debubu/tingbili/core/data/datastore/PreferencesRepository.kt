@@ -45,6 +45,12 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
+    /** 睡眠定时绝对触发点（wall clock ms，0=无定时；杀进程/重启后靠它恢复，不再丢定时） */
+    val sleepDeadlineMs: Flow<Long> = ds.data.map { it[SLEEP_DEADLINE_MS] ?: 0L }
+    /** 睡眠定时总秒数（恢复后高亮用；尾阶段为 0） */
+    val sleepTotalSec: Flow<Int> = ds.data.map { it[SLEEP_TOTAL_SEC] ?: 0 }
+    /** 播完即停尾阶段（倒计时已结束、等章尾；单独持久化，杀进程后仍能补停） */
+    val sleepTail: Flow<Boolean> = ds.data.map { it[SLEEP_TAIL] ?: false }
 
     val themeMode: Flow<ThemeMode> = ds.data.map { prefs ->
         prefs[THEME_MODE]?.let(ThemeMode::fromKey)
@@ -122,6 +128,34 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setSleepLastMinutes(min: Int) {
         ds.edit { it[SLEEP_LAST_MINUTES] = min.coerceIn(30, 600) }
+    }
+
+    /** 睡眠定时落盘：绝对时间+总量+开关，一次 edit 减少 DataStore 抖动；尾标志清零 */
+    suspend fun saveSleepTimerState(deadlineMs: Long, totalSec: Int, finishChapter: Boolean) {
+        ds.edit {
+            it[SLEEP_DEADLINE_MS] = deadlineMs
+            it[SLEEP_TOTAL_SEC] = totalSec
+            it[SLEEP_FINISH_CHAPTER] = finishChapter
+            it[SLEEP_TAIL] = false
+        }
+    }
+
+    /** 倒计时到点且播完本章开：转尾阶段，deadline/total 清掉，尾标志立起 */
+    suspend fun saveSleepTailState() {
+        ds.edit {
+            it.remove(SLEEP_DEADLINE_MS)
+            it.remove(SLEEP_TOTAL_SEC)
+            it[SLEEP_TAIL] = true
+        }
+    }
+
+    /** 清定时落盘：只清 deadline/total/tail，FINISH_CHAPTER 留作下次默认 */
+    suspend fun clearSleepTimerState() {
+        ds.edit {
+            it.remove(SLEEP_DEADLINE_MS)
+            it.remove(SLEEP_TOTAL_SEC)
+            it.remove(SLEEP_TAIL)
+        }
     }
 
 
@@ -223,6 +257,9 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val SUBTITLE_SCALE = floatPreferencesKey("subtitle_scale")
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
         val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
+        val SLEEP_DEADLINE_MS = androidx.datastore.preferences.core.longPreferencesKey("sleep_deadline_ms")
+        val SLEEP_TOTAL_SEC = androidx.datastore.preferences.core.intPreferencesKey("sleep_total_sec")
+        val SLEEP_TAIL = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_tail")
         val DYNAMIC_COLOR = androidx.datastore.preferences.core.booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")

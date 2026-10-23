@@ -163,6 +163,7 @@ class PlayerManagerTest {
     @Test
     fun `play sets queue and starts`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         fakePlayer.setCurrentPosition(0L)
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
         playerManager.play(tracks, 0)
@@ -176,6 +177,7 @@ class PlayerManagerTest {
     @Test
     fun `sleep timer pauses at zero and clears`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
         playerManager.startSleepTimer(60)
         assertEquals(60, playerManager.state.value.sleepRemainSec)
@@ -190,6 +192,7 @@ class PlayerManagerTest {
     @Test
     fun `sleep timer cancel clears state`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
         playerManager.startSleepTimer(60)
         playerManager.cancelSleepTimer()
@@ -204,6 +207,7 @@ class PlayerManagerTest {
     @Test
     fun `sleep timer with finishChapter enters chapter tail then stops`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
             Track("BV1", 1, "t1", "a", "", 3_600_000, null),
             Track("BV2", 2, "t2", "a", "", 3_600_000, null),
@@ -227,8 +231,77 @@ class PlayerManagerTest {
     }
 
     @Test
+    fun `sleep timer persists deadline and clears on fire`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.startSleepTimer(60)
+        runCurrent()
+        assertEquals(60, prefs.sleepTotalSec.first())
+        assertTrue(prefs.sleepDeadlineMs.first() > 0L)
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
+        assertEquals(0L, prefs.sleepDeadlineMs.first())
+        playerManager.release()
+    }
+
+    @Test
+    fun `restore resumes future deadline`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        prefs.saveSleepTimerState(testScheduler.currentTime + 50_000, 60, false)
+        playerManager.restoreSleepTimer()
+        runCurrent()
+        assertEquals(50, playerManager.state.value.sleepRemainSec)
+        assertEquals(60, playerManager.state.value.sleepTotalSec)
+        playerManager.release()
+    }
+
+    @Test
+    fun `restore with expired deadline pauses immediately`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        assertTrue(playerManager.state.value.isPlaying)
+        advanceTimeBy(10_000)
+        runCurrent()
+        prefs.saveSleepTimerState(testScheduler.currentTime - 1_000, 60, false)
+        playerManager.restoreSleepTimer()
+        runCurrent()
+        assertEquals(false, playerManager.state.value.isPlaying)
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
+        assertEquals(0L, prefs.sleepDeadlineMs.first())
+        playerManager.release()
+    }
+
+    @Test
+    fun `restore tail resumes chapter-end stop`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 3_600_000, null),
+            Track("BV1", 2, "t2", "a", "", 3_600_000, null),
+        )
+        playerManager.play(tracks, 0)
+        prefs.setSleepFinishChapter(true)
+        prefs.saveSleepTailState()
+        playerManager.restoreSleepTimer()
+        runCurrent()
+        assertEquals(true, playerManager.state.value.sleepEndOfChapter)
+        assertEquals(null, playerManager.state.value.sleepRemainSec)
+        playerManager.next()
+        advanceTimeBy(2000)
+        runCurrent()
+        assertEquals(false, playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
     fun `sleep timer setFinishChapter off mid-countdown stops at time`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
         playerManager.startSleepTimer(60, finishChapter = true)
         playerManager.setSleepFinishChapter(false)
@@ -243,6 +316,7 @@ class PlayerManagerTest {
     @Test
     fun `refreshQueue appends new episodes without interrupting`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
             Track("BV1", 1, "P1", "a", "", 1000, null),
             Track("BV1", 2, "P2", "a", "", 1000, null),
@@ -262,6 +336,7 @@ class PlayerManagerTest {
     @Test
     fun `refreshQueue removes stale renames kept and holds position`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
             Track("BV1", 1, "P1", "a", "", 1000, null),
             Track("BV1", 2, "P2", "a", "", 1000, null),
@@ -288,6 +363,7 @@ class PlayerManagerTest {
     @Test
     fun `refreshQueue keeps deleted playing episode in place`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
             Track("BV1", 1, "P1", "a", "", 1000, null),
             Track("BV1", 2, "P2", "a", "", 1000, null),
@@ -307,6 +383,7 @@ class PlayerManagerTest {
     @Test
     fun `play starts foreground playback service`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val appContext = ApplicationProvider.getApplicationContext<Context>()
         playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
         val started = org.robolectric.Shadows.shadowOf(appContext as android.app.Application)
@@ -318,6 +395,7 @@ class PlayerManagerTest {
     @Test
     fun `step seek respects config`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         // set step to 15s via prefs
         prefs.setStep(15)
         // prepare player at position 5000
@@ -335,6 +413,7 @@ class PlayerManagerTest {
     @Test
     fun `setSpeed updates player and prefs`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         playerManager.setSpeed(1.5f)
         assertEquals(1.5f, fakePlayer.capturedSpeed, 0.001f)
         assertEquals(1.5f, prefs.speed.first(), 0.001f)
@@ -343,6 +422,7 @@ class PlayerManagerTest {
     @Test
     fun `setRepeatMode updates player and state`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         playerManager.setRepeatMode(PlaybackState.REPEAT_MODE_ONE)
         assertEquals(Player.REPEAT_MODE_ONE, fakePlayer.repeatMode)
         assertEquals(PlaybackState.REPEAT_MODE_ONE, playerManager.state.value.repeatMode)
@@ -351,6 +431,7 @@ class PlayerManagerTest {
     @Test
     fun `history throttle saves after 10s`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
 
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
         fakePlayer.setCurrentPosition(12345L)
@@ -370,6 +451,7 @@ class PlayerManagerTest {
     @Test
     fun `pause flushes history immediately`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
 
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
         fakePlayer.setCurrentPosition(5000L)
@@ -388,6 +470,7 @@ class PlayerManagerTest {
     @Test
     fun `track transition flushes history immediately`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
             Track("BV1", 1, "t1", "a", "", 10000, null),
             Track("BV1", 2, "t2", "a", "", 10000, null),
@@ -442,6 +525,7 @@ class PlayerManagerTest {
     @Test
     fun `play persists queue for restore`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
         playerManager.play(tracks, 0)
         runCurrent()
@@ -457,6 +541,7 @@ class PlayerManagerTest {
     @Test
     fun `seek persists position`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
         playerManager.play(tracks, 0)
         runCurrent()
@@ -469,6 +554,7 @@ class PlayerManagerTest {
     @Test
     fun `play sets loading and custom cache key`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(Track("BV99", 123, "t", "a", "", 10000, null))
         playerManager.play(tracks, 0)
         runCurrent()
@@ -484,6 +570,7 @@ class PlayerManagerTest {
     @Test
     fun `play with empty result sets error and not loading`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         // Fake API returns empty playUrl if cid==-1 (simulate error)
         val fakeApi = FakeMediaResolvers().also { it.nextUrl = null }
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -503,6 +590,7 @@ class PlayerManagerTest {
     @Test
     fun `url expiry 403 triggers refresh and replaces mediaItem`() = runTest {
         playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
         val fakeApi = FakeMediaResolvers().also {
             it.urlSequence = listOf("http://example.com/audio1.mp3", "http://example.com/audio2.mp3")
         }

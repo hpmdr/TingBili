@@ -67,6 +67,8 @@ class PlayerManager @Inject constructor(
     /** Test hook — inject TestScope to control virtual time for throttle tests. */
     internal var testScope: CoroutineScope? = null
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
+    /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
+    internal var clock: () -> Long = { System.currentTimeMillis() }
 
     private var historyJob: Job? = null
     private var positionPollJob: Job? = null
@@ -80,7 +82,10 @@ class PlayerManager @Inject constructor(
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
-        scope.launch { restoreLastPlayback() }
+        scope.launch {
+            restoreLastPlayback()
+            restoreSleepTimer()
+        }
         // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
         scope.launch {
             try {
@@ -560,32 +565,116 @@ class PlayerManager @Inject constructor(
         effectiveScope().launch { saveHistorySnapshot(force = true) }
     }
 
-    // ── 睡眠定时（内存态，进程死即失效；触发=pause，自带落盘进度） ──
+    // ── 睡眠定时（绝对 deadline + DataStore 落盘；杀进程/Doze 冻结后可恢复校准；触发=pause，自带落盘进度） ──
     private var sleepJob: Job? = null
 
     /**
-     * 倒计时定时：seconds 秒后停止，60 秒起。
+     * 倒计时定时：seconds 秒后停止，60 秒起（恢复路径可小于 60，不钳制）。
+     * 按绝对 deadline 走，每秒用 clock() 重算剩余，Doze 冻结 delay 后能一次跳变追齐。
      * @param finishChapter 到点后是否播完本章再停（到点后转入播完即停阶段，不立即暂停）。
      */
     fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
         sleepJob?.cancel()
-        var left = seconds.coerceAtLeast(60)
+        val total = seconds.coerceAtLeast(60)
+        val deadline = clock() + total * 1000L
         _state.update {
             it.copy(
-                sleepRemainSec = left,
-                sleepTotalSec = left,
+                sleepRemainSec = total,
+                sleepTotalSec = total,
                 sleepFinishChapter = finishChapter,
                 sleepEndOfChapter = false,
             )
         }
-        sleepJob = effectiveScope().launch {
-            while (left > 0) {
-                delay(1000)
-                left--
-                _state.update { it.copy(sleepRemainSec = left) }
+        effectiveScope().launch {
+            try {
+                prefs.saveSleepTimerState(deadline, total, finishChapter)
+            } catch (_: Exception) {
             }
-            if (_state.value.sleepFinishChapter) enterChapterTail() else fireSleepTimer()
         }
+        sleepJob = effectiveScope().launch {
+            launchSleepCountdown(deadline)
+        }
+    }
+
+    /** 冷启动/进程重建后恢复定时：未来→继续倒计时；已过期→直接停或转尾；无落盘→忽略 */
+    suspend fun restoreSleepTimer() {
+        try {
+            val tail = try {
+                prefs.sleepTail.first()
+            } catch (_: Exception) {
+                false
+            }
+            if (tail) {
+                val finish = try {
+                    prefs.sleepFinishChapter.first()
+                } catch (_: Exception) {
+                    true
+                }
+                if (currentKey() == null) {
+                    try {
+                        prefs.clearSleepTimerState()
+                    } catch (_: Exception) {
+                    }
+                    return
+                }
+                _state.update {
+                    it.copy(
+                        sleepRemainSec = null,
+                        sleepTotalSec = null,
+                        sleepFinishChapter = finish,
+                        sleepEndOfChapter = true,
+                    )
+                }
+                sleepJob?.cancel()
+                sleepJob = effectiveScope().launch { watchChapterTail(currentKey()!!) }
+                return
+            }
+            val deadline = try {
+                prefs.sleepDeadlineMs.first()
+            } catch (_: Exception) {
+                0L
+            }
+            if (deadline <= 0L) return
+            val total = try {
+                prefs.sleepTotalSec.first()
+            } catch (_: Exception) {
+                0
+            }
+            val finish = try {
+                prefs.sleepFinishChapter.first()
+            } catch (_: Exception) {
+                false
+            }
+            val remain = ((deadline - clock()) / 1000).toInt()
+            if (remain <= 0) {
+                if (finish) enterChapterTail() else fireSleepTimer()
+                return
+            }
+            _state.update {
+                it.copy(
+                    sleepRemainSec = remain,
+                    sleepTotalSec = total.coerceAtLeast(remain),
+                    sleepFinishChapter = finish,
+                    sleepEndOfChapter = false,
+                )
+            }
+            sleepJob?.cancel()
+            sleepJob = effectiveScope().launch {
+                launchSleepCountdown(deadline)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** 倒计时主循环：按 deadline 重算剩余，抗 delay 被系统拉长 */
+    private suspend fun launchSleepCountdown(deadlineMs: Long) {
+        while (true) {
+            delay(1000)
+            val remain = ((deadlineMs - clock()) / 1000).toInt()
+            if (remain <= 0) break
+            _state.update { it.copy(sleepRemainSec = remain) }
+        }
+        if (_state.value.sleepFinishChapter) enterChapterTail() else fireSleepTimer()
     }
 
     /**
@@ -598,7 +687,15 @@ class PlayerManager @Inject constructor(
             if (!v) cancelSleepTimer()
             return
         }
-        if (s.sleepRemainSec != null) _state.update { it.copy(sleepFinishChapter = v) }
+        if (s.sleepRemainSec != null) {
+            _state.update { it.copy(sleepFinishChapter = v) }
+            effectiveScope().launch {
+                try {
+                    prefs.setSleepFinishChapter(v)
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 
     /** 倒计时到点 + 开关开：转入播完即停阶段。切歌或播到尾时暂停；手动暂停不取消（章还没完） */
@@ -609,16 +706,25 @@ class PlayerManager @Inject constructor(
             return
         }
         _state.update { it.copy(sleepRemainSec = null, sleepTotalSec = null, sleepEndOfChapter = true) }
-        sleepJob = effectiveScope().launch {
-            while (true) {
-                delay(1000)
-                val s = _state.value
-                val chapterOver = currentKey() != key ||
-                    (s.durationMs > 0 && s.positionMs >= s.durationMs - CHAPTER_END_MARGIN_MS)
-                if (chapterOver) {
-                    fireSleepTimer()
-                    return@launch
-                }
+        effectiveScope().launch {
+            try {
+                prefs.saveSleepTailState()
+            } catch (_: Exception) {
+            }
+        }
+        sleepJob?.cancel()
+        sleepJob = effectiveScope().launch { watchChapterTail(key) }
+    }
+
+    private suspend fun watchChapterTail(key: Pair<String, Long>) {
+        while (true) {
+            delay(1000)
+            val s = _state.value
+            val chapterOver = currentKey() != key ||
+                (s.durationMs > 0 && s.positionMs >= s.durationMs - CHAPTER_END_MARGIN_MS)
+            if (chapterOver) {
+                fireSleepTimer()
+                return
             }
         }
     }
@@ -626,6 +732,12 @@ class PlayerManager @Inject constructor(
     fun cancelSleepTimer() {
         sleepJob?.cancel()
         sleepJob = null
+        effectiveScope().launch {
+            try {
+                prefs.clearSleepTimerState()
+            } catch (_: Exception) {
+            }
+        }
         _state.update {
             it.copy(
                 sleepRemainSec = null,
@@ -638,6 +750,12 @@ class PlayerManager @Inject constructor(
 
     private fun fireSleepTimer() {
         // pause() 内已落盘进度，满足“定时停止必须记好进度”
+        effectiveScope().launch {
+            try {
+                prefs.clearSleepTimerState()
+            } catch (_: Exception) {
+            }
+        }
         pause()
         _state.update {
             it.copy(
@@ -800,6 +918,7 @@ class PlayerManager @Inject constructor(
         historyJob?.cancel(); historyJob = null
         positionPollJob?.cancel(); positionPollJob = null
         urlRefreshJob?.cancel(); urlRefreshJob = null
+        sleepJob?.cancel(); sleepJob = null
     }
 
     private var urlRefreshRetry = 0

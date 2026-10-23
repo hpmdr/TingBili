@@ -25,7 +25,7 @@ data class PlaybackState(
     val repeatMode: Int = REPEAT_MODE_OFF,
     val speed: Float = 1f,
     /**
-     * 睡眠定时剩余秒数，null 表示关闭。内存态：进程死即失效，不持久化。
+     * 睡眠定时剩余秒数，null 表示关闭。绝对 deadline 落盘，杀进程可恢复（见 PlayerManager）。
      * 触发时暂停并落盘进度（见 [PlayerManager]），由播放页展示倒计时。
      */
     val sleepRemainSec: Int? = null,
