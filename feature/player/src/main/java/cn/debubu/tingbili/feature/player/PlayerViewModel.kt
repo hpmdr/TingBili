@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -234,6 +235,9 @@ class PlayerViewModel @Inject constructor(
                 sleepEndOfChapter = p.sleepEndOfChapter,
             )
         }
+        // 1Hz 下发：进度条/睡眠倒计时秒级精度足够，主线程 tick 开销减半；
+        // 字幕行切换走 lyricUi（仍 500ms），不受影响。
+        .sample(1_000)
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProgressUiState())
 
