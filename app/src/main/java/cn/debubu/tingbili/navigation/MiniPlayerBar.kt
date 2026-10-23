@@ -143,9 +143,11 @@ private fun DismissableBarContent(
             .graphicsLayer {
                 val total = offsetY.value + scrollOffsetY
                 translationY = total
-                // 上滑/滚隐时同步淡出
+                // 上滑（负位移）与滚隐（正位移）各自淡出，相乘叠加
                 alpha = if (barHeightPx > 0f) {
-                    (1f + total / barHeightPx).coerceIn(0f, 1f)
+                    val dragAlpha = (1f + offsetY.value / barHeightPx).coerceIn(0f, 1f)
+                    val scrollAlpha = (1f - scrollOffsetY / barHeightPx).coerceIn(0f, 1f)
+                    dragAlpha * scrollAlpha
                 } else {
                     1f
                 }
