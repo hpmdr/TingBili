@@ -505,3 +505,7 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
   - `ThemeConfig` 单流拆分：收集已粒度化，无可测收益。
   - 双 Grid 合并：同一时间只组合一个（无双份内存），回顶已改只滚可见的。
   - 搜索/互斥锁拆分：共用节流是防 412 的保护，拆开反而提高被限概率。
+
+## 落地进度（2026-10-23 下午，mini 条回滚）
+
+- ✅ `c48dbf7`：回滚滚动位移方案。真机验证：位移版滚动隐藏后留 200px 纯底色死区（AnimatedVisibility 收起才是正确语义）；回滚后滚动隐藏/回滚出现/上滑关闭三态正常，无黑块。保留 remember 缓存。
