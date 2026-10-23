@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import cn.debubu.tingbili.core.data.model.DarkMode
+import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.Track
@@ -57,6 +58,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             ?: if (prefs[DYNAMIC_COLOR] == true) ThemeMode.SYSTEM else ThemeMode.DEFAULT
     }
     val darkMode: Flow<DarkMode> = ds.data.map { DarkMode.fromKey(it[DARK_MODE]) }
+    val darkThemeStyle: Flow<DarkThemeStyle> = ds.data.map { DarkThemeStyle.fromKey(it[DARK_THEME_STYLE]) }
     val customThemeColor: Flow<Int> = ds.data.map { it[CUSTOM_THEME_COLOR] ?: DEFAULT_THEME_COLOR }
     val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
@@ -178,6 +180,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[DARK_MODE] = mode.key }
     }
 
+    suspend fun setDarkThemeStyle(style: DarkThemeStyle) {
+        ds.edit { it[DARK_THEME_STYLE] = style.key }
+    }
+
     suspend fun setImageFormat(v: ImageFormat) {
         ds.edit { it[IMAGE_FORMAT] = v.name }
     }
@@ -264,6 +270,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val CUSTOM_THEME_COLOR = intPreferencesKey("custom_theme_color")
         val DARK_MODE = stringPreferencesKey("dark_mode")
+        val DARK_THEME_STYLE = stringPreferencesKey("dark_theme_style")
         val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
         val HOME_KEYWORDS = stringPreferencesKey("home_keywords")

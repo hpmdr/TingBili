@@ -69,4 +69,9 @@ class MainViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = cn.debubu.tingbili.core.data.model.DarkMode.FOLLOW_SYSTEM,
     )
+    val darkThemeStyle = prefs.darkThemeStyle.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = cn.debubu.tingbili.core.data.model.DarkThemeStyle.DARK_GRAY,
+    )
 }

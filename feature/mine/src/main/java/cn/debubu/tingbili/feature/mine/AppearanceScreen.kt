@@ -48,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
+import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
@@ -62,6 +63,7 @@ fun AppearanceScreen(
 ) {
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+    val darkThemeStyle by vm.darkThemeStyle.collectAsStateWithLifecycle()
     val customThemeColor by vm.customThemeColor.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
@@ -86,7 +88,9 @@ fun AppearanceScreen(
         ) {
             DarkModeSettings(
                 darkMode = darkMode,
-                onDarkModeChange = vm::setDarkMode
+                onDarkModeChange = vm::setDarkMode,
+                darkThemeStyle = darkThemeStyle,
+                onDarkThemeStyleChange = vm::setDarkThemeStyle
             )
 
             ThemeColorSettings(
@@ -120,7 +124,9 @@ fun AppearanceScreen(
 @Composable
 private fun DarkModeSettings(
     darkMode: DarkMode,
-    onDarkModeChange: (DarkMode) -> Unit
+    onDarkModeChange: (DarkMode) -> Unit,
+    darkThemeStyle: DarkThemeStyle,
+    onDarkThemeStyleChange: (DarkThemeStyle) -> Unit
 ) {
     Column {
         Text("深色模式", style = MaterialTheme.typography.bodyLarge)
@@ -148,6 +154,36 @@ private fun DarkModeSettings(
                 DarkMode.LIGHT -> "始终使用浅色界面"
                 DarkMode.DARK -> "始终使用深色界面"
                 DarkMode.FOLLOW_SYSTEM -> "跟随系统明暗自动切换"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("深色风格", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DarkThemeStyle.entries.forEach { style ->
+                FilterChip(
+                    enabled = darkMode != DarkMode.LIGHT,
+                    selected = darkThemeStyle == style,
+                    onClick = { onDarkThemeStyleChange(style) },
+                    label = {
+                        Text(
+                            when (style) {
+                                DarkThemeStyle.PURE_BLACK -> "🌑 纯黑"
+                                DarkThemeStyle.DARK_GRAY -> "🌘 深灰"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            when {
+                darkMode == DarkMode.LIGHT -> "浅色下不生效，切到深色后可切换风格"
+                darkThemeStyle == DarkThemeStyle.PURE_BLACK -> "纯黑：OLED 像素不发光，深夜不晃眼"
+                else -> "深灰：层级柔和，默认风格"
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -38,6 +38,14 @@ class ThemeTest {
     }
 
     @Test
+    fun `dark gray style keeps classic dark background`() {
+        val scheme = brandedColorScheme(Color(0xFFFF6699), dark = true, amoled = false)
+
+        assertNotEquals(Color.Black, scheme.background)
+        assertNotEquals(Color.Black, scheme.surface)
+    }
+
+    @Test
     fun `light theme keeps non-black background`() {
         val scheme = brandedColorScheme(Color(0xFFFF6699), dark = false)
 

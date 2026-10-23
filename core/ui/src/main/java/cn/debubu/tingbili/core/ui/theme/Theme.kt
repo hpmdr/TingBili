@@ -20,31 +20,38 @@ import cn.debubu.tingbili.core.data.model.ThemeMode
 
 /** 当前生效的深色模式（含用户手动覆盖），供各页面做明暗分支，替代 isSystemInDarkTheme() */
 val LocalDarkTheme = staticCompositionLocalOf { false }
+/** 深色风格是否为纯黑（false = 深灰）：硬编码深色色值的页面跟随它分支 */
+val LocalDarkAmoled = staticCompositionLocalOf { false }
 
 @Composable
 fun TingBiliTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     themeMode: ThemeMode = ThemeMode.DEFAULT,
     customThemeColorArgb: Int = PreferencesRepository.DEFAULT_THEME_COLOR,
+    darkAmoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     // 十几次 blend/contentColor 全是纯计算：HSV 拖动每帧都重算，remember 按输入缓存
-    val scheme = remember(themeMode, darkTheme, customThemeColorArgb) {
+    val scheme = remember(themeMode, darkTheme, customThemeColorArgb, darkAmoled) {
         when {
             themeMode == ThemeMode.SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                if (darkTheme) applyAmoledBlack(dynamicDarkColorScheme(context)) else dynamicLightColorScheme(context)
+                val dynamic = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                if (darkTheme && darkAmoled) applyAmoledBlack(dynamic) else dynamic
             }
-            themeMode == ThemeMode.CUSTOM -> brandedColorScheme(Color(customThemeColorArgb), darkTheme)
-            else -> brandedColorScheme(Color(PreferencesRepository.DEFAULT_THEME_COLOR), darkTheme)
+            themeMode == ThemeMode.CUSTOM -> brandedColorScheme(Color(customThemeColorArgb), darkTheme, darkAmoled)
+            else -> brandedColorScheme(Color(PreferencesRepository.DEFAULT_THEME_COLOR), darkTheme, darkAmoled)
         }
     }
-    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+    CompositionLocalProvider(
+        LocalDarkTheme provides darkTheme,
+        LocalDarkAmoled provides darkAmoled
+    ) {
         MaterialTheme(colorScheme = scheme, typography = Typography, content = content)
     }
 }
 
-internal fun brandedColorScheme(seed: Color, dark: Boolean): ColorScheme {
+internal fun brandedColorScheme(seed: Color, dark: Boolean, amoled: Boolean = true): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     val primary = if (dark) blend(seed, Color.White, 0.12f) else seed
     val onPrimary = contentColor(primary)
@@ -75,8 +82,9 @@ internal fun brandedColorScheme(seed: Color, dark: Boolean): ColorScheme {
         surfaceTint = primary,
         inversePrimary = primary
     )
-    // OLED 纯黑：深色下背景/表面全压到黑系，像素不发光，深夜不晃眼
-    return if (dark) applyAmoledBlack(branded) else branded
+    // OLED 纯黑：深色 + 纯黑风格下背景/表面全压到黑系，像素不发光，深夜不晃眼；
+    // 深灰风格保持 Material 默认深灰
+    return if (dark && amoled) applyAmoledBlack(branded) else branded
 }
 
 /**

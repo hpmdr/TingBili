@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
+import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,6 +24,9 @@ class AppearanceViewModel @Inject constructor(
     val darkMode: StateFlow<DarkMode> = prefs.darkMode.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM
     )
+    val darkThemeStyle: StateFlow<DarkThemeStyle> = prefs.darkThemeStyle.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), DarkThemeStyle.DARK_GRAY
+    )
     val customThemeColor: StateFlow<Int> = prefs.customThemeColor.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
@@ -35,6 +39,10 @@ class AppearanceViewModel @Inject constructor(
 
     fun setDarkMode(mode: DarkMode) {
         viewModelScope.launch { prefs.setDarkMode(mode) }
+    }
+
+    fun setDarkThemeStyle(style: DarkThemeStyle) {
+        viewModelScope.launch { prefs.setDarkThemeStyle(style) }
     }
 
     fun setCustomThemeColor(color: Int) {

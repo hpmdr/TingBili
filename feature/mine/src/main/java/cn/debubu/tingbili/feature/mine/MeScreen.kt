@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
@@ -233,8 +234,13 @@ private fun MeHeader(
     onToggleDark: () -> Unit,
     onUserClick: () -> Unit,
 ) {
+    val darkAmoled = LocalDarkAmoled.current
     val gradient = if (darkTheme) {
-        Brush.verticalGradient(listOf(Color(0xFF1A0F14), Color.Black, Color.Black))
+        if (darkAmoled) {
+            Brush.verticalGradient(listOf(Color(0xFF1A0F14), Color.Black, Color.Black))
+        } else {
+            Brush.verticalGradient(listOf(Color(0xFF251A20), Color(0xFF1E1E1E), Color(0xFF1A1A1A)))
+        }
     } else {
         Brush.linearGradient(listOf(BiliPinkLight, BiliPink, Color(0xFFF45C8A)))
     }
@@ -394,7 +400,9 @@ private fun DashboardGrid(
             .offset(y = (-16).dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (darkTheme) Color(0xFF121212) else MaterialTheme.colorScheme.surface
+            containerColor = if (darkTheme) {
+                if (LocalDarkAmoled.current) Color(0xFF121212) else Color(0xFF1E1E1E)
+            } else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -477,7 +485,9 @@ private fun SettingsGroup(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (darkTheme) Color(0xFF121212) else MaterialTheme.colorScheme.surface
+            containerColor = if (darkTheme) {
+                if (LocalDarkAmoled.current) Color(0xFF121212) else Color(0xFF1E1E1E)
+            } else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {

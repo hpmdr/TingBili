@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val customThemeColor by mainViewModel.customThemeColor.collectAsStateWithLifecycle()
             val darkMode by mainViewModel.darkMode.collectAsStateWithLifecycle()
+            val darkThemeStyle by mainViewModel.darkThemeStyle.collectAsStateWithLifecycle()
             val systemDark = isSystemInDarkTheme()
             val darkTheme = when (darkMode) {
                 cn.debubu.tingbili.core.data.model.DarkMode.DARK -> true
@@ -118,7 +119,8 @@ class MainActivity : ComponentActivity() {
             TingBiliTheme(
                 darkTheme = darkTheme,
                 themeMode = themeMode,
-                customThemeColorArgb = customThemeColor
+                customThemeColorArgb = customThemeColor,
+                darkAmoled = darkThemeStyle == cn.debubu.tingbili.core.data.model.DarkThemeStyle.PURE_BLACK
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
