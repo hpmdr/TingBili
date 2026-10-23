@@ -15,6 +15,7 @@ import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
 import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
 import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
@@ -57,6 +58,7 @@ class AppCacheManagerTest {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+        override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): FavFolderDto = FavFolderDto()
         override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): FavDetailDto = FavDetailDto()

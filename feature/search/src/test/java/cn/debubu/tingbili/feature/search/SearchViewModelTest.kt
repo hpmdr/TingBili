@@ -13,6 +13,7 @@ import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
 import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
 import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchItem
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
@@ -171,6 +172,7 @@ class SearchViewModelTest {
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
             PlayUrlDto(code = 0)
 
+        override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto =
             SubtitleDto(code = 0)
 

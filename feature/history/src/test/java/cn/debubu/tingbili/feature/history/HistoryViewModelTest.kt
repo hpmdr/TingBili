@@ -14,6 +14,7 @@ import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
@@ -172,6 +173,7 @@ class HistoryViewModelTest {
                 )
             )
         }
+        override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFolders(pn: Int, ps: Int, upMid: Long) =
             cn.debubu.tingbili.data.bilibili.dto.FavFolderDto(code = 0)

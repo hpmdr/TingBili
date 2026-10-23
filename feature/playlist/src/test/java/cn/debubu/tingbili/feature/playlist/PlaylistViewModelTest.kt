@@ -15,6 +15,7 @@ import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
@@ -214,6 +215,7 @@ class PlaylistViewModelTest {
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
             PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
+        override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
         override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
