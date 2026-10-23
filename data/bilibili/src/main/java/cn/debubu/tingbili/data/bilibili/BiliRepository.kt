@@ -160,6 +160,24 @@ class BiliRepository @Inject constructor(
         }
     }
 
+    /**
+     * 相关推荐：与 view 并行调用，失败不阻塞详情主内容（调用方在推荐区单独展示重试）。
+     * 接口无分页，一次约 10~20 条；过滤掉当前视频自己。
+     */
+    suspend fun getRelated(bvid: String): Result<List<Track>> = try {
+        val dto = api.related(bvid)
+        val err = checkSearchCode(dto.code, dto.message)
+        if (err != null) {
+            Result.Error(err)
+        } else {
+            Result.Success(dto.toTracks().filter { it.bvid != bvid })
+        }
+    } catch (e: BiliRateLimitedException) {
+        Result.Error(e.message ?: "请求太频繁（412），稍后再试", e)
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "related failed", e)
+    }
+
     suspend fun getPlayUrl(bvid: String, cid: Long): Result<String> = try {
         val dto = api.playUrl(bvid, cid)
         if (dto.code != 0) {

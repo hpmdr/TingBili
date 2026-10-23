@@ -250,6 +250,33 @@ class BiliRepositoryTest {
         assertTrue(((r as Result.Error).msg.contains("412")))
     }
 
+    @Test
+    fun `getRelated parses items and filters self`() = runTest {
+        server.enqueue(
+            jsonResponse(
+                """{"code":0,"data":[{"bvid":"BVself","title":"Self","pic":"http://cover0","duration":60,"videos":1,"owner":{"name":"me"}},{"bvid":"BVrel1","title":"Novel 1","pic":"http://cover1","duration":3600,"videos":12,"owner":{"name":"up1"}},{"bvid":"","title":"NoBvid","pic":"","duration":10}]}"""
+            )
+        )
+        val r = repo.getRelated("BVself")
+        assertTrue(r is Result.Success)
+        val tracks = (r as Result.Success).data
+        // 自己被过滤、无 bvid 被丢弃，只剩 1 条
+        assertEquals(1, tracks.size)
+        assertEquals("BVrel1", tracks[0].bvid)
+        assertEquals("Novel 1", tracks[0].title)
+        assertEquals("up1", tracks[0].author)
+        assertEquals(3600_000L, tracks[0].durationMs)
+        assertEquals(12, tracks[0].pageCount)
+        assertEquals("/x/web-interface/archive/related", server.takeRequest().requestUrl?.encodedPath)
+    }
+
+    @Test
+    fun `getRelated returns Error on non-zero code`() = runTest {
+        server.enqueue(jsonResponse("""{"code":-404,"message":"not found","data":[]}"""))
+        val r = repo.getRelated("BVself")
+        assertTrue(r is Result.Error)
+    }
+
     private fun jsonResponse(body: String) = MockResponse()
         .setBody(body)
         .setResponseCode(200)

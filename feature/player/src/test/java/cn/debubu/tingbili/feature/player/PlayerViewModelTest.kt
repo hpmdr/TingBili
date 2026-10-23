@@ -17,6 +17,7 @@ import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
 import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
@@ -57,6 +58,7 @@ class PlayerViewModelTest {
         var subtitleCalls = 0
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
         override suspend fun view(bvid: String): ViewDto = ViewDto()
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
             subtitleCalls++
@@ -231,6 +233,7 @@ class PlayerViewModelTest {
             var fail = true
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
             override suspend fun view(bvid: String): ViewDto = ViewDto()
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
                 calls++

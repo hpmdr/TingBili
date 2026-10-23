@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -34,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +74,7 @@ import java.util.Locale
 fun DetailScreen(
     onBack: () -> Unit = {},
     onPlayNavigate: () -> Unit = {},
+    onVideoClick: (String) -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -82,6 +85,7 @@ fun DetailScreen(
     val focus by viewModel.focus.collectAsStateWithLifecycle()
     val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val related by viewModel.related.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     // 打开页面不自动定位续播项；点了"继续播放"再滚过去（收藏详情同理）
@@ -143,7 +147,10 @@ fun DetailScreen(
                         focus = focus,
                         playingTrack = playingTrack,
                         progress = progress,
+                        related = related,
                         listState = listState,
+                        onVideoClick = onVideoClick,
+                        onRetryRelated = { viewModel.loadRelated() },
                         onPlayAll = {
                             viewModel.play(s.tracks, focus?.index ?: 0)
                             scrollFocusIntoView()
@@ -168,10 +175,13 @@ private fun DetailContent(
     focus: DetailFocus?,
     playingTrack: PlayingTrack?,
     progress: Map<String, HistoryEntity>,
+    related: RelatedUiState,
     listState: LazyListState,
     onPlayAll: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onPlayPage: (Int) -> Unit
+    onPlayPage: (Int) -> Unit,
+    onVideoClick: (String) -> Unit,
+    onRetryRelated: () -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
     // 头部重活只随 video 变：progress 每秒推，组合内 SDF/format 每秒跑纯属浪费
@@ -378,7 +388,112 @@ private fun DetailContent(
                 }
             }
         }
+        item {
+            Spacer(Modifier.height(14.dp))
+            Text(text = "相关推荐", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+        }
+        when (val r = related) {
+            is RelatedUiState.Loading -> {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+            is RelatedUiState.Error -> {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "相关推荐加载失败：${r.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        TextButton(onClick = onRetryRelated) { Text("重试") }
+                    }
+                }
+            }
+            is RelatedUiState.Success -> {
+                if (r.tracks.isEmpty()) {
+                    item {
+                        Text(
+                            text = "暂无相关推荐",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                } else {
+                    items(r.tracks, key = { it.bvid }) { t ->
+                        RelatedRow(track = t, onClick = { onVideoClick(t.bvid) })
+                    }
+                }
+            }
+        }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** 相关推荐行：复用搜索页行样式（封面 + 时长角标 + 标题 + UP/分P数），点击进新详情 */
+@Composable
+private fun RelatedRow(track: Track, onClick: () -> Unit) {
+    val imageFormat = LocalImageFormat.current
+    val coverUrl = remember(track.cover, imageFormat) {
+        track.cover.biliImage(232, 144, imageFormat)
+    }
+    val durationText = remember(track.durationMs) {
+        if (track.durationMs > 0L) formatDuration(track.durationMs) else null
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp)
+    ) {
+        Box {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                modifier = Modifier.width(116.dp).height(72.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            if (durationText != null) {
+                Text(
+                    text = durationText,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                        .background(Color(0x99000000), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f).height(72.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = buildString {
+                    if (track.author.isNotBlank()) append("UP: ${track.author}")
+                    if (track.pageCount > 1) {
+                        if (isNotEmpty()) append(" · ")
+                        append("${track.pageCount}P")
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

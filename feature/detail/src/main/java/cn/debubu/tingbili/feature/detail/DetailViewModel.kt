@@ -32,6 +32,15 @@ sealed interface DetailUiState {
 }
 
 /**
+ * 相关推荐区状态：与详情主内容独立加载，失败不影响主内容展示。
+ */
+sealed interface RelatedUiState {
+    data object Loading : RelatedUiState
+    data class Success(val tracks: List<Track>) : RelatedUiState
+    data class Error(val message: String) : RelatedUiState
+}
+
+/**
  * 列表里被重点标出的那一项。一个列表同时只会有一个。
  * @param index 分P 下标
  * @param isPlaying true=正在播这一项；false=历史续播点
@@ -54,6 +63,9 @@ class DetailViewModel @Inject constructor(
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
+
+    private val _related = MutableStateFlow<RelatedUiState>(RelatedUiState.Loading)
+    val related: StateFlow<RelatedUiState> = _related.asStateFlow()
 
     private val _isFavorited = MutableStateFlow(false)
     val isFavorited: StateFlow<Boolean> = _isFavorited.asStateFlow()
@@ -109,6 +121,7 @@ class DetailViewModel @Inject constructor(
 
     init {
         load()
+        loadRelated()
         observeFavorite()
     }
 
@@ -129,6 +142,16 @@ class DetailViewModel @Inject constructor(
                     _state.value = DetailUiState.Success(video, video.toTracks())
                 }
                 is Result.Error -> _state.value = DetailUiState.Error(result.msg ?: "加载失败")
+            }
+        }
+    }
+
+    fun loadRelated() {
+        _related.value = RelatedUiState.Loading
+        viewModelScope.launch {
+            when (val result = repo.getRelated(bvid)) {
+                is Result.Success -> _related.value = RelatedUiState.Success(result.data)
+                is Result.Error -> _related.value = RelatedUiState.Error(result.msg ?: "加载失败")
             }
         }
     }

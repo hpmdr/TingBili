@@ -19,6 +19,7 @@ import cn.debubu.tingbili.core.data.db.HomeSnapshotEntity
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchData
 import cn.debubu.tingbili.data.bilibili.dto.SearchItem
@@ -80,6 +81,7 @@ class HomeViewModelTest {
             return SearchDto(code = 0, data = data)
         }
         override suspend fun view(bvid: String): ViewDto = viewResult
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
@@ -304,6 +306,7 @@ class HomeViewModelTest {
                 return SearchDto(code = 0, data = SearchData(result = fakeApi.searchResult, page = page, numResults = 2, numPages = 9))
             }
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
             override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
@@ -328,6 +331,7 @@ class HomeViewModelTest {
         val errorApi = object : BiliApi {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = throw RuntimeException("network error")
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
             override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
@@ -460,6 +464,7 @@ class HomeViewModelTest {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto =
                 SearchDto(code = -412, message = "请求被拦截")
             override suspend fun view(bvid: String): ViewDto = limitedApi.view(bvid)
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
             override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = limitedApi.playUrl(bvid, cid, fnval)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = limitedApi.subtitle(bvid, cid)
             override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()

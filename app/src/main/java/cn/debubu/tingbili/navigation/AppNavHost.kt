@@ -164,7 +164,8 @@ fun AppRootNavHost(
             ImageFormatScope(mainViewModel) {
                 DetailScreen(
                     onBack = { navController.popBackStack() },
-                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } }
+                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                    onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
                 )
             }
         }

@@ -4,6 +4,7 @@ import cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto
 import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
 import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
 import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
@@ -24,6 +25,12 @@ interface BiliApi {
     suspend fun view(
         @Query("bvid") bvid: String
     ): ViewDto
+
+    // 相关推荐（对标 PiliPlus relatedVideoList）：只传 bvid，无需 WBI/登录，一次约 10~20 条
+    @GET("/x/web-interface/archive/related")
+    suspend fun related(
+        @Query("bvid") bvid: String
+    ): RelatedDto
 
     @GET("/x/player/playurl")
     suspend fun playUrl(
