@@ -166,7 +166,9 @@ private fun MiniPlayerSlot(
             navController.navigate(PlayerRoute) { launchSingleTop = true }
         },
         progress = progress,
-        visible = visibility.isVisible(trackKey),
+        // 布局占位只看手动关闭；滚动隐藏走位移，不触发 Scaffold 重测
+        visible = !visibility.isDismissed(trackKey),
+        scrollVisible = visibility.scrollVisible,
         onDismiss = { visibility.dismiss(trackKey) },
     )
 }
