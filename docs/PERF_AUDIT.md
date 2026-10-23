@@ -478,3 +478,10 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 
 - ✅ 缓存搬家第一步（`3b3b573`）：playUrl 大 Map 迁出 DataStore → Room `PlayUrlCacheEntity`（v9 + `MIGRATION_8_9`）；PlayerManager 经 `PlayUrlCacheDao` 读写 + 启动一次性搬运旧 JSON（读完删键）；prefs 旧读写 API 已删。真机验证：prefs 文件 19KB 且无 `playurl_cache_json` 键，播放/暂停/字幕正常。171 单测全绿（含新增 `PlayUrlCacheDaoTest` 4 例）。
 - 剩下：HomeSnapshot 单行 60 条 JSON、Subtitle 万行 linesJson 仍在 Room TEXT 里（读多写少，暂缓；动则加文件缓存）。
+
+## 落地进度（2026-10-23 中午，master @40148a0）
+
+- ✅ 网络 memo（`40148a0`）：view/viewDetail 成功态内存缓存 5min（只缓存 code==0，412 毒缓存免疫）；`refreshBv` 强制直取。单测：命中只发 1 请求、错误不缓存、强制刷新绕过（data:bilibili 57/57）。
+- ✅ Cookie 请求头 60s 缓存（`97b1f25`）：拦截器热路径只读缓存，会话变更即时失效；单测覆盖拼接/缓存/登出。
+- ✅ MainViewModel 独立成文件（`319955d`）：纯搬家，app 单测全绿。
+- 真机：P5 续播正常，字幕正常，零崩溃。

@@ -108,3 +108,7 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 ## 落地进度（2026-10-23 中午）
 
 - 缓存搬家（第 4 项）完成 playurl 部分（`3b3b573`）：Room 表 + v9 迁移 + DAO + 启动搬运；DataStore 只剩纯偏好。真机 prefs 已无旧键。
+
+## 落地进度（2026-10-23 中午）
+
+- 网络/会话（第 6 项）收尾：view memo + Cookie 头缓存。`WbiInterceptor` 热路径零拼串。
