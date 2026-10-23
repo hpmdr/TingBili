@@ -112,3 +112,8 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 ## 落地进度（2026-10-23 中午）
 
 - 网络/会话（第 6 项）收尾：view memo + Cookie 头缓存。`WbiInterceptor` 热路径零拼串。
+
+## 落地进度（2026-10-23 下午）
+
+- 队列真相（第 3 项）完成度：transport 时间线唯一写入者不变；元数据队列落 Room 单行快照（原子 Upsert，消灭 DataStore 三键分写错位）。纯 Room 播放队列表（长期）暂缓：当前快照已满足崩溃恢复， thermostat。
+- ThemeConfig/AppState 拆分（第 5 项）评估结论：暂缓。理由：订阅已全粒度化（4 个独立 StateFlow + `remember(scheme)`），单 ThemeConfig 流省不掉任何一次重组；导航态已收敛到 `isMainTabRoute/isMainTabDestination`。拆分只剩文件美学价值，改 6 处调用方的 churn 不值。

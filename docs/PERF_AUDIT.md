@@ -485,3 +485,8 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 - ✅ Cookie 请求头 60s 缓存（`97b1f25`）：拦截器热路径只读缓存，会话变更即时失效；单测覆盖拼接/缓存/登出。
 - ✅ MainViewModel 独立成文件（`319955d`）：纯搬家，app 单测全绿。
 - 真机：P5 续播正常，字幕正常，零崩溃。
+
+## 落地进度（2026-10-23 下午，master @5133271）
+
+- ✅ 队列快照迁 Room（`5133271`）：`PlayQueueSnapshotEntity` 单行表 + v10 + `MIGRATION_9_10`；persist/restore 改 Room Upsert/get；DataStore 旧三键一次性搬运后删除。180 单测全绿（含新增 `PlayQueueDaoTest` 3 例）。
+- 真机（升级安装）：旧 prefs 已无 `last_queue_json/last_index/playurl_cache_json`（145 字节，只剩 position/偏好）；杀进程冷启从 Room 恢复 P6/P1；播放/暂停/字幕正常，零崩溃。
