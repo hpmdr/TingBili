@@ -94,6 +94,18 @@ class PlayerManagerTest {
         }
     }
 
+
+    class FakePlayQueueDao : cn.debubu.tingbili.core.data.db.PlayQueueDao {
+        var snapshot: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = null
+        override suspend fun get(): cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = snapshot
+        override suspend fun save(s: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity) {
+            snapshot = s
+        }
+        override suspend fun clear() {
+            snapshot = null
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         val saved = mutableListOf<HistoryEntity>()
         private val map = mutableMapOf<Pair<String, Long>, HistoryEntity>()
@@ -124,6 +136,7 @@ class PlayerManagerTest {
 
     private lateinit var fakePlayer: FakePlayerHandle
     private lateinit var fakeHistory: FakeHistoryDao
+    private lateinit var fakePlayQueue: FakePlayQueueDao
     private lateinit var prefs: PreferencesRepository
     private lateinit var fakeResolvers: FakeMediaResolvers
     private lateinit var playerManager: PlayerManager
@@ -132,6 +145,7 @@ class PlayerManagerTest {
     fun setUp() {
         fakePlayer = FakePlayerHandle()
         fakeHistory = FakeHistoryDao()
+        fakePlayQueue = FakePlayQueueDao()
         val context = ApplicationProvider.getApplicationContext<Context>()
         // Ensure clean prefs file per test suite
         val file = context.preferencesDataStoreFile("test_media_prefs_${System.nanoTime()}")
@@ -142,7 +156,7 @@ class PlayerManagerTest {
         )
         prefs = PreferencesRepository(dataStore)
         fakeResolvers = FakeMediaResolvers()
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), context)
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), fakePlayQueue, context)
     }
 
     @Test
@@ -376,7 +390,11 @@ class PlayerManagerTest {
             Track("BV1", 1, "t1", "a", "cover1", 10000, null),
             Track("BV2", 2, "t2", "a", "cover2", 20000, null)
         )
-        prefs.setLastPlayback(tracks, 1, 5500L)
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
+            tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
+            currentIndex = 1,
+        )
+        prefs.setLastPosition(5500L)
         playerManager.restoreLastPlayback()
         assertEquals(2, playerManager.state.value.queue.size)
         assertEquals(1, playerManager.state.value.currentIndex)
@@ -403,10 +421,12 @@ class PlayerManagerTest {
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
         playerManager.play(tracks, 0)
         runCurrent()
-        // prefs should contain queue
-        assertEquals(1, prefs.lastQueue.first().size)
-        assertEquals("BV1", prefs.lastQueue.first().first().bvid)
-        assertEquals(0, prefs.lastIndex.first())
+        // Room snapshot should contain queue
+        val snap = fakePlayQueue.snapshot
+        val decoded = cn.debubu.tingbili.core.data.db.PlayQueueJson.decode(snap!!.tracksJson)
+        assertEquals(1, decoded.size)
+        assertEquals("BV1", decoded.first().bvid)
+        assertEquals(0, snap.currentIndex)
         playerManager.release()
     }
 
@@ -446,7 +466,7 @@ class PlayerManagerTest {
         val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val errPrefs = PreferencesRepository(ds)
-        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), context)
+        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
         errManager.testScope = this
         errManager.play(listOf(Track("BVX", 999, "t", "a", "", 1000, null)), 0)
         runCurrent()
@@ -466,7 +486,7 @@ class PlayerManagerTest {
         val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")
         val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
         val refreshPrefs = PreferencesRepository(ds)
-        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), context)
+        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
         m.testScope = this
         m.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
         runCurrent()

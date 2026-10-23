@@ -112,6 +112,18 @@ class OtherSettingsViewModelTest {
         }
     }
 
+
+    class FakePlayQueueDao : cn.debubu.tingbili.core.data.db.PlayQueueDao {
+        var snapshot: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = null
+        override suspend fun get(): cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = snapshot
+        override suspend fun save(s: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity) {
+            snapshot = s
+        }
+        override suspend fun clear() {
+            snapshot = null
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = null
@@ -155,7 +167,7 @@ class OtherSettingsViewModelTest {
         )
         fakeManager = FakeCacheManager()
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(BiliRepository(FakeBiliApi()))
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), context)
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
     }
 
     @After

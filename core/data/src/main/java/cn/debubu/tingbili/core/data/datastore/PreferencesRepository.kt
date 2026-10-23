@@ -73,19 +73,32 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
     val cacheMaxMb: Flow<Int> = ds.data.map { (it[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB).coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
 
-    // 上次播放恢复：队列（JSON）+ 下标 + 进度
-    val lastQueue: Flow<List<Track>> = ds.data.map { prefs ->
-        prefs[LAST_QUEUE_JSON]?.let { json ->
-            try {
-                Json.decodeFromString(ListSerializer(Track.serializer()), json)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        } ?: emptyList()
-    }
-    val lastIndex: Flow<Int> = ds.data.map { it[LAST_INDEX] ?: -1 }
+    // 进度（高频 10s 写）仍放 DataStore；队列 + 下标 + 合集名已迁 Room（PlayQueueDao，原子快照）。
+    // 旧三键只剩 drainLastQueue 一次性搬运用，搬完即删。
     val lastPositionMs: Flow<Long> = ds.data.map { it[LAST_POSITION_MS] ?: 0L }
-    val lastSourceTitle: Flow<String?> = ds.data.map { it[LAST_SOURCE_TITLE] }
+
+    /** 一次性搬运旧队列快照并删键：Room 为空且 DataStore 有旧数据时迁入，此后不再写入旧键 */
+    suspend fun drainLastQueue(): Triple<List<Track>, Int, String?> {
+        var tracks: List<Track> = emptyList()
+        var index = -1
+        var title: String? = null
+        ds.edit { prefs ->
+            val json = prefs[LAST_QUEUE_JSON]
+            if (json != null) {
+                tracks = try {
+                    Json.decodeFromString(ListSerializer(Track.serializer()), json)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                index = (prefs[LAST_INDEX] ?: -1)
+                title = prefs[LAST_SOURCE_TITLE]
+                prefs.remove(LAST_QUEUE_JSON)
+                prefs.remove(LAST_INDEX)
+                prefs.remove(LAST_SOURCE_TITLE)
+            }
+        }
+        return Triple(tracks, index, title)
+    }
 
     suspend fun setStep(v: Int) {
         ds.edit { it[STEP_SEC] = v }
@@ -146,27 +159,6 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[CACHE_MAX_MB] = v.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
     }
 
-    /** 持久化上次播放的队列与进度，队列超 100 首截断以控大小 */
-    suspend fun setLastPlayback(
-        queue: List<Track>,
-        index: Int,
-        positionMs: Long,
-        sourceTitle: String? = null,
-    ) {
-        val capped = if (queue.size > 100) queue.take(100) else queue
-        val json = Json.encodeToString(ListSerializer(Track.serializer()), capped)
-        ds.edit {
-            it[LAST_QUEUE_JSON] = json
-            it[LAST_INDEX] = index.coerceIn(-1, capped.lastIndex.coerceAtLeast(-1))
-            it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L)
-            if (sourceTitle.isNullOrBlank()) {
-                it.remove(LAST_SOURCE_TITLE)
-            } else {
-                it[LAST_SOURCE_TITLE] = sourceTitle
-            }
-        }
-    }
-
     suspend fun setLastPosition(positionMs: Long) {
         ds.edit { it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L) }
     }
@@ -187,15 +179,6 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             prefs.remove(PLAYURL_CACHE_JSON)
         }
         return out
-    }
-
-    suspend fun clearLastPlayback() {
-        ds.edit {
-            it.remove(LAST_QUEUE_JSON)
-            it.remove(LAST_INDEX)
-            it.remove(LAST_POSITION_MS)
-            it.remove(LAST_SOURCE_TITLE)
-        }
     }
 
     suspend fun addSearchHistory(query: String) {

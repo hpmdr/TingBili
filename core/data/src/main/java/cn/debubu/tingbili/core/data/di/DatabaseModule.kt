@@ -5,6 +5,7 @@ import androidx.room.Room
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
+import cn.debubu.tingbili.core.data.db.PlayQueueDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
@@ -35,7 +36,8 @@ object DatabaseModule {
                 TingBiliDatabase.MIGRATION_5_6,
                 TingBiliDatabase.MIGRATION_6_7,
                 TingBiliDatabase.MIGRATION_7_8,
-                TingBiliDatabase.MIGRATION_8_9
+                TingBiliDatabase.MIGRATION_8_9,
+                TingBiliDatabase.MIGRATION_9_10
             )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
@@ -54,4 +56,7 @@ object DatabaseModule {
 
     @Provides
     fun providePlayUrlCacheDao(db: TingBiliDatabase): PlayUrlCacheDao = db.playUrlCacheDao()
+
+    @Provides
+    fun providePlayQueueDao(db: TingBiliDatabase): PlayQueueDao = db.playQueueDao()
 }

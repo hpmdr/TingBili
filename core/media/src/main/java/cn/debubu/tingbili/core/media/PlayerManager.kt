@@ -7,6 +7,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.db.PlayQueueDao
+import cn.debubu.tingbili.core.data.db.PlayQueueJson
+import cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
@@ -51,6 +54,7 @@ class PlayerManager @Inject constructor(
     private val catalog: CatalogResolver,
     private val artwork: ArtworkResolver,
     private val playUrlCache: PlayUrlCacheDao,
+    private val playQueue: PlayQueueDao,
     @ApplicationContext private val appContext: Context,
 ) {
     private val _state = MutableStateFlow(PlaybackState())
@@ -92,11 +96,36 @@ class PlayerManager @Inject constructor(
     /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
     suspend fun restoreLastPlayback() {
         try {
-            val savedQueue = prefs.lastQueue.first()
+            // Room 单行快照优先；空表时搬一次 DataStore 旧三键（搬完即删键），之后只走 Room
+            var snapshot = try {
+                playQueue.get()
+            } catch (_: Exception) {
+                null
+            }
+            if (snapshot == null) {
+                val (legacyQueue, legacyIndex, legacyTitle) = try {
+                    prefs.drainLastQueue()
+                } catch (_: Exception) {
+                    Triple(emptyList(), -1, null)
+                }
+                if (legacyQueue.isNotEmpty()) {
+                    snapshot = PlayQueueSnapshotEntity(
+                        tracksJson = PlayQueueJson.encode(legacyQueue.take(100)),
+                        currentIndex = legacyIndex.coerceIn(0, legacyQueue.lastIndex),
+                        sourceTitle = legacyTitle?.takeIf { it.isNotBlank() },
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    try {
+                        playQueue.save(snapshot)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            val savedQueue = snapshot?.let { PlayQueueJson.decode(it.tracksJson) }.orEmpty()
             if (savedQueue.isEmpty()) return
-            val savedIndex = prefs.lastIndex.first().coerceIn(0, savedQueue.lastIndex)
+            val savedIndex = (snapshot?.currentIndex ?: -1).coerceIn(0, savedQueue.lastIndex)
             val savedPos = prefs.lastPositionMs.first().coerceAtLeast(0L)
-            val savedSourceTitle = prefs.lastSourceTitle.first()
+            val savedSourceTitle = snapshot?.sourceTitle
             val track = savedQueue.getOrNull(savedIndex) ?: return
             queue = savedQueue
             currentIndex = savedIndex
@@ -121,12 +150,27 @@ class PlayerManager @Inject constructor(
         }
     }
 
+    private suspend fun saveQueueSnapshot(tracks: List<Track>, index: Int, sourceTitle: String?) {
+        if (tracks.isEmpty() || index !in tracks.indices) return
+        val capped = if (tracks.size > MAX_QUEUE_SNAPSHOT) tracks.take(MAX_QUEUE_SNAPSHOT) else tracks
+        val snapshot = PlayQueueSnapshotEntity(
+            tracksJson = PlayQueueJson.encode(capped),
+            currentIndex = index.coerceIn(0, capped.lastIndex),
+            sourceTitle = sourceTitle?.takeIf { it.isNotBlank() },
+            updatedAt = System.currentTimeMillis(),
+        )
+        // 单行 Upsert 原子落盘：队列/下标/合集名要么一起新，要么一起旧
+        try {
+            playQueue.save(snapshot)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun persistQueue() {
         val q = queue
         val idx = currentIndex
-        val pos = _state.value.positionMs
         if (q.isEmpty() || idx !in q.indices) return
-        effectiveScope().launch { prefs.setLastPlayback(q, idx, pos, _state.value.sourceTitle) }
+        effectiveScope().launch { saveQueueSnapshot(q, idx, _state.value.sourceTitle) }
     }
 
     private fun persistPosition(pos: Long) {
@@ -428,11 +472,10 @@ class PlayerManager @Inject constructor(
                 ?.coerceAtMost(playableTracks[startIndex].durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
                 ?: 0L
 
-            // 持久化队列与起点进度，供下次冷启动恢复
+            // 持久化队列与起点，供下次冷启动恢复（Room 单行原子快照 + DataStore 进度）
             val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
-            effectiveScope().launch {
-                prefs.setLastPlayback(playableTracks, startIndex, resolvedStartPosition, resolvedSourceTitle)
-            }
+            effectiveScope().launch { saveQueueSnapshot(playableTracks, startIndex, resolvedSourceTitle) }
+            persistPosition(resolvedStartPosition)
             transport.setMediaItems(
                 items.map { (track, url) -> track.toMediaItem(url, imageFormat) },
                 startIndex,
@@ -762,6 +805,8 @@ class PlayerManager @Inject constructor(
     private var urlRefreshRetry = 0
     private var urlRefreshJob: Job? = null
     private companion object {
+        /** 队列快照上限（与旧 DataStore 版一致，控单行 JSON 大小） */
+        const val MAX_QUEUE_SNAPSHOT = 100
         /** 历史落盘节流：10s 写一次 Room，1s 写是全 App 1Hz 抖动的根因 */
         const val HISTORY_SAVE_INTERVAL_MS = 10_000L
         /** 进度轮询：纯内存态更新 UI，不碰磁盘 */

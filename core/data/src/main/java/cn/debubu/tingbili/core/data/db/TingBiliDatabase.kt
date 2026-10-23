@@ -6,8 +6,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, HistoryEntity::class, HomeSnapshotEntity::class, SubtitleDiskEntity::class, PlayUrlCacheEntity::class],
-    version = 9,
+    entities = [PlaylistEntity::class, PlaylistTrackEntity::class, HistoryEntity::class, HomeSnapshotEntity::class, SubtitleDiskEntity::class, PlayUrlCacheEntity::class, PlayQueueSnapshotEntity::class],
+    version = 10,
     exportSchema = false
 )
 abstract class TingBiliDatabase : RoomDatabase() {
@@ -16,6 +16,7 @@ abstract class TingBiliDatabase : RoomDatabase() {
     abstract fun homeSnapshotDao(): HomeSnapshotDao
     abstract fun subtitleDiskDao(): SubtitleDiskDao
     abstract fun playUrlCacheDao(): PlayUrlCacheDao
+    abstract fun playQueueDao(): PlayQueueDao
 
     companion object {
         /** 纯新增可空列 cover，AutoMigration 失效时的兜底手动迁移 */
@@ -68,6 +69,12 @@ abstract class TingBiliDatabase : RoomDatabase() {
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `PlayUrlCacheEntity` (`key` TEXT NOT NULL, `url` TEXT NOT NULL, `fetchedAtMs` INTEGER NOT NULL, PRIMARY KEY(`key`))")
+            }
+        }
+        /** 新增播放队列快照单行表（替代 DataStore 三键分写，原子落盘防错位） */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `PlayQueueSnapshotEntity` (`id` INTEGER NOT NULL, `tracksJson` TEXT NOT NULL, `currentIndex` INTEGER NOT NULL, `sourceTitle` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
             }
         }
     }

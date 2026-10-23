@@ -104,6 +104,18 @@ class HistoryViewModelTest {
         }
     }
 
+
+    class FakePlayQueueDao : cn.debubu.tingbili.core.data.db.PlayQueueDao {
+        var snapshot: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = null
+        override suspend fun get(): cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = snapshot
+        override suspend fun save(s: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity) {
+            snapshot = s
+        }
+        override suspend fun clear() {
+            snapshot = null
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         private val flow = MutableStateFlow<List<HistoryEntity>>(emptyList())
         private val map = mutableMapOf<Pair<String, Long>, HistoryEntity>()
@@ -196,7 +208,7 @@ class HistoryViewModelTest {
         )
         prefs = PreferencesRepository(dataStore)
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
-        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), context)
+        playerManager = PlayerManager(fakePlayer, fakeDao, prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
     }
 
     @After

@@ -65,6 +65,18 @@ class PlaylistViewModelTest {
         }
     }
 
+
+    class FakePlayQueueDao : cn.debubu.tingbili.core.data.db.PlayQueueDao {
+        var snapshot: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = null
+        override suspend fun get(): cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = snapshot
+        override suspend fun save(s: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity) {
+            snapshot = s
+        }
+        override suspend fun clear() {
+            snapshot = null
+        }
+    }
+
     class FakePlaylistDao : PlaylistDao {
         private var idSeq = 1L
         private val playlists = mutableListOf<PlaylistEntity>()
@@ -228,7 +240,7 @@ class PlaylistViewModelTest {
         )
         val repo = BiliRepository(FakeBiliApi())
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
-        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), ctx)
+        player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), ctx)
     }
 
     @After

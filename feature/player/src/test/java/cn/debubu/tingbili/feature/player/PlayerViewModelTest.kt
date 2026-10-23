@@ -102,6 +102,18 @@ class PlayerViewModelTest {
         }
     }
 
+
+    class FakePlayQueueDao : cn.debubu.tingbili.core.data.db.PlayQueueDao {
+        var snapshot: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = null
+        override suspend fun get(): cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity? = snapshot
+        override suspend fun save(s: cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity) {
+            snapshot = s
+        }
+        override suspend fun clear() {
+            snapshot = null
+        }
+    }
+
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
         override suspend fun get(bvid: String, cid: Long): HistoryEntity? = null
@@ -123,6 +135,7 @@ class PlayerViewModelTest {
     private lateinit var api: SlowSubtitleApi
     private lateinit var repo: BiliRepository
     private lateinit var player: PlayerManager
+    private lateinit var fakePlayQueue: FakePlayQueueDao
     private lateinit var prefs: PreferencesRepository
     private lateinit var authStore: FakeAuthStore
     private lateinit var auth: AuthRepository
@@ -141,7 +154,8 @@ class PlayerViewModelTest {
             )
         )
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
-        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), context)
+        fakePlayQueue = FakePlayQueueDao()
+        player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), fakePlayQueue, context)
         authStore = FakeAuthStore()
         auth = AuthRepository(testJson, authStore)
     }
@@ -169,7 +183,7 @@ class PlayerViewModelTest {
         val track = demoTrack()
         // 用“冷启动恢复” seeding 当前曲目：只跑有限任务，不启动无限轮询，
         // runTest 收尾不会卡死（见 CONVENTIONS 坑 1）。
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         // 恢复与预热都是挂起等真线程 IO，直接调、等它完事，不确定性到此为止
         player.restoreLastPlayback()
         prefs.stepSec.first()
@@ -192,7 +206,7 @@ class PlayerViewModelTest {
     @Test
     fun `logged out shows NoAuth without network`() = runTest(dispatcher) {
         val track = demoTrack()
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
         val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
@@ -231,7 +245,7 @@ class PlayerViewModelTest {
         }
         val cache = SubtitleCache(BiliRepository(failingApi), FakeSubtitleDiskDao())
         val track = demoTrack()
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
         val vm = PlayerViewModel(player, cache, auth, prefs, repo)
@@ -261,7 +275,7 @@ class PlayerViewModelTest {
         val lines = listOf(cn.debubu.tingbili.data.bilibili.model.LyricLine(1000L, "你好"))
         seed.store(track.bvid, track.cid, tracks, 0, lines, "中文", false)
         val callsBefore = api.subtitleCalls
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo)
         val collectJob = launch { vm.uiState.collect {} }
@@ -280,7 +294,7 @@ class PlayerViewModelTest {
     fun `refreshBv keeps old queue on view failure`() = runTest(dispatcher) {
         loginAndRebuildAuth()
         val track = demoTrack()
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         // SlowSubtitleApi.view 回空 data → getViewDetail 走 Error（真机对应“刷新失败”）
         val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
@@ -305,7 +319,7 @@ class PlayerViewModelTest {
         // 会拿到 track=null 的初值而静默 return（真机点刷新毫无反应）
         loginAndRebuildAuth()
         val track = demoTrack()
-        prefs.setLastPlayback(listOf(track), 0, 0L, "测试书")
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
         // 故意不 collect vm.uiState：SlowSubtitleApi.view 回空 data → 走 Error 分支
