@@ -266,6 +266,11 @@ private fun HomeSearchEntry(
     onTitleDoubleClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // 词表几乎不变：拼一次缓存，DataStore 全量词表更新才重拼
+    val hint = remember(keywords) {
+        if (keywords.isEmpty()) "搜索 B站视频 / 关键词"
+        else "搜索 B站视频 · 推荐：" + keywords.joinToString("/")
+    }
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -297,8 +302,7 @@ private fun HomeSearchEntry(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = if (keywords.isEmpty()) "搜索 B站视频 / 关键词"
-                else "搜索 B站视频 · 推荐：${keywords.joinToString("/")}",
+                text = hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
