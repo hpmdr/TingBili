@@ -490,3 +490,7 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 
 - ✅ 队列快照迁 Room（`5133271`）：`PlayQueueSnapshotEntity` 单行表 + v10 + `MIGRATION_9_10`；persist/restore 改 Room Upsert/get；DataStore 旧三键一次性搬运后删除。180 单测全绿（含新增 `PlayQueueDaoTest` 3 例）。
 - 真机（升级安装）：旧 prefs 已无 `last_queue_json/last_index/playurl_cache_json`（145 字节，只剩 position/偏好）；杀进程冷启从 Room 恢复 P6/P1；播放/暂停/字幕正常，零崩溃。
+
+## 落地进度（2026-10-23 下午，master @8283729）
+
+- ✅ mini 条隐藏分两层（`8283729`）：滚动隐藏改纯位移+透明度（`animateFloatAsState` 跟 `scrollVisible`，Scaffold 内边距不动）；手动关闭仍走 `AnimatedVisibility` 收缩占位。真机验证：上滚条子移出但槽位 `[0,2274]` 保留、下滚即回；条上上滑关闭后槽位塌掉无 64dp 空隙。
