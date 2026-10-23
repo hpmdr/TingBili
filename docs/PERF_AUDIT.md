@@ -509,3 +509,25 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 ## 落地进度（2026-10-23 下午，mini 条回滚）
 
 - ✅ `c48dbf7`：回滚滚动位移方案。真机验证：位移版滚动隐藏后留 200px 纯底色死区（AnimatedVisibility 收起才是正确语义）；回滚后滚动隐藏/回滚出现/上滑关闭三态正常，无黑块。保留 remember 缓存。
+
+## 落地进度（2026-10-23 下午，mini 条黑条修复 @3274a75）
+
+- ✅ `3274a75`：滚动隐藏 mini 条后留 200px 级黑条，根因是 `AdaptiveMainScaffold` 手机分支（+ `MainTabsScaffold` 同款）的 `AppRootNavHost` modifier 只有 `padding(innerPadding)`、没有 `fillMaxSize`。mini 条 `AnimatedVisibility` 收起 → 底栏高度塌掉 → `innerPadding.bottom` 变小，但内容页不填多出的空间，露出 Scaffold 底色。位移方案不改布局高度所以没暴露，收起方案才显形。修法：`fillMaxSize().padding(...)` 两处补齐。
+- 真机（Redmi K70E）：上滑内容 mini 条收起、内容顶到底栏无黑块；下滑 mini 条回来；`app:testDebugUnitTest` 全绿。
+
+## 总 Top10 对 master @3274a75 刷新（2026-10-23 下午）
+
+对照总 Top10 逐项重销账（✅=已上机验证，🟡=部分/暂缓，⬜=未动）：
+
+1. ✅ 历史 10s 节流 + DAO 按需化（`1b25426`+`d96738d`+`742941b`/`8dfc5b5`/`a466a9d`+切歌即写）：poll 只改内存，暂停/seek/切歌即时刷。
+2. ✅ 播放页拆三层（`a2cd153`+`47226a8`回填）：track/prog/lyric 各收各，事件读常热 `player.state`。
+3. ✅ 底栏槽位隔离（`2e6402c`）+ 黑条修复（`3274a75`）：500ms tick 只重组槽位；滚动收起不再留黑条。
+4. ✅ N 路 getView 懒加载（`5af366c`）：行进入组合才 prefetch + 4 并发。
+5. ✅ 搜索补 key + Paging 对齐 + 412 退避（`11286a0`/`f226c45`/`04f2784`）。
+6. 🟡 图片分档全收尾（`a081549`：mini128/行232/网480/播640/详情720）；`memoryCacheKey` 明确不做（等 `core:image` 统一 ImageLoader）。
+7. 🟡 主题：`remember(scheme)` + 图片格式按页提供 done；HSV 防抖/ThemeConfig 单流明确不做（无可测收益）。
+8. ✅ 分P key + 章节 key + 整秒进度（`ec5a1fa`/`4f367d7`）：详情 `"bvid:cid"`、章节补 key。
+9. ✅ 卡片 URL/时长组合内算：search/home/history remember + 详情头部 remember（`81cd4b1`）。
+10. ✅ 超时 + 缓存切 IO（`712e3b7`/`6ee052c`）+ view memo（`40148a0`）+ Cookie 头缓存（`97b1f25`）+ 快照 IO（`77483cc`）：磁盘缓存由 memo 替代（防 412 中毒）。
+
+架构 Top5 对 master @3274a75 刷新：1✅拆 AppDataModule 2✅解耦 media/bilibili 3✅队列真相（plan 纯函数 + Room 单行快照 v10，纯队列表长期暂缓）4🟡缓存搬家（playUrl/队列快照 done；HomeSnapshot/Subtitle 待评估见下）5🟡主题（按页提供 done，拆分暂缓）。
