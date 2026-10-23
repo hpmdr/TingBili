@@ -38,13 +38,13 @@ class PlayerHeaderTest {
 
     @Test
     fun `chapter prefixes current episode when index known`() {
-        assertEquals("本集 P1 · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 1)))
+        assertEquals("第1集 · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 1)))
     }
 
     @Test
     fun `chapter prefixes even when total count is default`() {
         // 整单播放时队列 track 的 pageCount 常是默认值，只认序号
-        assertEquals("本集 P3 · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 3, pageCount = 1)))
+        assertEquals("第3集 · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 3, pageCount = 1)))
     }
 
     @Test
