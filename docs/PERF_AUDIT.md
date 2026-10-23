@@ -494,3 +494,14 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 ## 落地进度（2026-10-23 下午，master @8283729）
 
 - ✅ mini 条隐藏分两层（`8283729`）：滚动隐藏改纯位移+透明度（`animateFloatAsState` 跟 `scrollVisible`，Scaffold 内边距不动）；手动关闭仍走 `AnimatedVisibility` 收缩占位。真机验证：上滚条子移出但槽位 `[0,2274]` 保留、下滚即回；条上上滑关闭后槽位塌掉无 64dp 空隙。
+
+## 落地进度（2026-10-23 下午，热身收尾）
+
+- ✅ 章节目录补 key（`4f367d7`）、回顶只滚可见 Grid（`fb8a0f9`，单测 18/18）。
+- ✅ 详情头部文案/封面 remember（`81cd4b1`）、快照 IO（`77483cc`）、MainViewModel 独立文件（`319955d`）、Cookie 头缓存（`97b1f25`，单测 3 例）、view memo（`40148a0`，单测 3 例：命中/错误不缓存/强制刷新）。
+- 明确不做（已验证不可行/无收益，勿重开）：
+  - `memoryCacheKey`：Coil 3.6 `AsyncImage` 简便重载无此参数，需全站切 `ImageRequest.Builder` + 统一 ImageLoader（placeholder/crossfade/size 一起做才值）。等 `core:image` 模块时再做。
+  - HSV 防抖：`CustomColorDialog` 已是本地预览+点应用才提交，无逐帧 DataStore 写。
+  - `ThemeConfig` 单流拆分：收集已粒度化，无可测收益。
+  - 双 Grid 合并：同一时间只组合一个（无双份内存），回顶已改只滚可见的。
+  - 搜索/互斥锁拆分：共用节流是防 412 的保护，拆开反而提高被限概率。
