@@ -339,15 +339,21 @@ private fun DetailContent(
                 selectedTabIndex = selectedTab,
                 modifier = Modifier.background(MaterialTheme.colorScheme.surface)
             ) {
+                // M3 的 Tab 默认未选中色 == 选中色（只靠下划线区分），整行 contentColor 又是 primary，
+                // 不显式指定就会两个 Tab 都是强调色
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectTab(0) },
-                    text = { Text("分P ${tracks.size}") }
+                    text = { Text("分P ${tracks.size}") },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectTab(1) },
-                    text = { Text("相关推荐") }
+                    text = { Text("相关推荐") },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
