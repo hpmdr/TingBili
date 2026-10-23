@@ -2,6 +2,7 @@ package cn.debubu.tingbili.feature.detail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,13 +35,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +92,7 @@ fun DetailScreen(
     val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val related by viewModel.related.collectAsStateWithLifecycle()
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
 
     // 打开页面不自动定位续播项；点了"继续播放"再滚过去（收藏详情同理）
@@ -148,10 +155,13 @@ fun DetailScreen(
                         playingTrack = playingTrack,
                         progress = progress,
                         related = related,
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
                         listState = listState,
                         onVideoClick = onVideoClick,
                         onRetryRelated = { viewModel.loadRelated() },
                         onPlayAll = {
+                            selectedTab = 0
                             viewModel.play(s.tracks, focus?.index ?: 0)
                             scrollFocusIntoView()
                             onPlayNavigate()
@@ -165,6 +175,7 @@ fun DetailScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DetailContent(
     video: ViewData,
@@ -176,6 +187,8 @@ private fun DetailContent(
     playingTrack: PlayingTrack?,
     progress: Map<String, HistoryEntity>,
     related: RelatedUiState,
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
     listState: LazyListState,
     onPlayAll: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -206,6 +219,13 @@ private fun DetailContent(
             if ((stat?.coin ?: 0) > 0) append(" · ${formatCount(stat!!.coin)} 投币")
             if ((stat?.favorite ?: 0) > 0) append(" · ${formatCount(stat!!.favorite)} 收藏")
         }
+    }
+    val tabScope = rememberCoroutineScope()
+    // TabRow 吸顶 header 在整列里的下标：封面/标题/UP/统计/按钮 5 个固定项，有简介再 +1
+    val tabHeaderIndex = if (video.desc.isNotBlank()) 6 else 5
+    fun selectTab(index: Int) {
+        onTabSelected(index)
+        tabScope.launch { listState.scrollToItem(tabHeaderIndex) }
     }
     LazyColumn(
         state = listState,
@@ -314,12 +334,24 @@ private fun DetailContent(
                 Text(text = video.desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
         }
-        if (tracks.size > 1) {
-            item {
-                Spacer(Modifier.height(14.dp))
-                Text(text = "分P列表 (共${tracks.size}P)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
+        stickyHeader {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectTab(0) },
+                    text = { Text("分P ${tracks.size}") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectTab(1) },
+                    text = { Text("相关推荐") }
+                )
             }
+        }
+        if (selectedTab == 0) {
             itemsIndexed(tracks, key = { _, t -> "${t.bvid}:${t.cid}" }) { idx, t ->
                 val isPending = startingPlay && pendingIndex == idx
                 val focused = focus?.index == idx
@@ -387,13 +419,8 @@ private fun DetailContent(
                     Text(text = formatDuration(t.durationMs), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
             }
-        }
-        item {
-            Spacer(Modifier.height(14.dp))
-            Text(text = "相关推荐", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-        }
-        when (val r = related) {
+        } else {
+            when (val r = related) {
             is RelatedUiState.Loading -> {
                 item {
                     Box(
@@ -435,6 +462,7 @@ private fun DetailContent(
                     }
                 }
             }
+        }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
