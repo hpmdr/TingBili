@@ -855,6 +855,8 @@ class PlayerManager @Inject constructor(
                         )
                     }
                     persistQueue()
+                    // 切歌即时刷一次历史：节流 10s 下，播完一切就落盘，不用等下一 tick
+                    effectiveScope().launch { saveHistorySnapshot(force = true) }
                     urlRefreshRetry = 0
                     scheduleProactiveRefresh()
                 }

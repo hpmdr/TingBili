@@ -51,6 +51,7 @@ class PlayerManagerTest {
         override val isPlaying: Boolean get() = _isPlaying
         private var _isPlaying: Boolean = false
         fun setCurrentPosition(pos: Long) { _pos = pos }
+        fun moveTo(index: Int) { _currentIdx = index.coerceIn(0, mediaItems.size - 1) }
         fun setDuration(v: Long) { _duration = v }
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
             mediaItems = items; this.startIndex = startIndex; _currentIdx = startIndex; _pos = startPositionMs
@@ -381,6 +382,29 @@ class PlayerManagerTest {
         // 暂停即时刷：不等 10s 节流，直接落盘
         assertTrue(fakeHistory.saved.isNotEmpty())
         assertEquals(5000L, fakeHistory.saved.first().positionMs)
+        playerManager.release()
+    }
+
+    @Test
+    fun `track transition flushes history immediately`() = runTest {
+        playerManager.testScope = this
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 10000, null),
+            Track("BV1", 2, "t2", "a", "", 10000, null),
+        )
+        fakePlayer.setCurrentPosition(1000L)
+        playerManager.play(tracks, 0)
+        runCurrent()
+        fakeHistory.saved.clear()
+        // 切到第 2 集：不等 10s 节流，transition 当场落盘
+        fakePlayer.setCurrentPosition(2000L)
+        fakePlayer.moveTo(1)
+        fakePlayer.storedListener?.onMediaItemTransition(null, Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
+        runCurrent()
+        val saved = fakeHistory.saved
+        assertTrue(saved.isNotEmpty())
+        assertEquals(2L, saved.last().cid)
+        assertEquals(2000L, saved.last().positionMs)
         playerManager.release()
     }
 
