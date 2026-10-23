@@ -277,6 +277,13 @@ class PlayerViewModel @Inject constructor(
     }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricUiState())
 
+    /** 管线徽标：解码器初始化/切歌时更新，offload 睡眠态变化时更新。 */
+    val pipelineBadge: StateFlow<String?> = combine(
+        cn.debubu.tingbili.core.media.AudioPipelineMonitor.decoderName,
+        cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadSleeping,
+    ) { decoder, sleeping -> pipelineBadge(decoder, sleeping) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     /**
      * 全量聚合（单测与旧调用兼容用）：生产屏幕改收 trackUi/progressUi/lyricUi，
      * 此处无生产订阅者；事件函数一律读 player.state，禁止回退到 uiState.value。

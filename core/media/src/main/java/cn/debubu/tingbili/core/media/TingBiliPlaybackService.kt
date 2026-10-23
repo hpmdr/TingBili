@@ -40,6 +40,7 @@ class TingBiliPlaybackService : MediaSessionService() {
             (player as ExoPlayer).addAudioOffloadListener(object : ExoPlayer.AudioOffloadListener {
                 override fun onSleepingForOffloadChanged(sleepingForOffload: Boolean) {
                     Log.i("TingBiliAudio", "sleepingForOffload=$sleepingForOffload")
+                    AudioPipelineMonitor.onOffloadSleepingChanged(sleepingForOffload)
                 }
 
                 override fun onOffloadedPlayback(offloadedPlayback: Boolean) {
@@ -54,6 +55,7 @@ class TingBiliPlaybackService : MediaSessionService() {
                     initializationError: Long,
                 ) {
                     Log.i("TingBiliAudio", "audioDecoder=$decoderName")
+                    AudioPipelineMonitor.onDecoderInitialized(decoderName)
                 }
             })
         }

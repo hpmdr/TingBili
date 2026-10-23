@@ -114,6 +114,7 @@ fun PlayerScreen(
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     val progUi by vm.progressUi.collectAsStateWithLifecycle()
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
+    val pipelineBadge by vm.pipelineBadge.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
@@ -330,6 +331,16 @@ fun PlayerScreen(
             onChapterClick = { showChapterSheet = true },
             onSpeedClick = vm::cycleSpeed,
         )
+
+        pipelineBadge?.let { badge ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = badge,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+            )
+        }
 
         Spacer(Modifier.height(8.dp))
     }
