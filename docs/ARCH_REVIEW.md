@@ -99,3 +99,8 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 5. 🟡 主题/状态：图片格式按页提供 done（`1c058b7`）；`ThemeConfig` 收敛 + 拆 `MainViewModel` 未动。
 
 明日建议顺序：先 P1-H1 同类小项（N 路 getView→按需/懒加载，HistoryViewModel 首当其冲）+ 分P key + mini/详情图片分档（都是小补丁，热身）；再开队列真相唯一化（大手术，单独验证）。
+
+## 落地进度（2026-10-23 上午）
+
+- 队列真相唯一化（第 3 项）完成第一步（`5b25864`）：消灭 mirror 可变副本与双尾分叉，plan 纯函数化；transport 时间线仍是唯一写入方，queue 字段保留为 UI 元数据（彻底 Room 落盘队列待业务需要时再做）。
+- 播放器事件链回填（`47226a8`）：拆订阅的副作用教训——无订阅者的 StateFlow 会停在初值，事件读必须走常热源。

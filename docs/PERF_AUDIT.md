@@ -465,3 +465,11 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 10. ✅ 超时 + 缓存切 IO（`712e3b7`/`6ee0525`）；search/view 磁盘缓存未动。
 
 另：`isMainTabDestination` 收敛（`a2d3d6a`）、通知权限延后（`8b3e8ee`）、Slider 松手提交（`71e0002`）、5 处旧 fake 补齐（门禁恢复全绿，165 单测 0 失败）。
+
+## 落地进度（2026-10-23 上午，master @509f182）
+
+- ✅ N 路 getView 改懒加载（`5af366c`）：进页不再全量拉，行进入组合才 `prefetch` + 4 并发 bound；单测断言“历史 emit 不触发 view、prefetch 才触发且去重”（6/6）。
+- ✅ 分P key（`ec5a1fa`）：详情补 `"bvid:cid"` 稳定 key（歌单早已有）。
+- ✅ 图片分档收尾（`a081549`）：播放封面 640 档；B 站收藏/空间列表原图改按尺寸裁剪（192x120 / ListThumb）。`memoryCacheKey` 未做：需等 Coil ImageLoader 统一调参，记入 `core:cache` 模块时一起做。
+- ✅ 队列真相第一步（`5b25864`）：refreshQueue 拆纯 plan + 不断播手术 + 双尾合一，24 单测钉住行为，真机刷新链路回归通过。
+- ✅ 播放器拆分回填坑（`47226a8` + `509f182`）：拆订阅后 `playAt/refreshBv/cycleSpeed` 误读无人订阅的 `uiState` 导致静默 return；改读常热 `player.state`，回归单测反向验证（旧代码必挂 1 个），真机章节 P1→P5 跳播验证通过。
