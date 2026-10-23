@@ -163,7 +163,8 @@ class HomeViewModel @Inject constructor(
 
     private fun saveSnapshot(tracks: List<Track>, orderedKeywords: List<String>) {
         if (tracks.isEmpty()) return
-        viewModelScope.launch {
+        // 60 条 Track JSON 编码 + Room 写放 IO：回调起于 Paging append，滚动中别占主线程
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val bounded = tracks.take(MAX_SNAPSHOT_TRACKS)
                 homeSnapshotDao.save(

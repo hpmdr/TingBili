@@ -188,7 +188,7 @@ class PlayerViewModelTest {
         player.restoreLastPlayback()
         prefs.stepSec.first()
         assertEquals("BV1xx", player.state.value.currentTrack?.bvid)
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -209,7 +209,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -248,7 +248,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, cache, auth, prefs, repo)
+        val vm = PlayerViewModel(player, cache, auth, prefs, repo, dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -277,7 +277,7 @@ class PlayerViewModelTest {
         val callsBefore = api.subtitleCalls
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo, dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -297,7 +297,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         // SlowSubtitleApi.view 回空 data → getViewDetail 走 Error（真机对应“刷新失败”）
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -321,7 +321,7 @@ class PlayerViewModelTest {
         val track = demoTrack()
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
         // 故意不 collect vm.uiState：SlowSubtitleApi.view 回空 data → 走 Error 分支
         runCurrent()
         vm.refreshBv()

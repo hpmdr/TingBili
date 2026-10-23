@@ -12,6 +12,9 @@ import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import javax.inject.Named
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,6 +80,8 @@ class PlayerViewModel @Inject constructor(
     private val auth: AuthRepository,
     private val prefs: PreferencesRepository,
     private val repo: BiliRepository,
+    /** 字幕管线 IO 调度器（`PlayerModule` 提供 IO；单测传入 StandardTestDispatcher 保虚拟时间确定性） */
+    @Named("subtitleIo") private val subtitleIo: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     private val trackFlow = player.state
@@ -154,6 +160,8 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                     }
+                        // Room 读 + 万行 JSON 编解码放 IO：下游 emit 照常回主线程刷 UI
+                        .flowOn(subtitleIo)
                 }
             }
             .onStart { emit(SubState()) }
