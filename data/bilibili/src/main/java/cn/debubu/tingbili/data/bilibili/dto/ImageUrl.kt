@@ -9,6 +9,8 @@ enum class BiliImageVariant(val width: Int, val height: Int) {
     ListThumb(480, 270),
     DetailHero(720, 405),
     SquareCover(480, 480),
+    /** 播放页 320dp 封面：3x 屏 1.5x→2x，480 在高分屏偏糊，720 又浪费一倍 */
+    LargeSquare(640, 640),
     SmallSquare(128, 128),
     Avatar(96, 96),
 }

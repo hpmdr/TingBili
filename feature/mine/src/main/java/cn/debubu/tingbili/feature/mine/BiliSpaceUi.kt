@@ -31,7 +31,8 @@ import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
-import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -93,7 +94,7 @@ fun BiliVideoRow(
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 120.dp, height = 68.dp).clip(MaterialTheme.shapes.medium)) {
                 AsyncImage(
-                    model = item.cover.normalizeBiliImageUrl(),
+                    model = item.cover.biliImage(BiliImageVariant.ListThumb),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

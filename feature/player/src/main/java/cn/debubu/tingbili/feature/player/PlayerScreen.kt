@@ -157,7 +157,7 @@ fun PlayerScreen(
             AsyncImage(
                 model = trackUi.track?.cover
                     ?.takeIf { it.isNotBlank() }
-                    ?.biliImage(BiliImageVariant.SquareCover, imageFormat),
+                    ?.biliImage(BiliImageVariant.LargeSquare, imageFormat),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

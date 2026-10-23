@@ -41,7 +41,7 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.dto.BiliFavFolder
 import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
-import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -139,7 +139,7 @@ fun BiliFavFoldersScreen(
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 AsyncImage(
-                                    model = folder.cover.normalizeBiliImageUrl(),
+                                    model = folder.cover.biliImage(192, 120),
                                     contentDescription = null,
                                     modifier = Modifier.size(width = 96.dp, height = 60.dp).clip(MaterialTheme.shapes.medium),
                                     contentScale = ContentScale.Crop,
