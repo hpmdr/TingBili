@@ -1,10 +1,9 @@
 package cn.debubu.tingbili.feature.player
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -44,7 +43,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -82,7 +80,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -600,9 +597,10 @@ private fun PlaybackProgressBar(
                         .fillMaxWidth()
                         .height(18.dp),
                 ) {
+                    // 细线风：与 mini 播放器顶部的 2.dp 进度线统一，无常驻圆点
                     val centerY = size.height / 2f
-                    val baseHeight = 4.dp.toPx()
-                    val activeHeight = 5.dp.toPx()
+                    val baseHeight = 3.dp.toPx()
+                    val activeHeight = 3.dp.toPx()
 
                     drawRoundRect(
                         color = trackColor,
@@ -624,22 +622,20 @@ private fun PlaybackProgressBar(
                     )
                 }
             },
-            thumb = { state ->
-                val scale by animateFloatAsState(
-                    targetValue = if (state.isDragging) 1.2f else 1f,
-                    label = "progressThumbScale",
-                )
+            thumb = {
+                // 无常驻圆点：固定占位防轨道跳动，手指拖动时才画小圆点当手柄
                 Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                        }
-                        .shadow(6.dp, CircleShape, clip = false)
-                        .background(MaterialTheme.colorScheme.surface, CircleShape)
-                        .border(3.dp, activeColor, CircleShape),
-                )
+                    modifier = Modifier.size(10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (dragRatio != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(activeColor, CircleShape),
+                        )
+                    }
+                }
             },
         )
     }
