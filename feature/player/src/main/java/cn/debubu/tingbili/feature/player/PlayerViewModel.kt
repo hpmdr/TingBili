@@ -416,7 +416,7 @@ class PlayerViewModel @Inject constructor(
 
     /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
     fun cycleSpeed() {
-        val steps = listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f)
+        val steps = listOf(1.25f, 1.5f, 2.0f)
         val cur = player.state.value.speed
         val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
         viewModelScope.launch { player.setSpeed(next) }
