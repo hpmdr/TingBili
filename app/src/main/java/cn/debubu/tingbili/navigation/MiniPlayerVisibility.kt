@@ -46,9 +46,6 @@ class MiniPlayerVisibility {
     fun isVisible(trackKey: String?): Boolean =
         trackKey != null && dismissedKey != trackKey && scrollVisible
 
-    /** 是否被手动关闭（布局占位走 AnimatedVisibility 收起，与滚动隐藏分开） */
-    fun isDismissed(trackKey: String?): Boolean = trackKey != null && dismissedKey == trackKey
-
     companion object {
         /** 滚动死区，避免手指微抖导致条子闪烁 */
         const val SCROLL_DEAD_ZONE_PX = 6f

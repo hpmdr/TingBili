@@ -2,7 +2,6 @@ package cn.debubu.tingbili.navigation
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -58,9 +57,9 @@ import kotlinx.coroutines.launch
 
 /**
  * 贴底 mini 播放条：全宽矩形、与底栏同色实底（视觉连成一体）+ 顶部 2dp 播放进度线。
- * - [visible] 为 false 时向上收起、不占位（手动关闭/切歌时才变，AnimatedVisibility 管布局）；
- * - 滚动联动隐藏走 [scrollVisible]，纯位移 + 透明度，不触动 Scaffold 布局
- *   （之前滚动也走 AnimatedVisibility，每帧改底栏高度触发全页重测）；
+ * - [visible] 为 false 时向上收起、不占位（滚动联动隐藏 + 手动关闭都走这里）；
+ *   注：曾试过滚动只改位移以省重测，但会留一块底色死区（slot 占位不塌），
+ *   实测不如收起干净，已回滚；滚动时的过渡重测仅 250ms，可接受。
  * - 条上上滑超过阈值（或快速上甩）触发 [onDismiss]，关闭≠暂停，音乐继续播，
  *   切歌后自动回来；
  * - 无曲目时由调用方隐藏（不占位）。
@@ -75,7 +74,6 @@ fun MiniPlayerBar(
     modifier: Modifier = Modifier,
     progress: Float = 0f,
     visible: Boolean = true,
-    scrollVisible: Boolean = true,
     onDismiss: () -> Unit = {},
 ) {
     if (track == null) return
@@ -91,7 +89,6 @@ fun MiniPlayerBar(
             isPlaying = isPlaying,
             isLoading = isLoading,
             progress = progress,
-            scrollVisible = scrollVisible,
             onToggle = onToggle,
             onOpen = onOpen,
             onDismiss = onDismiss,
@@ -107,7 +104,6 @@ private fun DismissableBarContent(
     isPlaying: Boolean,
     isLoading: Boolean,
     progress: Float,
-    scrollVisible: Boolean,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -125,10 +121,6 @@ private fun DismissableBarContent(
     val offsetY = remember { Animatable(0f) }
     var barHeightPx by remember { mutableFloatStateOf(0f) }
     // 滚动隐藏只改位移：Scaffold 内边距不动，内容不重测
-    val scrollOffsetY by animateFloatAsState(
-        targetValue = if (scrollVisible) 0f else barHeightPx,
-        label = "miniScrollHide",
-    )
     val scope = rememberCoroutineScope()
     // 切歌后复位（上滑关闭是按首歌记忆的）
     LaunchedEffect(trackKey) { offsetY.snapTo(0f) }
@@ -141,13 +133,10 @@ private fun DismissableBarContent(
             .testTag("miniPlayerBar")
             .onSizeChanged { barHeightPx = it.height.toFloat() }
             .graphicsLayer {
-                val total = offsetY.value + scrollOffsetY
-                translationY = total
+                translationY = offsetY.value
                 // 上滑（负位移）与滚隐（正位移）各自淡出，相乘叠加
                 alpha = if (barHeightPx > 0f) {
-                    val dragAlpha = (1f + offsetY.value / barHeightPx).coerceIn(0f, 1f)
-                    val scrollAlpha = (1f - scrollOffsetY / barHeightPx).coerceIn(0f, 1f)
-                    dragAlpha * scrollAlpha
+                    (1f + offsetY.value / barHeightPx).coerceIn(0f, 1f)
                 } else {
                     1f
                 }
