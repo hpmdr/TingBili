@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -77,7 +78,8 @@ class HomeViewModel @Inject constructor(
     val pagingStarted: StateFlow<Boolean> = _pagingStarted.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        // 快照读 + 60 条 JSON 反序列化放 IO：主线程只收结果，冷启动少一顿
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val entity = homeSnapshotDao.get()
                 val tracks = if (entity != null) {
