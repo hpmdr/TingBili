@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +46,8 @@ fun SettingsScreen(
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
+    val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
+    val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
 
     TingBiliScaffold(
         topBar = {
@@ -116,6 +120,51 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // 音频解码（播放页右上播放设置唯一入口；缺省开，见 PreferencesRepository）
+            Column {
+                Text("音频解码", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("优先硬件解码")
+                        Text(
+                            "硬解更省电；机型不支持或硬解失败时自动回落软解。切换后下一首生效。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = audioHwDecode,
+                        onCheckedChange = { vm.setAudioHwDecode(it) }
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("DSP 音频卸载（省电）")
+                        Text(
+                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后下一首生效；开启时倍速不可用（保持 1.0x）。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = audioOffload,
+                        onCheckedChange = { vm.setAudioOffload(it) }
+                    )
                 }
             }
 

@@ -28,4 +28,22 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setSubtitleScale(v) }
     }
 
+
+    /** DSP 音频卸载开关（默认开；切换后下一首生效，开启时不支持倍速） */
+    val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    /** 音频优先硬解开关（默认开；切换后下一首生效） */
+    val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setAudioHwDecode(v: Boolean) {
+        viewModelScope.launch { prefs.setAudioHwDecode(v) }
+    }
+
+    fun setAudioOffload(v: Boolean) {
+        viewModelScope.launch { prefs.setAudioOffload(v) }
+    }
 }

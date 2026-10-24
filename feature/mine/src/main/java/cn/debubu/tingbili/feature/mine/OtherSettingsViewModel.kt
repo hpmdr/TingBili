@@ -33,20 +33,6 @@ class OtherSettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
 
-    /** DSP 音频卸载开关（默认开；切换后下一首生效，开启时不支持倍速） */
-    val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        true
-    )
-
-    /** 音频优先硬解开关（默认开；切换后下一首生效） */
-    val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        true
-    )
-
     /** 首页推荐词（设置页可增减，至少保留一个） */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_HOME_KEYWORDS
@@ -182,13 +168,6 @@ class OtherSettingsViewModel @Inject constructor(
         }
     }
 
-    fun setAudioHwDecode(v: Boolean) {
-        viewModelScope.launch { prefs.setAudioHwDecode(v) }
-    }
-
-    fun setAudioOffload(v: Boolean) {
-        viewModelScope.launch { prefs.setAudioOffload(v) }
-    }
 }
 
 private fun formatCacheSize(bytes: Long): String = when {

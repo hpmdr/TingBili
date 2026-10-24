@@ -26,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,8 +52,6 @@ fun OtherSettingsScreen(
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
-    val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
-    val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val decoders by vm.audioDecoders.collectAsStateWithLifecycle()
     val decodersLoading by vm.audioDecodersLoading.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
@@ -168,50 +165,6 @@ fun OtherSettingsScreen(
                 )
             }
 
-            // 音频解码
-            Column {
-                Text("音频解码", style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("优先硬件解码")
-                        Text(
-                            "硬解更省电；机型不支持或硬解失败时自动回落软解。切换后下一首生效。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Switch(
-                        checked = audioHwDecode,
-                        onCheckedChange = { vm.setAudioHwDecode(it) }
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("DSP 音频卸载（省电）")
-                        Text(
-                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后下一首生效；开启时倍速不可用（保持 1.0x）。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Switch(
-                        checked = audioOffload,
-                        onCheckedChange = { vm.setAudioOffload(it) }
-                    )
-                }
-            }
 
             // 本机音频解码器: MediaCodecList 实测, 只展示 audio/ 解码器, 供问题定位(厂商前缀只看不判).
             Column {
