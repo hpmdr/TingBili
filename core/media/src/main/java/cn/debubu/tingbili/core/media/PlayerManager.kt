@@ -79,6 +79,7 @@ class PlayerManager @Inject constructor(
             value?.let { sleepTimer.attach(it, sleepListener) }
             value?.let { historyTracker.attach(it, historyListener) }
             value?.let { queueManager.attach(it, queueListener) }
+            value?.let { eventHandler.attach(it, eventListener) }
         }
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
     /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
@@ -434,7 +435,7 @@ class PlayerManager @Inject constructor(
 
             historyTracker.start(clock())
             attachPlayerListener()
-            urlRefreshRetry = 0
+            eventHandler.resetRetry()
             scheduleProactiveRefresh()
         } catch (e: Exception) {
             _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "播放失败") }
@@ -572,12 +573,71 @@ class PlayerManager @Inject constructor(
         urlRefreshJob?.cancel(); urlRefreshJob = null
         sleepTimer.release()
         audioPolicy.release()
+        eventHandler.release()
     }
 
-    private var urlRefreshRetry = 0
+    // ── 播放器事件：切歌/播停/缓冲/错误 + 过期重试决策（计时与判定在组件内）──
+    private val eventHandler = PlaybackEventHandler(transport, playUrlPipeline)
+
+    private val eventListener = object : PlaybackEventHandler.Listener {
+        override fun queueSnapshot(): List<Track> = queueManager.queue
+        override fun onTransition(index: Int) {
+            queueManager.moveCurrentTo(index)
+            _state.update {
+                it.copy(
+                    currentIndex = index,
+                    currentTrack = queue[index],
+                    positionMs = transport.currentPosition,
+                    bufferedPositionMs = transport.bufferedPosition,
+                    durationMs = queue[index].durationMs,
+                )
+            }
+            // 切歌即时刷一次历史：节流 10s 下，播完一切就落盘，不用等下一 tick
+            effectiveScope().launch { historyTracker.flush() }
+            scheduleProactiveRefresh()
+        }
+        override fun onPlayingChanged(isPlaying: Boolean) {
+            _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
+        }
+        override fun onPlayerStateChanged(buffering: Boolean) {
+            _state.update {
+                it.copy(
+                    isPlaying = transport.isPlaying,
+                    isLoading = buffering,
+                    bufferedPositionMs = transport.bufferedPosition,
+                )
+            }
+        }
+        override fun onFatalError(message: String?) {
+            _state.update { it.copy(isLoading = false, errorMessage = message ?: "播放出错") }
+        }
+        override fun onRetryStarted() {
+            _state.update { it.copy(isLoading = true, errorMessage = null) }
+        }
+        override suspend fun onRetryRecover(): PlaybackEventHandler.RecoverResult {
+            val track = _state.value.currentTrack
+                ?: return PlaybackEventHandler.RecoverResult.Failed("音源失效")
+            val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
+            // 解析失败（null/空）与旧 Result.Error 同义：报刷新失败，下次错误再重试
+            val newUrl = playUrlPipeline.refreshUrl(track)
+                ?: return PlaybackEventHandler.RecoverResult.Failed("音源刷新失败")
+            val imageFormat = prefs.imageFormat.first()
+            val newItem = playUrlPipeline.buildItem(track, newUrl, imageFormat)
+            val idx = currentIndex
+            if (idx !in queue.indices) {
+                return PlaybackEventHandler.RecoverResult.Failed("刷新失败")
+            }
+            transport.replaceMediaItem(idx, newItem)
+            transport.prepare()
+            transport.seekTo(pos)
+            transport.play()
+            _state.update { it.copy(isLoading = true) }
+            scheduleProactiveRefresh()
+            return PlaybackEventHandler.RecoverResult.Recovered
+        }
+    }
     private var urlRefreshJob: Job? = null
     private companion object {
-        const val MAX_URL_REFRESH_RETRY = 2
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
     }
 
@@ -601,81 +661,6 @@ class PlayerManager @Inject constructor(
     private fun attachPlayerListener() {
         if (listenerAttached) return
         listenerAttached = true
-        transport.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val idx = transport.currentMediaItemIndex
-                if (idx in queue.indices) {
-                    queueManager.moveCurrentTo(idx)
-                    _state.update {
-                        it.copy(
-                            currentIndex = idx,
-                            currentTrack = queue[idx],
-                            positionMs = transport.currentPosition,
-                            bufferedPositionMs = transport.bufferedPosition,
-                            durationMs = queue[idx].durationMs,
-                        )
-                    }
-                    // 切歌即时刷一次历史：节流 10s 下，播完一切就落盘，不用等下一 tick
-                    effectiveScope().launch { historyTracker.flush() }
-                    urlRefreshRetry = 0
-                    scheduleProactiveRefresh()
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
-                if (isPlaying) urlRefreshRetry = 0
-            }
-
-            override fun onPlaybackStateChanged(state: Int) {
-                // keep isPlaying in sync + 驱动加载态：buffering 时显示加载，ready/idle/ended 时收敛
-                val buffering = state == Player.STATE_BUFFERING
-                _state.update {
-                    it.copy(
-                        isPlaying = transport.isPlaying,
-                        isLoading = buffering,
-                        bufferedPositionMs = transport.bufferedPosition,
-                    )
-                }
-                if (state == Player.STATE_READY) urlRefreshRetry = 0
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val isRecoverable = playUrlPipeline.isRecoverable(error)
-                if (!isRecoverable || urlRefreshRetry >= MAX_URL_REFRESH_RETRY) {
-                    _state.update { it.copy(isLoading = false, errorMessage = error.message ?: "播放出错") }
-                    return
-                }
-                urlRefreshRetry++
-                _state.update { it.copy(isLoading = true, errorMessage = null) }
-                effectiveScope().launch {
-                    delay(1000L * urlRefreshRetry)
-                    val track = _state.value.currentTrack ?: run {
-                        _state.update { it.copy(isLoading = false, errorMessage = "音源失效") }
-                        return@launch
-                    }
-                    val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
-                    // 解析失败（null/空）与旧 Result.Error 同义：报刷新失败，下次错误再重试
-                    val newUrl = playUrlPipeline.refreshUrl(track)
-                    if (newUrl.isNullOrBlank()) {
-                                _state.update { it.copy(isLoading = false, errorMessage = "音源刷新失败") }
-                                return@launch
-                            }
-                            val imageFormat = prefs.imageFormat.first()
-                            val newItem = playUrlPipeline.buildItem(track, newUrl, imageFormat)
-                            val idx = currentIndex
-                            if (idx in queue.indices) {
-                                transport.replaceMediaItem(idx, newItem)
-                                transport.prepare()
-                                transport.seekTo(pos)
-                                transport.play()
-                                _state.update { it.copy(isLoading = true) }
-                                scheduleProactiveRefresh()
-                            } else {
-                                _state.update { it.copy(isLoading = false, errorMessage = "刷新失败") }
-                            }
-                        }
-            }
-        })
+        eventHandler.attach(effectiveScope(), eventListener)
     }
 }
