@@ -394,8 +394,11 @@ class PlayerManager @Inject constructor(
             transport.prepare()
             transport.play()
 
-            // Restore preferences: speed, repeatMode
-            val speed = prefs.speed.first()
+            // Restore preferences: speed（经 AudioPipelinePolicy：offload 开时存量变速也钳回 1.0x）、repeatMode
+            val speed = when (val r = audioPolicy.requestSpeed(prefs.speed.first())) {
+                is AudioPipelinePolicy.SpeedResult.Applied -> r.speed
+                AudioPipelinePolicy.SpeedResult.BlockedByOffload -> 1f
+            }
             val repeat = prefs.repeatMode.first()
             if (speed != 1f) transport.setPlaybackSpeed(speed)
             transport.repeatMode = when (repeat) {
@@ -475,8 +478,7 @@ class PlayerManager @Inject constructor(
 
     fun cancelSleepTimer() = sleepTimer.cancel()
 
-    private fun currentKey(): Pair<String, Long>? =
-        _state.value.currentTrack?.let { it.bvid to it.cid }
+    // currentKey 已收进 SleepTimer.Listener.chapter() 快照，此处不再需要
 
     fun resume() {
         // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
