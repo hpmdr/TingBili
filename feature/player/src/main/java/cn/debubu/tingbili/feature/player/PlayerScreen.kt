@@ -29,9 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Timer
@@ -115,7 +113,6 @@ fun PlayerScreen(
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     val progUi by vm.progressUi.collectAsStateWithLifecycle()
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
-    val pipelineBadge by vm.pipelineBadge.collectAsStateWithLifecycle()
     val pipelineInfo by vm.pipelineInfo.collectAsStateWithLifecycle()
     val qualityLabel by vm.audioQualityLabel.collectAsStateWithLifecycle()
     val qualityLine by vm.qualityLine.collectAsStateWithLifecycle()
@@ -342,16 +339,6 @@ fun PlayerScreen(
             onSpeedClick = vm::cycleSpeed,
         )
 
-        pipelineBadge?.let { badge ->
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = badge,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary,
-                maxLines = 1,
-            )
-        }
-
         Spacer(Modifier.height(8.dp))
     }
 
@@ -415,6 +402,10 @@ fun PlayerScreen(
             info = pipelineInfo,
             qualityLine = qualityLine,
             hasTrack = trackUi.track != null,
+            onBack = {
+                showInfoSheet = false
+                showMoreSheet = true
+            },
             onDismiss = { showInfoSheet = false },
         )
     }
@@ -435,7 +426,7 @@ fun PlayerScreen(
     }
 }
 
-/** 右上 ⋮ 动作表：刷新当前内容 / 播放信息 / 查看 BV 详情 / 播放设置（切字幕/定时等仍在原位） */
+/** 右上 ⋮ 动作表（A4 极简）：无图标细分割线，内容 / 播放两组；与底部 AuxBar 零重复。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerMoreSheet(
@@ -452,37 +443,100 @@ private fun PlayerMoreSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            PlayerMoreRow(
-                icon = Icons.Filled.Refresh,
-                label = if (refreshing) "正在刷新…" else "刷新当前内容",
-                trailingLoading = refreshing,
+            Text(
+                text = "更多操作",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+            )
+            MoreGroupTitle("内容")
+            MoreBareRow(
+                title = if (refreshing) "正在刷新…" else "刷新当前内容",
+                subtitle = "重新拉取分P与播放地址",
+                busy = refreshing,
                 enabled = !refreshing,
                 onClick = onRefresh,
             )
-            PlayerMoreRow(
-                icon = Icons.Filled.Info,
-                label = "播放信息",
-                onClick = onInfo,
-            )
-            PlayerMoreRow(
-                icon = Icons.Filled.List,
-                label = "查看 BV 详情",
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+            MoreBareRow(
+                title = "查看 BV 详情",
+                subtitle = "跳转视频详情页",
                 onClick = onDetail,
             )
-            PlayerMoreRow(
-                icon = Icons.Filled.Settings,
-                label = "播放设置",
+            MoreGroupTitle("播放")
+            MoreBareRow(
+                title = "播放信息",
+                subtitle = "只看：解码 · 声道 · 倍速 · DSP 状态",
+                onClick = onInfo,
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+            MoreBareRow(
+                title = "播放设置",
+                subtitle = "可改：步进秒数 · 定时默认 · 字幕字号",
                 onClick = onSettings,
             )
         }
     }
 }
 
+@Composable
+private fun MoreGroupTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 2.dp),
+    )
+}
+
+/** A4 极简行：无图标，左标题 + 副标题，右 › / 转圈，行间细分割线。 */
+@Composable
+private fun MoreBareRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    busy: Boolean = false,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 /**
- * 播放信息：有在播时展示管线快照（解码器/方式/offload/格式/倍速），只读。
- * 暂无在播时切空态：技术行整组隐藏，只留开关与偏好行 + 一句引导，不再满屏"未知"。
+ * 播放信息二级页（A4 极简，随更多菜单同语言）：‹ 返回上一级，音频 / 播放分组 K-V + 小知识。
+ * 只读；暂无在播时技术行整组隐藏，只留开关与偏好行 + 一句引导。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -490,6 +544,7 @@ private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
     qualityLine: String,
     hasTrack: Boolean,
+    onBack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -498,10 +553,28 @@ private fun PlaybackInfoSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = "播放信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回更多操作",
+                    )
+                }
+                Text(
+                    text = "播放信息",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .padding(horizontal = 56.dp),
+                )
+            }
             if (!hasTrack) {
                 PlaybackInfoRow("当前状态", "暂无在播")
                 Text(
@@ -519,18 +592,19 @@ private fun PlaybackInfoSheet(
                 PlaybackInfoRow("倍速", "${info.speed}x")
             } else {
             // 有在播：管线参数尚未就绪时显示"读取中…"（如切集瞬间），不写"未知"吓人。
+            MoreGroupTitle("音频")
             val initializing = info.decoderName == null && !info.offloadSleeping
-            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
-            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
-            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启，当前不支持，已自动回落")
             PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
-            val bitrateKbps = info.bitrateKbps
-            PlaybackInfoRow("码率", if (bitrateKbps != null) "$bitrateKbps kbps" else "读取中…")
+            PlaybackInfoRow("码率", if (info.bitrateKbps != null) "${info.bitrateKbps} kbps" else "读取中…")
             PlaybackInfoRow("音质", qualityLine)
             PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "读取中…")
             PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "读取中…")
+            MoreGroupTitle("播放")
+            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
+            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
+            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启，当前不支持，已自动回落")
             PlaybackInfoRow("倍速", "${info.speed}x")
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
@@ -647,40 +721,6 @@ private fun AudioQualitySheet(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlayerMoreRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    trailingLoading: Boolean = false,
-    enabled: Boolean = true,
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            if (trailingLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             }
         }
     }
@@ -1510,4 +1550,4 @@ private fun formatChapterDuration(durationMs: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-}
+}
