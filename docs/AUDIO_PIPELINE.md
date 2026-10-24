@@ -127,4 +127,5 @@ L2 CPU 软解（OMX.google.* / c2.android.*）
 
 天玑依据：本机音频解码器页共 34 项，有 MTK 硬解（MP3/ALAC/ADPCM/Dolby），唯独无 AAC 硬解。AAC 只有 c2.android.aac.decoder 可选，选软解是正确结果，不是选择器 bug，这正是第 3 节运行时探测的实证。
 回归项（两台机）：倍速互斥提示并保持 1.0x / 睡眠定时倒计时 / 杀进程恢复（暂停态）/ 跨页进度同步 / 我的页累计收听分钟数，均正常；logcat 无崩溃、无 PlaybackException。
-待补：蓝牙 A2DP（需耳机）、HE-AAC/MP3 硬解路径（需对应格式内容源）。
+蓝牙 A2DP（两台机均接蓝牙音箱，dumpsys audio 确认 Devices: bt_a2dp）：骁龙仍 sleepingForOffload=true（高通 BT offload），天玑保持软解 c2.android.aac.decoder；两台 media_session 均为 PLAYING、无 error、进度推进，不断播。
+待补：HE-AAC/MP3 硬解路径（需对应格式内容源）。
