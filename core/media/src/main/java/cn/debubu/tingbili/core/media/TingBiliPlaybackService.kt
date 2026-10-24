@@ -3,13 +3,21 @@ package cn.debubu.tingbili.core.media
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Audio-only foreground service. Single source of truth — no Surface, low memory.
@@ -20,6 +28,8 @@ import javax.inject.Inject
 class TingBiliPlaybackService : MediaSessionService() {
 
     @Inject lateinit var player: Player
+    @Inject lateinit var prefs: cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
@@ -36,6 +46,7 @@ class TingBiliPlaybackService : MediaSessionService() {
             )
             (player as ExoPlayer).setHandleAudioBecomingNoisy(true)
             (player as ExoPlayer).setWakeMode(C.WAKE_MODE_NETWORK)
+            applyOffloadLive()
             // 可观测性：offload 是否真正接管 + 实际解码器名（logcat 搜 TingBiliAudio）
             (player as ExoPlayer).addAudioOffloadListener(object : ExoPlayer.AudioOffloadListener {
                 override fun onSleepingForOffloadChanged(sleepingForOffload: Boolean) {
@@ -57,9 +68,42 @@ class TingBiliPlaybackService : MediaSessionService() {
                     Log.i("TingBiliAudio", "audioDecoder=$decoderName")
                     AudioPipelineMonitor.onDecoderInitialized(decoderName)
                 }
+
+                override fun onAudioInputFormatChanged(
+                    eventTime: AnalyticsListener.EventTime,
+                    format: Format,
+                    decoderReuseEvaluation: DecoderReuseEvaluation?,
+                ) {
+                    AudioPipelineMonitor.onAudioFormatChanged(format)
+                }
             })
         }
         mediaSession = MediaSession.Builder(this, player).build()
+    }
+
+    /**
+     * offload 开关运行时下发: 创建时只定初始值(见 ServicePlayerModule), 这里监听开关变化实时重下发, 下一首生效.
+     * 直接操作 Service 内的 ExoPlayer, 不走 MediaController(无对应会话命令).
+     */
+    private fun applyOffloadLive() {
+        serviceScope.launch {
+            prefs.audioOffload.collect { on ->
+                val exo = player as? ExoPlayer ?: return@collect
+                val offload = if (on) {
+                    TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                        .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                        .setIsGaplessSupportRequired(true)
+                        .setIsSpeedChangeSupportRequired(false)
+                        .build()
+                } else {
+                    TrackSelectionParameters.AudioOffloadPreferences.DEFAULT
+                }
+                exo.trackSelectionParameters = exo.trackSelectionParameters
+                    .buildUpon()
+                    .setAudioOffloadPreferences(offload)
+                    .build()
+            }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
@@ -67,6 +111,7 @@ class TingBiliPlaybackService : MediaSessionService() {
     override fun onDestroy() {
         mediaSession?.release()
         player.release()
+        serviceScope.cancel()
         super.onDestroy()
     }
 }

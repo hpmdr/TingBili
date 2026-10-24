@@ -79,6 +79,10 @@ class PlayerManager @Inject constructor(
     private var lastListenKey: Pair<String, Long>? = null
     private val playMutex = Mutex()
 
+
+    /** offload 开关镜像(Service 侧做实时下发, 这里只做倍速互斥; 默认开, 随 prefs 缺省 true). */
+    @Volatile
+    private var offloadEnabled = false
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
@@ -89,6 +93,10 @@ class PlayerManager @Inject constructor(
         // 硬解开关实时镜像：解码器每次建实例都查最新值，切换后下一首生效，无需重建播放器
         scope.launch {
             prefs.audioHwDecode.collect { PreferHardwareAudioDecoderSelector.preferHardware = it }
+        }
+        // offload 开关实时镜像: 开时若倍速非 1.0x 则回 1.0x(DSP 管线不支持变速)
+        scope.launch {
+            prefs.audioOffload.collect { applyAudioOffload(it) }
         }
         // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
         scope.launch {
@@ -823,11 +831,31 @@ class PlayerManager @Inject constructor(
         persistPosition(target)
     }
 
+    /**
+     * offload 开启时 DSP 管线不支持变速: 非 1.0x 请求直接拒绝并提示, 不断播.
+     * 开关打开瞬间若正处变速, 由 applyAudioOffload 一次性回 1.0x.
+     */
     suspend fun setSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 3.0f)
+        if (offloadEnabled && clamped != 1f) {
+            _state.update { it.copy(errorMessage = "DSP 省电开启时不支持倍速，已保持 1.0x") }
+            return
+        }
         prefs.setSpeed(clamped)
         transport.setPlaybackSpeed(clamped)
-        _state.update { it.copy(speed = clamped) }
+        _state.update { it.copy(speed = clamped, errorMessage = null) }
+    }
+
+    private suspend fun applyAudioOffload(enabled: Boolean) {
+        offloadEnabled = enabled
+        if (enabled && _state.value.speed != 1f) {
+            prefs.setSpeed(1f)
+            try {
+                transport.setPlaybackSpeed(1f)
+            } catch (_: Exception) {
+            }
+            _state.update { it.copy(speed = 1f) }
+        }
     }
 
     suspend fun setRepeatMode(mode: Int) {
