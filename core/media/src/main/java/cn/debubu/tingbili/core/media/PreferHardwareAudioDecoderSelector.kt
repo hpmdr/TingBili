@@ -7,7 +7,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
  * 音频优先硬解的解码器选择器：只做重排，不改变兜底。
  *
  * - 仅对音频 mime 生效，视频选型原样不动；
- * - 有硬解时硬解前移、软解保留在后：硬解初始化失败 ExoPlayer 会按序尝试下一个，
+ * - 硬解优先、纯软永远兜底：硬解初始化失败 ExoPlayer 会按序尝试下一个，
  *   即“硬解用不了自动软解”；
  * - 本机无硬解（列表里没有 hardwareAccelerated）时原样返回，行为与系统默认一致。
  *
@@ -35,7 +35,14 @@ object PreferHardwareAudioDecoderSelector : MediaCodecSelector {
     internal fun rankForMime(mimeType: String, infos: List<MediaCodecInfo>): List<MediaCodecInfo> {
         if (!preferHardware || !mimeType.startsWith("audio/")) return infos
         if (infos.none { it.hardwareAccelerated }) return infos
-        // 稳定排序：硬解整体前移，同组内保持系统原有顺序。
-        return infos.sortedByDescending { it.hardwareAccelerated }
+        // 稳定排序：三级（硬解>未知>纯软），同组内保持系统原序。
+        return infos.sortedByDescending { tierOf(it) }
+    }
+
+    /** 2=HW accelerated-nonSW, 1=unknown untagged, 0=SW softwareOnly (always last fallback). */
+    internal fun tierOf(info: MediaCodecInfo): Int = when {
+        info.hardwareAccelerated && !info.softwareOnly -> 2
+        info.softwareOnly -> 0
+        else -> 1
     }
 }

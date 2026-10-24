@@ -59,8 +59,8 @@ object ServicePlayerModule {
 
         // 解码器经 PreferHardwareAudioDecoderSelector 重排：有硬解优先硬解，
     // 失败自动回落软解（ExoPlayer 按序尝试，兜底逻辑不变）。
-    // DSP offload 只能在创建时下发（MediaController 无对应会话命令，运行时下发到不了 Service）。
-    // DataStore 首读走磁盘（约数十毫秒），随 Service 创建一次性同步读，注释开关=重启 App 生效。
+    // DSP offload 创建时下发初始值；运行时由 TingBiliPlaybackService 监听开关实时重下发（下一首生效）。
+    // DataStore 首读走磁盘（约数十毫秒），随 Service 创建一次性同步读；开关实时生效，下一首用新值。
     val offloadOn = runBlocking { prefs.audioOffload.first() }
     // 可观测性：release 包验证 offload 意愿是否落到 ExoPlayer（logcat 搜 TingBiliAudio）
     Log.i("TingBiliAudio", "audioOffload pref=$offloadOn")
@@ -76,7 +76,10 @@ object ServicePlayerModule {
     }
     val trackParams = TrackSelectionParameters.DEFAULT.buildUpon()
         .setAudioOffloadPreferences(offload).build()
-    val renderersFactory = DefaultRenderersFactory(context).setMediaCodecSelector(PreferHardwareAudioDecoderSelector)
+    val renderersFactory = DefaultRenderersFactory(context)
+        .setMediaCodecSelector(PreferHardwareAudioDecoderSelector)
+        // 解码器初始化失败自动向低优先级回落：硬解坏了不断播，切软解（选择器只重排，兜底靠它）。
+        .setEnableDecoderFallback(true)
     return ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
