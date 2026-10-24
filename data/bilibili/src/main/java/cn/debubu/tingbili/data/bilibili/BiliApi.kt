@@ -32,11 +32,14 @@ interface BiliApi {
         @Query("bvid") bvid: String
     ): RelatedDto
 
+    // 音质直通：qn 传音频偏好 id（如 30232/30280/30251），服务端按登录/会员态鉴权返回可用档；
+    // 不传则服务端给默认档，客户端再按偏好 rank 二次精选（见 selectAudio），双保险不断播。
     @GET("/x/player/playurl")
     suspend fun playUrl(
         @Query("bvid") bvid: String,
         @Query("cid") cid: Long,
-        @Query("fnval") fnval: Int = 16
+        @Query("fnval") fnval: Int = 16,
+        @Query("qn") qn: Int? = null
     ): PlayUrlDto
 
     // B站账号体系(我的页二级页,只读):收藏夹/夹内/稍后看/历史,对标 PiliPlus

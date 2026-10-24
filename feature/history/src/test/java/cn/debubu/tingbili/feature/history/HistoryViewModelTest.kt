@@ -162,7 +162,7 @@ class HistoryViewModelTest {
             viewCalls++
             return viewResult
         }
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto {
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto {
             return PlayUrlDto(
                 code = 0,
                 message = "",
@@ -209,7 +209,7 @@ class HistoryViewModelTest {
             produceFile = { file }
         )
         prefs = PreferencesRepository(dataStore)
-        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo, prefs)
         playerManager = PlayerManager(fakePlayer, fakeDao, prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
     }
 

@@ -59,7 +59,7 @@ class PlayerViewModelTest {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
         override suspend fun view(bvid: String): ViewDto = ViewDto()
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
             subtitleCalls++
             delay(10_000)
@@ -155,7 +155,7 @@ class PlayerViewModelTest {
                 produceFile = { context.preferencesDataStoreFile("player_test_prefs") }
             )
         )
-        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo, prefs)
         fakePlayQueue = FakePlayQueueDao()
         player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), fakePlayQueue, context)
         authStore = FakeAuthStore()
@@ -234,7 +234,7 @@ class PlayerViewModelTest {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
             override suspend fun view(bvid: String): ViewDto = ViewDto()
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
                 calls++
                 if (fail) throw RuntimeException("cdn 抽风")

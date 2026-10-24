@@ -45,11 +45,20 @@ data class DashVideo(
     @SerialName("base_url") val baseUrlAlt: String = ""
 )
 
-fun PlayUrlDto.toAudioUrl(): String? {
-    val d = data ?: return null
-    // Prefer dash audio highest bandwidth -> first typically highest
-    val dashUrl = d.dash?.audio?.firstOrNull()?.resolvedUrl()?.takeIf { it.isNotBlank() }
+/** 本次返回的全部 dash 音频轨（供音质面板展示可用性；服务端按登录/会员态过滤，未登录通常只有 64K/132K）。 */
+fun PlayUrlDto.toAudioOptions(): List<DashAudio> =
+    data?.dash?.audio?.filter { it.resolvedUrl().isNotBlank() }.orEmpty()
+
+/**
+ * 按偏好档位选轨（[pickAudio] 语义）：偏好 132K 则 132K/64K 中取 132K；
+ * 偏好 Hi-Res 则取服务端给出的最高档。够不着偏好时自动回落，不断播。
+ */
+fun PlayUrlDto.selectAudio(preferCode: Int = AudioQuality.DEFAULT_CODE): DashAudio? =
+    toAudioOptions().pickAudio(preferCode)
+
+fun PlayUrlDto.toAudioUrl(preferCode: Int = AudioQuality.DEFAULT_CODE): String? {
+    val dashUrl = selectAudio(preferCode)?.resolvedUrl()?.takeIf { it.isNotBlank() }
     if (!dashUrl.isNullOrBlank()) return dashUrl
-    val durlUrl = d.durl?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
+    val durlUrl = data?.durl?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
     return durlUrl
 }

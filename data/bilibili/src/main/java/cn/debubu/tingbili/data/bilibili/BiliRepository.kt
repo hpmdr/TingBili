@@ -2,6 +2,7 @@ package cn.debubu.tingbili.data.bilibili
 
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.data.bilibili.dto.BiliFavFolder
 import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleFile
@@ -11,6 +12,8 @@ import cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleResult
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
+import cn.debubu.tingbili.data.bilibili.dto.DashAudio
+import cn.debubu.tingbili.data.bilibili.dto.toAudioOptions
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
@@ -179,17 +182,37 @@ class BiliRepository @Inject constructor(
         Result.Error(e.message ?: "related failed", e)
     }
 
-    suspend fun getPlayUrl(bvid: String, cid: Long): Result<String> = try {
-        val dto = api.playUrl(bvid, cid)
+    /**
+     * 取音频直链：qn 下发偏好档位做服务端鉴权，返回后再按偏好 rank 二次精选（见 selectAudio）。
+     * 默认偏好 132K（免登录可得最佳档）；服务端只给低档时诚实回落，不断播。
+     */
+    suspend fun getPlayUrl(
+        bvid: String,
+        cid: Long,
+        preferQuality: Int = AudioQuality.DEFAULT_CODE,
+    ): Result<String> = try {
+        val dto = api.playUrl(bvid, cid, qn = preferQuality)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
-            val url = dto.toAudioUrl()
+            val url = dto.toAudioUrl(preferQuality)
             if (url.isNullOrBlank()) {
                 Result.Error("no play url")
             } else {
                 Result.Success(url)
             }
+        }
+    } catch (e: Exception) {
+        Result.Error(e.message ?: "playurl failed", e)
+    }
+
+    /** 音质面板用：本次服务端实际返回的可用音频轨（id/带宽），展示可用性与当前有效档。 */
+    suspend fun getAudioOptions(bvid: String, cid: Long): Result<List<DashAudio>> = try {
+        val dto = api.playUrl(bvid, cid)
+        if (dto.code != 0) {
+            Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
+        } else {
+            Result.Success(dto.toAudioOptions())
         }
     } catch (e: Exception) {
         Result.Error(e.message ?: "playurl failed", e)

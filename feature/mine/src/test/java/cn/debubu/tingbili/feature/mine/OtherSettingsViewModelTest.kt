@@ -141,7 +141,7 @@ class OtherSettingsViewModelTest {
     class FakeBiliApi : BiliApi {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto =
             PlayUrlDto(code = 0, data = PlayUrlData(dash = DashData(audio = listOf(DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
@@ -168,7 +168,7 @@ class OtherSettingsViewModelTest {
             StandaloneDatabaseProvider(context)
         )
         fakeManager = FakeCacheManager()
-        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(BiliRepository(FakeBiliApi()))
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(BiliRepository(FakeBiliApi()), prefs)
         player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
     }
 

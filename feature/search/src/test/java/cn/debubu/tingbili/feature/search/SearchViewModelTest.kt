@@ -169,7 +169,7 @@ class SearchViewModelTest {
 
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
 
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto =
             PlayUrlDto(code = 0)
 
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()

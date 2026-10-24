@@ -57,7 +57,7 @@ class AppCacheManagerTest {
     class FakeBiliApi : BiliApi {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto = PlayUrlDto(code = 0)
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): FavFolderDto = FavFolderDto()

@@ -638,6 +638,25 @@ class PlayerManager @Inject constructor(
             return PlaybackEventHandler.RecoverResult.Recovered
         }
     }
+    /**
+     * 音质切换：按当前偏好重解析本集直链并原位替换（沿用 onRetryRecover 的不断播 swap 模式）。
+     * 解析走 PlayUrlPipeline.refreshUrl（直连网络、回写缓存），偏好已由调用方先落盘。
+     * 成功返回 true；无在播/解析失败返回 false（调用方保留旧声、Toast 提示）。
+     */
+    suspend fun refreshCurrentUrl(): Boolean {
+        val track = _state.value.currentTrack ?: return false
+        val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
+        val newUrl = playUrlPipeline.refreshUrl(track) ?: return false
+        val idx = currentIndex
+        if (idx !in queue.indices) return false
+        transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, newUrl, prefs.imageFormat.first()))
+        transport.prepare()
+        transport.seekTo(pos)
+        if (_state.value.isPlaying) transport.play()
+        scheduleProactiveRefresh()
+        return true
+    }
+
     private var urlRefreshJob: Job? = null
     private companion object {
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新

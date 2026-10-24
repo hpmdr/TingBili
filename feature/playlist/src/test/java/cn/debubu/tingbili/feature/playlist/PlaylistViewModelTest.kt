@@ -213,7 +213,7 @@ class PlaylistViewModelTest {
     class FakeBiliApi : BiliApi {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int): PlayUrlDto =
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto =
             PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
@@ -241,7 +241,7 @@ class PlaylistViewModelTest {
             ) { ctx.preferencesDataStoreFile("test_playlist_prefs_${System.nanoTime()}") }
         )
         val repo = BiliRepository(FakeBiliApi())
-        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo)
+        val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo, prefs)
         player = PlayerManager(playerHandle, FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), ctx)
     }
 

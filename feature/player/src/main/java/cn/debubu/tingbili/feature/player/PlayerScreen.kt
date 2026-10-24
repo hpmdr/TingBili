@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
@@ -116,6 +117,9 @@ fun PlayerScreen(
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
     val pipelineBadge by vm.pipelineBadge.collectAsStateWithLifecycle()
     val pipelineInfo by vm.pipelineInfo.collectAsStateWithLifecycle()
+    val qualityLabel by vm.audioQualityLabel.collectAsStateWithLifecycle()
+    val qualityLine by vm.qualityLine.collectAsStateWithLifecycle()
+    val audioOptions by vm.audioOptions.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
@@ -135,6 +139,7 @@ fun PlayerScreen(
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showQualitySheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -322,15 +327,17 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(4.dp))
 
-        // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 倍速
+        // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 音质 / 倍速
         PlayerAuxBar(
             sleepLabel = sleepLabel(progUi.sleepRemainSec, progUi.sleepEndOfChapter),
             sleepActive = progUi.sleepRemainSec != null || progUi.sleepEndOfChapter,
             showSubtitleEntry = lyrUi.subtitleTracks.size > 1,
             speedLabel = if (trackUi.speed == 1f) "倍速" else "${trackUi.speed}x",
+            qualityLabel = qualityLabel,
             onTimerClick = { showTimerSheet = true },
             onSubtitleClick = { showSubtitleSheet = true },
             onChapterClick = { showChapterSheet = true },
+            onQualityClick = { vm.loadAudioOptions(); showQualitySheet = true },
             onSpeedClick = vm::cycleSpeed,
         )
 
@@ -405,7 +412,21 @@ fun PlayerScreen(
     if (showInfoSheet) {
         PlaybackInfoSheet(
             info = pipelineInfo,
+            qualityLine = qualityLine,
             onDismiss = { showInfoSheet = false },
+        )
+    }
+    if (showQualitySheet) {
+        AudioQualitySheet(
+            options = audioOptions,
+            onRetry = { vm.loadAudioOptions() },
+            onSelect = { code ->
+                if (!vm.selectAudioQuality(code)) {
+                    showQualitySheet = false
+                    onLoginClick()
+                }
+            },
+            onDismiss = { showQualitySheet = false },
         )
     }
 }
@@ -460,6 +481,7 @@ private fun PlayerMoreSheet(
 @Composable
 private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
+    qualityLine: String,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -480,6 +502,7 @@ private fun PlaybackInfoSheet(
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
             val bitrateKbps = info.bitrateKbps
             PlaybackInfoRow("码率", if (bitrateKbps != null) "$bitrateKbps kbps" else "未知")
+            PlaybackInfoRow("音质", qualityLine)
             PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "未知")
             PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "未知")
             PlaybackInfoRow("倍速", "${info.speed}x")
@@ -496,6 +519,80 @@ private fun PlaybackInfoRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.width(96.dp))
         Text(text = value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AudioQualitySheet(
+    options: PlayerViewModel.AudioOptionsUi,
+    onRetry: () -> Unit,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(text = "切换音质", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = "高音质需登录；所选档位不可用时自动用可用最高档，不断播",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when (options) {
+                is PlayerViewModel.AudioOptionsUi.Hidden,
+                is PlayerViewModel.AudioOptionsUi.Loading -> {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+                is PlayerViewModel.AudioOptionsUi.Error -> {
+                    Text(text = options.msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    Button(onClick = onRetry) { Text("重试") }
+                }
+                is PlayerViewModel.AudioOptionsUi.Ready -> {
+                    options.options.forEach { item ->
+                        Surface(
+                            onClick = { onSelect(item.code) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (item.selected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = if (item.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                    Text(
+                                        text = item.subTitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (item.selected) {
+                                    Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                } else if (item.locked) {
+                                    Text(text = "去登录", color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -746,9 +843,11 @@ private fun PlayerAuxBar(
     sleepActive: Boolean,
     showSubtitleEntry: Boolean,
     speedLabel: String,
+    qualityLabel: String,
     onTimerClick: () -> Unit,
     onSubtitleClick: () -> Unit,
     onChapterClick: () -> Unit,
+    onQualityClick: () -> Unit,
     onSpeedClick: () -> Unit,
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
@@ -787,6 +886,13 @@ private fun PlayerAuxBar(
             tint = idleColor,
             contentDescription = "倍速",
             onClick = onSpeedClick,
+        )
+        AuxItem(
+            icon = Icons.Filled.HighQuality,
+            label = qualityLabel,
+            tint = idleColor,
+            contentDescription = "音质",
+            onClick = onQualityClick,
         )
     }
 }

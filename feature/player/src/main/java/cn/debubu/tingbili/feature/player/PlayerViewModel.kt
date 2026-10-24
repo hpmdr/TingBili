@@ -7,6 +7,9 @@ import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
+import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.data.bilibili.dto.DashAudio
+import cn.debubu.tingbili.data.bilibili.dto.pickAudio
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
@@ -22,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
@@ -444,4 +448,116 @@ class PlayerViewModel @Inject constructor(
         val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
         viewModelScope.launch { player.setSpeed(next) }
     }
+    // ---------- 音质（播放页底部第四入口；档位定义见 data:bilibili AudioQuality，对标 PiliPlus） ----------
+
+    /** 用户音质偏好 id（默认 132K；落盘，解析器/面板/信息页同源）。 */
+    val audioQuality: StateFlow<Int> = prefs.audioQuality
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.DEFAULT_CODE)
+
+    /** 底部音质入口短标签（64K/132K/192K/杜比/Hi-Res）。 */
+    val audioQualityLabel: StateFlow<String> = prefs.audioQuality
+        .map { AudioQuality.fromCode(it).shortDesc }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.fromCode(AudioQuality.DEFAULT_CODE).shortDesc)
+
+    /** 音质面板行：canonical 全档位 × 服务端可用性 × 当前有效选择。 */
+    data class AudioOptionUi(
+        val code: Int,
+        val title: String,
+        val subTitle: String,
+        val locked: Boolean,
+        val selected: Boolean,
+    )
+
+    sealed interface AudioOptionsUi {
+        data object Hidden : AudioOptionsUi
+        data object Loading : AudioOptionsUi
+        data class Ready(val options: List<AudioOptionUi>, val effectiveCode: Int?) : AudioOptionsUi
+        data class Error(val msg: String) : AudioOptionsUi
+    }
+
+    private val _audioOptions = MutableStateFlow<AudioOptionsUi>(AudioOptionsUi.Hidden)
+    val audioOptions: StateFlow<AudioOptionsUi> = _audioOptions.asStateFlow()
+    /** 面板原始轨缓存（供切换后本地重算有效档，不额外打接口）。 */
+    private var audioRawTracks: List<DashAudio> = emptyList()
+    private var audioOptionsKey: String? = null
+
+    /**
+     * 打开音质面板时调用：按当前曲目拉服务端可用轨（登录态变化/换集即失效重拉，内存 memo 去重）。
+     * 未登录时高档本就拿不到，面板照实展示“需登录”，不断播。
+     */
+    fun loadAudioOptions() {
+        val cur = player.state.value.currentTrack
+        if (cur == null) {
+            _audioOptions.value = AudioOptionsUi.Error("暂无在播")
+            return
+        }
+        val key = "${cur.bvid}:${cur.cid}:${isLoggedIn.value}"
+        if (key == audioOptionsKey && _audioOptions.value is AudioOptionsUi.Ready) return
+        audioOptionsKey = key
+        _audioOptions.value = AudioOptionsUi.Loading
+        viewModelScope.launch {
+            val prefer = prefs.audioQuality.first()
+            when (val r = repo.getAudioOptions(cur.bvid, cur.cid)) {
+                is Result.Error -> _audioOptions.value = AudioOptionsUi.Error(r.msg.ifBlank { "音质列表获取失败" })
+                is Result.Success -> {
+                    audioRawTracks = r.data
+                    _audioOptions.value = buildOptions(r.data, prefer, isLoggedIn.value)
+                }
+            }
+        }
+    }
+
+    private fun buildOptions(raw: List<DashAudio>, prefer: Int, loggedIn: Boolean): AudioOptionsUi.Ready {
+        val available = raw.map { it.id }.toSet()
+        val effective = raw.pickAudio(prefer)?.id
+        val rows = AudioQuality.values.map { q ->
+            val has = available.contains(q.code)
+            val needLogin = q.requiresLogin && !loggedIn
+            AudioOptionUi(
+                code = q.code,
+                title = q.desc + if (has) "" else "（当前不可用）",
+                subTitle = when {
+                    q.vipOnly -> "需登录·大会员"
+                    q.requiresLogin -> "需登录"
+                    else -> "免登录"
+                },
+                locked = needLogin,
+                selected = q.code == (effective ?: prefer),
+            )
+        }
+        return AudioOptionsUi.Ready(rows, effective)
+    }
+
+    /**
+     * 选中档位：高档需登录，未登录返回 false（已写提示，屏端跳登录页）；
+     * 已登录则落盘偏好→本集不断播换链→面板本地重算有效档。返回 true 表示已受理。
+     */
+    fun selectAudioQuality(code: Int): Boolean {
+        val q = AudioQuality.fromCode(code)
+        if (q.requiresLogin && isLoggedIn.value != true) {
+            _message.value = "该音质需登录后使用，请先登录"
+            return false
+        }
+        viewModelScope.launch {
+            prefs.setAudioQuality(code)
+            // 面板即时反馈：本地按新偏好重算有效档（服务端实际档位以换链结果为准）
+            if (audioRawTracks.isNotEmpty()) {
+                _audioOptions.value = buildOptions(audioRawTracks, code, isLoggedIn.value)
+            }
+            val ok = player.refreshCurrentUrl()
+            _message.value = if (ok) "已切换为${q.desc}" else "切换失败，已保留当前播放"
+        }
+        return true
+    }
+
+    /**
+     * 播放信息页“音质”行：偏好档 + 本次实际有效档（面板拉过才知，否则只展示偏好）。
+     * 实际码率仍以管线 format.bitrate 为准（见 pipelineInfo.bitrateKbps），此处只表明确档归属。
+     */
+    val qualityLine: StateFlow<String> = combine(audioQuality, _audioOptions) { prefer, opts ->
+        val preferDesc = AudioQuality.fromCode(prefer).desc
+        val eff = (opts as? AudioOptionsUi.Ready)?.effectiveCode
+        if (eff == null || eff == prefer) preferDesc
+        else "${preferDesc}（当前实际：${AudioQuality.fromCode(eff).desc}）"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.fromCode(AudioQuality.DEFAULT_CODE).desc)
 }

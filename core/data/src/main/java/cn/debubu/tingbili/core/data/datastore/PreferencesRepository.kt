@@ -47,6 +47,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val audioHwDecode: Flow<Boolean> = ds.data.map { it[AUDIO_HW_DECODE] ?: true }
     /** DSP 音频卸载（设置页开关，默认开；开后条件满足时整条管线交 DSP，AP 休眠） */
     val audioOffload: Flow<Boolean> = ds.data.map { it[AUDIO_OFFLOAD] ?: true }
+    /** 音质偏好（playurl qn/audio id：30216/30232/30280/30250/30251，默认 132K；未知值回落默认） */
+    val audioQuality: Flow<Int> = ds.data.map { it[AUDIO_QUALITY] ?: DEFAULT_AUDIO_QUALITY }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
@@ -219,6 +221,11 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[AUDIO_HW_DECODE] = v }
     }
 
+    /** 音质偏好 id（30216/30232/30280/30250/30251；写未知值时读侧回落请调用方钳制） */
+    suspend fun setAudioQuality(v: Int) {
+        ds.edit { it[AUDIO_QUALITY] = v }
+    }
+
     suspend fun drainPlayUrlCache(): Map<String, CachedPlayUrl> {
         var out: Map<String, CachedPlayUrl> = emptyMap()
         ds.edit { prefs ->
@@ -275,6 +282,9 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val SUBTITLE_SCALE = floatPreferencesKey("subtitle_scale")
         val AUDIO_HW_DECODE = androidx.datastore.preferences.core.booleanPreferencesKey("audio_hw_decode")
         val AUDIO_OFFLOAD = androidx.datastore.preferences.core.booleanPreferencesKey("audio_offload")
+        val AUDIO_QUALITY = androidx.datastore.preferences.core.intPreferencesKey("audio_quality")
+        /** 默认音质偏好 132K（免登录可得最佳档；对齐 data:bilibili AudioQuality.DEFAULT_CODE，core:data 不反向依赖） */
+        const val DEFAULT_AUDIO_QUALITY = 30232
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
         val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
         val SLEEP_DEADLINE_MS = androidx.datastore.preferences.core.longPreferencesKey("sleep_deadline_ms")

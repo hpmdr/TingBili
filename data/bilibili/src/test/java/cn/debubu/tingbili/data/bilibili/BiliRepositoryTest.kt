@@ -292,6 +292,41 @@ class BiliRepositoryTest {
         assertTrue(r is Result.Error)
     }
 
+    private fun playUrlBody() =
+        """{"code":0,"data":{"dash":{"audio":[
+          {"baseUrl":"https://cdn.example.com/64.m4s","id":30216,"bandwidth":64000},
+          {"baseUrl":"https://cdn.example.com/132.m4s","id":30232,"bandwidth":132000},
+          {"baseUrl":"https://cdn.example.com/192.m4s","id":30280,"bandwidth":192000}
+        ]}}}"""
+
+    @Test
+    fun `playUrl defaults to 132K and sends qn`() = runTest {
+        server.enqueue(jsonResponse(playUrlBody()))
+        val r = repo.getPlayUrl("BV1xx", 1001)
+        assertTrue(r is Result.Success)
+        assertEquals("https://cdn.example.com/132.m4s", (r as Result.Success).data)
+        val req = server.takeRequest()
+        assertTrue(req.path!!.contains("qn=30232"))
+    }
+
+    @Test
+    fun `playUrl prefer selects matching tier`() = runTest {
+        server.enqueue(jsonResponse(playUrlBody()))
+        val low = repo.getPlayUrl("BV1xx", 1001, 30216)
+        assertEquals("https://cdn.example.com/64.m4s", (low as Result.Success).data)
+        server.enqueue(jsonResponse(playUrlBody()))
+        val high = repo.getPlayUrl("BV1xx", 1001, 30251)
+        assertEquals("https://cdn.example.com/192.m4s", (high as Result.Success).data)
+    }
+
+    @Test
+    fun `getAudioOptions exposes available tracks`() = runTest {
+        server.enqueue(jsonResponse(playUrlBody()))
+        val r = repo.getAudioOptions("BV1xx", 1001)
+        assertTrue(r is Result.Success)
+        assertEquals(listOf(30216, 30232, 30280), (r as Result.Success).data.map { it.id })
+    }
+
     private fun viewBody(bvid: String) =
         """{"code":0,"data":{"bvid":"$bvid","title":"T","pic":"https://cover","owner":{"name":"u"},"pages":[{"cid":1,"page":1,"part":"P1","duration":60}],"duration":60}}"""
 
