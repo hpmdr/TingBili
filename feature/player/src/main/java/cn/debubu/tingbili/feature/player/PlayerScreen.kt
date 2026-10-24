@@ -588,10 +588,10 @@ private fun AudioQualitySheet(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                            }
                                 if (item.selected) {
                                     Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 }
+                            }
                         }
                     }
                     if (showLoginHint) {
