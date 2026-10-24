@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Headphones
@@ -60,6 +59,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
+import cn.debubu.tingbili.core.ui.component.SettingRow
+import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
+import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
@@ -129,9 +131,9 @@ fun MeScreen(
 
         // ── 3. 分组设置列表 ──────────────────────────────
         Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)) {
-            SectionLabel("个性化与播放")
+            SettingSectionLabel("个性化与播放")
             SettingsGroup {
-                SettingsRow(
+                SettingRow(
                     icon = Icons.Filled.Palette,
                     iconTint = Color(0xFF6366F1),
                     iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
@@ -141,7 +143,7 @@ fun MeScreen(
                     onClick = onOpenAppearance
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                SettingsRow(
+                SettingRow(
                     icon = Icons.Filled.Settings,
                     iconTint = Color(0xFF10B981),
                     iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
@@ -152,9 +154,9 @@ fun MeScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            SectionLabel("系统与账户")
+            SettingSectionLabel("系统与账户")
             SettingsGroup {
-                SettingsRow(
+                SettingRow(
                     icon = Icons.Filled.Tune,
                     iconTint = Color(0xFF8B5CF6),
                     iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
@@ -163,7 +165,7 @@ fun MeScreen(
                     onClick = onOpenOtherSettings
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                SettingsRow(
+                SettingRow(
                     icon = Icons.Filled.Info,
                     iconTint = Color(0xFF06B6D4),
                     iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
@@ -465,76 +467,6 @@ private fun androidx.compose.foundation.layout.RowScope.GridItem(
     }
 }
 
-// ── 分组设置列表 ────────────────────────────────────────
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.Gray,
-        modifier = Modifier.padding(start = 8.dp, bottom = 6.dp)
-    )
-}
-
-@Composable
-private fun SettingsGroup(content: @Composable () -> Unit) {
-    val darkTheme = LocalDarkTheme.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (darkTheme) {
-                if (LocalDarkAmoled.current) Color(0xFF121212) else Color(0xFF1E1E1E)
-            } else MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column { content() }
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    icon: ImageVector,
-    iconTint: Color,
-    iconBg: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    trailing: (@Composable () -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(17.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(subtitle, fontSize = 11.sp, color = Color.Gray)
-        }
-        trailing?.invoke()
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = Color.Gray,
-            modifier = Modifier.size(18.dp)
-        )
-    }
-}
 
 // ── 关于对话框 ────────────────────────────────────────
 

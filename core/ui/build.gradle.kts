@@ -28,6 +28,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.material.icons.core)
     implementation(libs.androidx.lifecycle.runtimeCompose)
     testImplementation(libs.junit)
 }

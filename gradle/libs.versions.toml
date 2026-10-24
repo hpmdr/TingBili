@@ -36,6 +36,7 @@ compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version = "1.13.0" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
