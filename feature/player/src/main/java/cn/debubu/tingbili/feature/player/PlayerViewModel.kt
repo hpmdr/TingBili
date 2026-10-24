@@ -529,7 +529,7 @@ class PlayerViewModel @Inject constructor(
                 AudioOptionUi(
                     code = a.id,
                     title = q.desc,
-                    subTitle = if (a.bandwidth > 0) "约 ${a.bandwidth / 1000} kbps" else "本视频提供",
+                    subTitle = if (a.bandwidth > 0) "B站实测约 ${a.bandwidth / 1000} kbps" else "本视频提供",
                     locked = false,
                     selected = a.id == (effective ?: prefer),
                 )
