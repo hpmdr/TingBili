@@ -33,18 +33,18 @@ class OtherSettingsViewModel @Inject constructor(
         PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
 
-    /** DSP 音频卸载开关（默认关；切换后重启 App 生效） */
+    /** DSP 音频卸载开关（默认开；切换后下一首生效，开启时不支持倍速） */
     val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        false
+        true
     )
 
-    /** 音频优先硬解开关（默认关；切换后下一首生效） */
+    /** 音频优先硬解开关（默认开；切换后下一首生效） */
     val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        false
+        true
     )
 
     /** 首页推荐词（设置页可增减，至少保留一个） */
@@ -69,6 +69,13 @@ class OtherSettingsViewModel @Inject constructor(
         }
     }
 
+    /** 本机音频解码器实测列表(MediaCodecList 枚举 audio/ 解码器, 仅展示定位用). */
+    private val _audioDecoders = MutableStateFlow<List<cn.debubu.tingbili.core.media.AudioDecoderInfo>>(emptyList())
+    val audioDecoders: StateFlow<List<cn.debubu.tingbili.core.media.AudioDecoderInfo>> = _audioDecoders.asStateFlow()
+
+    private val _audioDecodersLoading = MutableStateFlow(false)
+    val audioDecodersLoading: StateFlow<Boolean> = _audioDecodersLoading.asStateFlow()
+
     private val _cacheStats = MutableStateFlow(CacheStats())
     val cacheStats: StateFlow<CacheStats> = _cacheStats.asStateFlow()
 
@@ -82,7 +89,22 @@ class OtherSettingsViewModel @Inject constructor(
 
     init {
         refreshCacheStats()
+        refreshAudioDecoders()
     }
+
+    /** 重读本机音频解码器(IO 线程枚举, 失败置空不抛). */
+    fun refreshAudioDecoders() {
+        viewModelScope.launch {
+            _audioDecodersLoading.value = true
+            _audioDecoders.value = try {
+                cn.debubu.tingbili.core.media.AudioDecoderInspector.queryAudioDecoders()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            _audioDecodersLoading.value = false
+        }
+    }
+
 
     fun refreshCacheStats() {
         viewModelScope.launch {

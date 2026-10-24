@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.hilt.android)
+    implementation(libs.media3.exoplayer)
     implementation(libs.zxing.core)
     ksp(libs.hilt.compiler)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")

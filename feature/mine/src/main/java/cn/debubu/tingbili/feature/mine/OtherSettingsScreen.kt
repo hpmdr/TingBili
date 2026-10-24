@@ -55,6 +55,8 @@ fun OtherSettingsScreen(
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
+    val decoders by vm.audioDecoders.collectAsStateWithLifecycle()
+    val decodersLoading by vm.audioDecodersLoading.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     var newKeyword by remember { mutableStateOf("") }
@@ -198,7 +200,7 @@ fun OtherSettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("DSP 音频卸载（省电）")
                         Text(
-                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后重启 App 生效。",
+                            "条件满足时整条管线交 DSP，CPU 休眠；变速或格式不支持时自动回落。切换后下一首生效；开启时倍速不可用（保持 1.0x）。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.secondary
                         )
@@ -210,6 +212,33 @@ fun OtherSettingsScreen(
                     )
                 }
             }
+
+            // 本机音频解码器: MediaCodecList 实测, 只展示 audio/ 解码器, 供问题定位(厂商前缀只看不判).
+            Column {
+                Text("本机音频解码器", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                if (decodersLoading) {
+                    Text("正在读取本机解码器...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                } else if (decoders.isEmpty()) {
+                    Text("暂无数据, 点右键重读.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                } else {
+                    Text(
+                        "共 ${decoders.size} 项(硬解优先排序).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    decoders.take(80).forEach { d ->
+                        DecoderRow(name = d.name, tag = d.kindLabel + " · " + d.vendorLabel, mime = d.mimeType)
+                    }
+                    if (decoders.size > 80) {
+                        Text("仅显示前 80 项.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { vm.refreshAudioDecoders() }) { Text("重新读取") }
+            }
+
 
             // 缓存管理：音频 / 图片 / 字幕分别统计、分别清理
             Column {
@@ -291,4 +320,16 @@ private fun formatCacheSize(bytes: Long): String = when {
     bytes <= 0L -> "0MB"
     bytes < 1024L * 1024L -> "${bytes / 1024L}KB"
     else -> String.format("%.1fMB", bytes / (1024.0 * 1024.0))
+}
+
+@Composable
+private fun DecoderRow(name: String, tag: String, mime: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = name, style = MaterialTheme.typography.bodyMedium)
+            Text(text = mime, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(text = tag, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+    }
 }
