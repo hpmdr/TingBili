@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -19,11 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,11 +45,15 @@ import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ThemeMode
+import cn.debubu.tingbili.core.ui.component.SettingDivider
+import cn.debubu.tingbili.core.ui.component.SettingRadioRow
+import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
+import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：外观设置（主题色 / UI 选项） */
+/** 二级页：外观设置（深色模式 / 深色风格 / 主题色）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
@@ -86,12 +85,53 @@ fun AppearanceScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            DarkModeSettings(
-                darkMode = darkMode,
-                onDarkModeChange = vm::setDarkMode,
-                darkThemeStyle = darkThemeStyle,
-                onDarkThemeStyleChange = vm::setDarkThemeStyle
-            )
+            Column {
+                SettingSectionLabel("深色模式")
+                SettingsGroup {
+                    SettingRadioRow(
+                        title = "跟随系统",
+                        subtitle = "跟随系统明暗自动切换",
+                        selected = darkMode == DarkMode.FOLLOW_SYSTEM,
+                        onClick = { vm.setDarkMode(DarkMode.FOLLOW_SYSTEM) }
+                    )
+                    SettingDivider()
+                    SettingRadioRow(
+                        title = "浅色",
+                        subtitle = "始终使用浅色界面",
+                        selected = darkMode == DarkMode.LIGHT,
+                        onClick = { vm.setDarkMode(DarkMode.LIGHT) }
+                    )
+                    SettingDivider()
+                    SettingRadioRow(
+                        title = "深色",
+                        subtitle = "始终使用深色界面",
+                        selected = darkMode == DarkMode.DARK,
+                        onClick = { vm.setDarkMode(DarkMode.DARK) }
+                    )
+                }
+            }
+
+            // 浅色下不展示：之前置灰占位反而让人困惑
+            if (darkMode != DarkMode.LIGHT) {
+                Column {
+                    SettingSectionLabel("深色风格")
+                    SettingsGroup {
+                        SettingRadioRow(
+                            title = "深灰",
+                            subtitle = "层级柔和，默认",
+                            selected = darkThemeStyle == DarkThemeStyle.DARK_GRAY,
+                            onClick = { vm.setDarkThemeStyle(DarkThemeStyle.DARK_GRAY) }
+                        )
+                        SettingDivider()
+                        SettingRadioRow(
+                            title = "纯黑",
+                            subtitle = "OLED 像素不发光，深夜不晃眼",
+                            selected = darkThemeStyle == DarkThemeStyle.PURE_BLACK,
+                            onClick = { vm.setDarkThemeStyle(DarkThemeStyle.PURE_BLACK) }
+                        )
+                    }
+                }
+            }
 
             ThemeColorSettings(
                 themeMode = themeMode,
@@ -99,95 +139,7 @@ fun AppearanceScreen(
                 onThemeModeChange = vm::setThemeMode,
                 onCustomColorChange = vm::setCustomThemeColor
             )
-
-            // UI 选项：占位，后续补充（界面密度 / 动态取色开关等）
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("UI 选项", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "界面密度、布局模式等选项开发中，敬请期待。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
-    }
-}
-
-@Composable
-private fun DarkModeSettings(
-    darkMode: DarkMode,
-    onDarkModeChange: (DarkMode) -> Unit,
-    darkThemeStyle: DarkThemeStyle,
-    onDarkThemeStyleChange: (DarkThemeStyle) -> Unit
-) {
-    Column {
-        Text("深色模式", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DarkMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = darkMode == mode,
-                    onClick = { onDarkModeChange(mode) },
-                    label = {
-                        Text(
-                            when (mode) {
-                                DarkMode.LIGHT -> "☀️ 浅色"
-                                DarkMode.DARK -> "🌙 深色"
-                                DarkMode.FOLLOW_SYSTEM -> "📱 跟随系统"
-                            }
-                        )
-                    }
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            when (darkMode) {
-                DarkMode.LIGHT -> "始终使用浅色界面"
-                DarkMode.DARK -> "始终使用深色界面"
-                DarkMode.FOLLOW_SYSTEM -> "跟随系统明暗自动切换"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(12.dp))
-        Text("深色风格", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DarkThemeStyle.entries.forEach { style ->
-                FilterChip(
-                    enabled = darkMode != DarkMode.LIGHT,
-                    selected = darkThemeStyle == style,
-                    onClick = { onDarkThemeStyleChange(style) },
-                    label = {
-                        Text(
-                            when (style) {
-                                DarkThemeStyle.PURE_BLACK -> "🌑 纯黑"
-                                DarkThemeStyle.DARK_GRAY -> "🌘 深灰"
-                            }
-                        )
-                    }
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            when {
-                darkMode == DarkMode.LIGHT -> "浅色下不生效，切到深色后可切换风格"
-                darkThemeStyle == DarkThemeStyle.PURE_BLACK -> "纯黑：OLED 像素不发光，深夜不晃眼"
-                else -> "深灰：层级柔和，默认风格"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -216,52 +168,31 @@ private fun ThemeColorSettings(
     var showCustomDialog by remember { mutableStateOf(false) }
 
     Column {
-        Text("主题色", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeMode.entries.forEach { mode ->
-                val swatch = when (mode) {
-                    ThemeMode.DEFAULT -> Color(PreferencesRepository.DEFAULT_THEME_COLOR)
-                    ThemeMode.SYSTEM -> systemColor
-                    ThemeMode.CUSTOM -> Color(customThemeColor)
-                }
-                ThemeModeChip(
-                    mode = mode,
-                    swatch = swatch,
-                    selected = themeMode == mode,
-                    onClick = {
-                        when (mode) {
-                            ThemeMode.CUSTOM -> showCustomDialog = true
-                            else -> onThemeModeChange(mode)
-                        }
-                    }
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        when (themeMode) {
-            ThemeMode.DEFAULT -> {
-                Text(
-                    "默认听视频粉 #FF6699",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ThemeMode.SYSTEM -> {
-                Text(
-                    "跟随系统动态取色，当前系统主色 ${systemColor.toHex()}。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ThemeMode.CUSTOM -> {
-                Text(
-                    "当前自定义色 ${Color(customThemeColor).toHex()}，点击“自定义”可重新调整。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        SettingSectionLabel("主题色")
+        SettingsGroup {
+            SettingRadioRow(
+                title = "默认",
+                subtitle = "听视频粉 ${Color(PreferencesRepository.DEFAULT_THEME_COLOR).toHex()}",
+                selected = themeMode == ThemeMode.DEFAULT,
+                onClick = { onThemeModeChange(ThemeMode.DEFAULT) },
+                trailing = { ColorSwatch(Color(PreferencesRepository.DEFAULT_THEME_COLOR)) }
+            )
+            SettingDivider()
+            SettingRadioRow(
+                title = "跟随系统",
+                subtitle = "动态取色，当前系统主色 ${systemColor.toHex()}",
+                selected = themeMode == ThemeMode.SYSTEM,
+                onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
+                trailing = { ColorSwatch(systemColor) }
+            )
+            SettingDivider()
+            SettingRadioRow(
+                title = "自定义",
+                subtitle = "当前 ${Color(customThemeColor).toHex()}，点选重选颜色",
+                selected = themeMode == ThemeMode.CUSTOM,
+                onClick = { showCustomDialog = true },
+                trailing = { ColorSwatch(Color(customThemeColor)) }
+            )
         }
     }
 
@@ -278,29 +209,10 @@ private fun ThemeColorSettings(
 }
 
 @Composable
-private fun ThemeModeChip(
-    mode: ThemeMode,
-    swatch: Color,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        leadingIcon = { ColorSwatch(swatch) },
-        label = { Text(mode.label()) },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = swatch.copy(alpha = 0.10f),
-            selectedContainerColor = swatch.copy(alpha = 0.24f)
-        )
-    )
-}
-
-@Composable
 private fun ColorSwatch(color: Color) {
     Box(
         modifier = Modifier
-            .size(16.dp)
+            .size(20.dp)
             .clip(CircleShape)
             .background(color)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
@@ -369,9 +281,3 @@ private fun CustomColorDialog(
 }
 
 private fun Color.toHex(): String = String.format("#%06X", toArgb() and 0xFFFFFF)
-
-private fun ThemeMode.label(): String = when (this) {
-    ThemeMode.DEFAULT -> "默认"
-    ThemeMode.SYSTEM -> "跟随系统"
-    ThemeMode.CUSTOM -> "自定义"
-}
