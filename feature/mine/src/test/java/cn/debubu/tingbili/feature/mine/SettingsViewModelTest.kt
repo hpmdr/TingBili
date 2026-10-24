@@ -73,4 +73,15 @@ class SettingsViewModelTest {
         advanceUntilIdle()
         assertEquals(5, prefs.stepSec.first())
     }
+
+    @Test fun `audio quality persists and coerces unknown`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs)
+        assertEquals(30232, prefs.audioQuality.first())
+        vm.setAudioQuality(30280)
+        advanceUntilIdle()
+        assertEquals(30280, prefs.audioQuality.first())
+        vm.setAudioQuality(99999)
+        advanceUntilIdle()
+        assertEquals(30232, prefs.audioQuality.first())
+    }
 }

@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -45,5 +46,15 @@ class SettingsViewModel @Inject constructor(
 
     fun setAudioOffload(v: Boolean) {
         viewModelScope.launch { prefs.setAudioOffload(v) }
+    }
+
+    /** 默认音质偏好（默认标准 132K；未知值回落默认；切换后下一首生效） */
+    val audioQuality: StateFlow<Int> = prefs.audioQuality.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_AUDIO_QUALITY
+    )
+
+    fun setAudioQuality(code: Int) {
+        val safe = if (AudioQuality.isKnown(code)) code else AudioQuality.DEFAULT_CODE
+        viewModelScope.launch { prefs.setAudioQuality(safe) }
     }
 }

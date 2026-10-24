@@ -26,14 +26,14 @@ class AudioQuality(
         val dolbyAlt = AudioQuality(30255, "杜比全景声", "杜比", 50, requiresLogin = true, vipOnly = true)
         val hiRes = AudioQuality(30251, "Hi-Res无损", "Hi-Res", 60, requiresLogin = true, vipOnly = true)
 
-        /** 展示顺序：从高到低（PiliPlus values 同序）。 */
-        val values: List<AudioQuality> = listOf(hiRes, dolby, dolbyAlt, k192, k132, k64)
+        /** 展示顺序：从高到低（PiliPlus values 同序；30255 与 30250 同为杜比只展示一行）。 */
+        val values: List<AudioQuality> = listOf(hiRes, dolby, k192, k132, k64)
 
         /** 默认偏好：标准 132K——免登录可得的最佳档，不断播且不浪费流量。 */
         const val DEFAULT_CODE = 30232
 
         private val codeMap: Map<Int, AudioQuality> =
-            values.associateBy { it.code }
+            (values + dolbyAlt).associateBy { it.code }
 
         fun isKnown(code: Int): Boolean = codeMap.containsKey(code)
 

@@ -520,10 +520,12 @@ class PlayerViewModel @Inject constructor(
                 prefer,
             )
         }
-        val effective = raw.pickAudio(prefer)?.id
-        val rows = raw
+        val deduped = raw
             .sortedWith(compareByDescending<DashAudio> { AudioQuality.fromCode(it.id).rank }.thenByDescending { it.bandwidth })
             .distinctBy { it.id }
+            .distinctBy { AudioQuality.fromCode(it.id).desc } // 同名档（如双杜比码）只留一行
+        val effective = deduped.pickAudio(prefer)?.id
+        val rows = deduped
             .map { a ->
                 val q = AudioQuality.fromCode(a.id)
                 AudioOptionUi(

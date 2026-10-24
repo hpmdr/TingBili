@@ -53,6 +53,7 @@ PiliPlus `VideoUtils.findTargetAudio`（`lib/utils/video_utils.dart`）取
 | qn 下发/偏好精选/可用轨查询 | `BiliApi.playUrl(qn)`、`BiliRepository.getPlayUrl/getAudioOptions` |
 | 解析器读偏好 | `BiliMediaResolvers`（`PreferencesRepository.audioQuality`） |
 | 偏好存取（默认 132K） | `PreferencesRepository.audioQuality/setAudioQuality` |
+| 设置页“默认音质”入口 + 六档说明 | `feature/mine/.../SettingsScreen.kt`（`DefaultQualitySheet`）+ `SettingsViewModel.audioQuality/setAudioQuality` |
 | 面板态/登录门/换链触发 | `feature/player/.../PlayerViewModel.kt`（audioQuality/audioOptions/selectAudioQuality/qualityLine） |
 | 底部第四入口 + 音质面板 + 播放信息“音质”行 | `feature/player/.../PlayerScreen.kt`（`PlayerAuxBar`/`AudioQualitySheet`/`PlaybackInfoSheet`） |
 
