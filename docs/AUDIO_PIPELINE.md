@@ -115,3 +115,16 @@ L2 CPU 软解（OMX.google.* / c2.android.*）
 - `https://developer.android.com/media/media3/exoplayer/track-selection`
 - `https://developer.android.com/reference/androidx/media3/exoplayer/DefaultRenderersFactory`
 - `https://developer.android.com/reference/android/media/MediaCodecInfo`
+
+## 9. 真机实测记录（2026-10-24，重构后回归）
+
+包：app-debug.apk（5948080 之后）；两台红米测试机，同一 B 站 AAC 内容（mp4a.40.2 / 64kbps / 44.1kHz / 双声道）。
+
+| 机型 | SoC | 解码器（播放信息页） | DSP 卸载 | 结论 |
+|---|---|---|---|---|
+| Redmi 25053RT47C | 骁龙 SM8735（Android 16） | 未初始化（DSP 接管后无 CPU 侧解码器） | 生效中（DSP 接管），sleepingForOffload=true | L0 真进 DSP，符合预期 |
+| Redmi K70E 2311DRK48C | 天玑 8300（Android 16） | c2.android.aac.decoder（软解） | 已开启但未接管 | L0 静默降 L2，不断播，符合预期 |
+
+天玑依据：本机音频解码器页共 34 项，有 MTK 硬解（MP3/ALAC/ADPCM/Dolby），唯独无 AAC 硬解。AAC 只有 c2.android.aac.decoder 可选，选软解是正确结果，不是选择器 bug，这正是第 3 节运行时探测的实证。
+回归项（两台机）：倍速互斥提示并保持 1.0x / 睡眠定时倒计时 / 杀进程恢复（暂停态）/ 跨页进度同步 / 我的页累计收听分钟数，均正常；logcat 无崩溃、无 PlaybackException。
+待补：蓝牙 A2DP（需耳机）、HE-AAC/MP3 硬解路径（需对应格式内容源）。
