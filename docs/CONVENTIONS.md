@@ -41,3 +41,9 @@ Tab（`MainTabsRoute`：首页/听单/历史/设置，带底栏）与全屏页�
 3. `assertEquals(12345, fakePlayer.seekToPos)` 在 `seekToPos: Long?` 上只能匹配 `assertEquals(Object, Object)`，实际比较 `Integer` 与 `Long`，永远不等。Long 断言必须写 `12345L`；判空用 `assertNull`。
 - **真机验证只看控件树，不靠截图**：`adb shell uiautomator dump /sdcard/ui.xml` + `adb exec-out cat /sdcard/ui.xml` 拿到 class/text/clickable/bounds，用 bounds 中心 `adb shell input tap x y` 操作，改完再 dump 校验文本与结构。截图仅用于给用户看最终视觉效果，不作为“验证通过”的依据，也不用来反推坐标。
 - 单人开发，**直接提交 `master`**：不走分支、不开 PR，一次改动一个提交。提交信息 `feat/fix/docs/test/refactor/chore(范围): 简述`。提交前：门禁绿 + 相关单测绿 + `git status` 干净。大重构在 `docs/` 下留设计说明（历史 superpowers 目录已删除，不再新增）。
+## 7. 真机验证（强制门，2026-10-24 起）
+
+- UI / 文案 / 交互类改动，能装机验证的一律装机验证后再汇报完成，不拿"我检查过代码"代替。
+- 流程：`./gradlew :app:assembleDebug` 打 fresh 包 → `adb install -r`（多设备必须加 `-s` 指定）→ `am start` 进应用 → `uiautomator dump` + `pull` 到本地逐屏核对文本与结构 → 过程文件（`ui_*.xml`）验完即删，保持 `git status` 干净。
+- 弹窗/确认框点到出现即可；破坏性操作（清空缓存、退出登录、删歌单）点取消收场，不真执行。
+- 难触发态（如播放器无在播空态）：先走正常路径验主分支；分支态以构建 + 逐行复核为准，并如实告知用户哪块没覆盖到，不报喜不报忧。
