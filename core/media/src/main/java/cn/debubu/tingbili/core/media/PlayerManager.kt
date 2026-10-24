@@ -66,6 +66,11 @@ class PlayerManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Test hook — inject TestScope to control virtual time for throttle tests. */
     internal var testScope: CoroutineScope? = null
+        set(value) {
+            field = value
+            // 睡眠任务跟随当前有效作用域：单测注入后切过去，避免旧 Main 作用域泄漏
+            value?.let { sleepTimer.attach(it, sleepListener) }
+        }
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
     /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
     internal var clock: () -> Long = { System.currentTimeMillis() }
@@ -79,12 +84,62 @@ class PlayerManager @Inject constructor(
     private var lastListenKey: Pair<String, Long>? = null
     private val playMutex = Mutex()
 
+    // ── 睡眠定时：时间逻辑在 SleepTimer；PlayerManager 只做状态合入 + 到点暂停 ──
+    private val sleepTimer: SleepTimer = SleepTimer(
+        clock = { clock() },
+        store = object : SleepTimer.Store {
+            override suspend fun loadTail(): Boolean =
+                try { prefs.sleepTail.first() } catch (_: Exception) { false }
+            override suspend fun loadFinishChapter(fallback: Boolean): Boolean =
+                try { prefs.sleepFinishChapter.first() } catch (_: Exception) { fallback }
+            override suspend fun loadDeadlineMs(): Long =
+                try { prefs.sleepDeadlineMs.first() } catch (_: Exception) { 0L }
+            override suspend fun loadTotalSec(): Int =
+                try { prefs.sleepTotalSec.first() } catch (_: Exception) { 0 }
+            override suspend fun saveCountdown(deadlineMs: Long, totalSec: Int, finishChapter: Boolean) =
+                prefs.saveSleepTimerState(deadlineMs, totalSec, finishChapter)
+            override suspend fun saveTail() = prefs.saveSleepTailState()
+            override suspend fun setFinishChapter(finishChapter: Boolean) =
+                prefs.setSleepFinishChapter(finishChapter)
+            override suspend fun clear() = prefs.clearSleepTimerState()
+        },
+    )
+
+    private val sleepListener = object : SleepTimer.Listener {
+        override fun chapter(): SleepTimer.ChapterSnapshot {
+            val s = _state.value
+            val key = s.currentTrack?.let { it.bvid to it.cid }
+            // 章尾判定余量：距结束不足此时长即视为播完（与旧 watchChapterTail 一致）
+            val over = s.durationMs > 0 && s.positionMs >= s.durationMs - SleepTimer.CHAPTER_END_MARGIN_MS
+            return SleepTimer.ChapterSnapshot(key, over)
+        }
+        override fun onStateChanged(state: SleepTimer.SleepUiState) {
+            _state.update {
+                it.copy(
+                    sleepRemainSec = state.remainSec,
+                    sleepTotalSec = state.totalSec,
+                    sleepFinishChapter = state.finishChapter,
+                    sleepEndOfChapter = state.endOfChapter,
+                )
+            }
+        }
+        // pause() 内已落盘进度，满足"定时停止必须记好进度"；落盘清定时由 SleepTimer 先做
+        override suspend fun onFire() = pause()
+    }
+
+    /**
+     * 倒计时定时：seconds 秒后停止，60 秒起（恢复路径可小于 60，不钳制）。
+     * 按绝对 deadline 走，Doze 冻结 delay 后能一次跳变追齐。
+     * @param finishChapter 到点后是否播完本章再停（到点后转入播完即停阶段，不立即暂停）。
+     */
+
 
     /** offload 开关镜像(Service 侧做实时下发, 这里只做倍速互斥; 默认开, 随 prefs 缺省 true). */
     @Volatile
     private var offloadEnabled = false
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
+        sleepTimer.attach(scope, sleepListener)
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch {
             restoreLastPlayback()
@@ -521,207 +576,19 @@ class PlayerManager @Inject constructor(
         effectiveScope().launch { saveHistorySnapshot(force = true) }
     }
 
-    // ── 睡眠定时（绝对 deadline + DataStore 落盘；杀进程/Doze 冻结后可恢复校准；触发=pause，自带落盘进度） ──
-    private var sleepJob: Job? = null
-
-    /**
-     * 倒计时定时：seconds 秒后停止，60 秒起（恢复路径可小于 60，不钳制）。
-     * 按绝对 deadline 走，每秒用 clock() 重算剩余，Doze 冻结 delay 后能一次跳变追齐。
-     * @param finishChapter 到点后是否播完本章再停（到点后转入播完即停阶段，不立即暂停）。
-     */
-    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
-        sleepJob?.cancel()
-        val total = seconds.coerceAtLeast(60)
-        val deadline = clock() + total * 1000L
-        _state.update {
-            it.copy(
-                sleepRemainSec = total,
-                sleepTotalSec = total,
-                sleepFinishChapter = finishChapter,
-                sleepEndOfChapter = false,
-            )
-        }
-        effectiveScope().launch {
-            try {
-                prefs.saveSleepTimerState(deadline, total, finishChapter)
-            } catch (_: Exception) {
-            }
-        }
-        sleepJob = effectiveScope().launch {
-            launchSleepCountdown(deadline)
-        }
-    }
+    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) =
+        sleepTimer.start(seconds, finishChapter)
 
     /** 冷启动/进程重建后恢复定时：未来→继续倒计时；已过期→直接停或转尾；无落盘→忽略 */
-    suspend fun restoreSleepTimer() {
-        try {
-            val tail = try {
-                prefs.sleepTail.first()
-            } catch (_: Exception) {
-                false
-            }
-            if (tail) {
-                val finish = try {
-                    prefs.sleepFinishChapter.first()
-                } catch (_: Exception) {
-                    true
-                }
-                if (currentKey() == null) {
-                    try {
-                        prefs.clearSleepTimerState()
-                    } catch (_: Exception) {
-                    }
-                    return
-                }
-                _state.update {
-                    it.copy(
-                        sleepRemainSec = null,
-                        sleepTotalSec = null,
-                        sleepFinishChapter = finish,
-                        sleepEndOfChapter = true,
-                    )
-                }
-                sleepJob?.cancel()
-                sleepJob = effectiveScope().launch { watchChapterTail(currentKey()!!) }
-                return
-            }
-            val deadline = try {
-                prefs.sleepDeadlineMs.first()
-            } catch (_: Exception) {
-                0L
-            }
-            if (deadline <= 0L) return
-            val total = try {
-                prefs.sleepTotalSec.first()
-            } catch (_: Exception) {
-                0
-            }
-            val finish = try {
-                prefs.sleepFinishChapter.first()
-            } catch (_: Exception) {
-                false
-            }
-            val remain = ((deadline - clock()) / 1000).toInt()
-            if (remain <= 0) {
-                if (finish) enterChapterTail() else fireSleepTimer()
-                return
-            }
-            _state.update {
-                it.copy(
-                    sleepRemainSec = remain,
-                    sleepTotalSec = total.coerceAtLeast(remain),
-                    sleepFinishChapter = finish,
-                    sleepEndOfChapter = false,
-                )
-            }
-            sleepJob?.cancel()
-            sleepJob = effectiveScope().launch {
-                launchSleepCountdown(deadline)
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    /** 倒计时主循环：按 deadline 重算剩余，抗 delay 被系统拉长 */
-    private suspend fun launchSleepCountdown(deadlineMs: Long) {
-        while (true) {
-            delay(1000)
-            val remain = ((deadlineMs - clock()) / 1000).toInt()
-            if (remain <= 0) break
-            _state.update { it.copy(sleepRemainSec = remain) }
-        }
-        if (_state.value.sleepFinishChapter) enterChapterTail() else fireSleepTimer()
-    }
+    suspend fun restoreSleepTimer() = sleepTimer.restore()
 
     /**
-     * 倒计时进行中改“到点后播完本章再停”开关。播完即停阶段关掉=整单取消
+     * 倒计时进行中改"到点后播完本章再停"开关。播完即停阶段关掉=整单取消
      *（否则关了开关定时还会停在章尾，不符合直觉）。
      */
-    fun setSleepFinishChapter(v: Boolean) {
-        val s = _state.value
-        if (s.sleepEndOfChapter) {
-            if (!v) cancelSleepTimer()
-            return
-        }
-        if (s.sleepRemainSec != null) {
-            _state.update { it.copy(sleepFinishChapter = v) }
-            effectiveScope().launch {
-                try {
-                    prefs.setSleepFinishChapter(v)
-                } catch (_: Exception) {
-                }
-            }
-        }
-    }
+    fun setSleepFinishChapter(v: Boolean) = sleepTimer.setFinishChapter(v)
 
-    /** 倒计时到点 + 开关开：转入播完即停阶段。切歌或播到尾时暂停；手动暂停不取消（章还没完） */
-    private fun enterChapterTail() {
-        val key = currentKey()
-        if (key == null) {
-            fireSleepTimer()
-            return
-        }
-        _state.update { it.copy(sleepRemainSec = null, sleepTotalSec = null, sleepEndOfChapter = true) }
-        effectiveScope().launch {
-            try {
-                prefs.saveSleepTailState()
-            } catch (_: Exception) {
-            }
-        }
-        sleepJob?.cancel()
-        sleepJob = effectiveScope().launch { watchChapterTail(key) }
-    }
-
-    private suspend fun watchChapterTail(key: Pair<String, Long>) {
-        while (true) {
-            delay(1000)
-            val s = _state.value
-            val chapterOver = currentKey() != key ||
-                (s.durationMs > 0 && s.positionMs >= s.durationMs - CHAPTER_END_MARGIN_MS)
-            if (chapterOver) {
-                fireSleepTimer()
-                return
-            }
-        }
-    }
-
-    fun cancelSleepTimer() {
-        sleepJob?.cancel()
-        sleepJob = null
-        effectiveScope().launch {
-            try {
-                prefs.clearSleepTimerState()
-            } catch (_: Exception) {
-            }
-        }
-        _state.update {
-            it.copy(
-                sleepRemainSec = null,
-                sleepTotalSec = null,
-                sleepFinishChapter = false,
-                sleepEndOfChapter = false,
-            )
-        }
-    }
-
-    private fun fireSleepTimer() {
-        // pause() 内已落盘进度，满足“定时停止必须记好进度”
-        effectiveScope().launch {
-            try {
-                prefs.clearSleepTimerState()
-            } catch (_: Exception) {
-            }
-        }
-        pause()
-        _state.update {
-            it.copy(
-                sleepRemainSec = null,
-                sleepTotalSec = null,
-                sleepFinishChapter = false,
-                sleepEndOfChapter = false,
-            )
-        }
-    }
+    fun cancelSleepTimer() = sleepTimer.cancel()
 
     private fun currentKey(): Pair<String, Long>? =
         _state.value.currentTrack?.let { it.bvid to it.cid }
@@ -894,7 +761,7 @@ class PlayerManager @Inject constructor(
         historyJob?.cancel(); historyJob = null
         positionPollJob?.cancel(); positionPollJob = null
         urlRefreshJob?.cancel(); urlRefreshJob = null
-        sleepJob?.cancel(); sleepJob = null
+        sleepTimer.release()
     }
 
     private var urlRefreshRetry = 0
