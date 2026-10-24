@@ -36,3 +36,7 @@ keystore.properties
 # 日志与临时文件
 *.log
 .DS_Store
+
+# 临时预览 / 原型（不入库）
+temp/
+
