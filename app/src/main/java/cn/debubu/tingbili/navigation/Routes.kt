@@ -26,7 +26,7 @@ object MeRoute
 @Serializable
 object AppearanceRoute
 
-/** 二级页：常用设置（播放 / 音频） */
+/** 二级页：播放设置（步长 / 字幕 / 解码 / 默认音质） */
 @Serializable
 object SettingsRoute
 

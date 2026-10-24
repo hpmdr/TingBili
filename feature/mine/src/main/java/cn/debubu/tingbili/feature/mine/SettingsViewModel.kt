@@ -58,3 +58,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setAudioQuality(safe) }
     }
 }
+
+/** 字幕缩放系数 → 四档中文名（就近匹配，兜底标准；播放设置行内值与我的页副标题共用） */
+fun subtitleScaleLabel(scale: Float): String = when {
+    scale < 0.925f -> "小"
+    scale < 1.075f -> "标准"
+    scale < 1.225f -> "大"
+    else -> "特大"
+}

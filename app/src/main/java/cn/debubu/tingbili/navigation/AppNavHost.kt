@@ -117,7 +117,10 @@ fun AppRootNavHost(
             AppearanceScreen(onBack = { navController.popBackStack() })
         }
         composable<SettingsRoute> {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAudioDecoders = { navController.navigate(AudioDecodersRoute) },
+            )
         }
         composable<OtherSettingsRoute> {
             OtherSettingsScreen(
