@@ -128,8 +128,8 @@ fun SettingsScreen(
                         icon = Icons.Filled.Memory,
                         iconTint = Color(0xFF06B6D4),
                         iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
-                        title = "DSP 音频卸载",
-                        subtitle = "开启时倍速不可用（保持 1.0x）",
+                        title = "省电播放（DSP 卸载）",
+                        subtitle = "DSP 芯片直接解码，比硬解更省电；开启后倍速不可调，保持 1.0x",
                         checked = audioOffload,
                         onCheckedChange = { vm.setAudioOffload(it) }
                     )
