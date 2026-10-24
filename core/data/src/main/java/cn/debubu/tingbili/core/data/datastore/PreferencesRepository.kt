@@ -43,10 +43,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
     /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
     val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
-    /** 音频优先硬解（设置页开关，默认关；开则硬解优先、失败自动回落软解） */
-    val audioHwDecode: Flow<Boolean> = ds.data.map { it[AUDIO_HW_DECODE] ?: false }
-    /** DSP 音频卸载（设置页开关，默认关；开后条件满足时整条管线交 DSP，AP 休眠） */
-    val audioOffload: Flow<Boolean> = ds.data.map { it[AUDIO_OFFLOAD] ?: false }
+    /** 音频优先硬解（设置页开关，默认开；开则硬解优先、失败自动回落软解） */
+    val audioHwDecode: Flow<Boolean> = ds.data.map { it[AUDIO_HW_DECODE] ?: true }
+    /** DSP 音频卸载（设置页开关，默认开；开后条件满足时整条管线交 DSP，AP 休眠） */
+    val audioOffload: Flow<Boolean> = ds.data.map { it[AUDIO_OFFLOAD] ?: true }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
