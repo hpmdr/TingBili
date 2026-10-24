@@ -34,6 +34,10 @@ object SettingsRoute
 @Serializable
 object OtherSettingsRoute
 
+/** 二级页：本机音频解码器实测列表（MediaCodecList 枚举，仅展示定位用） */
+@Serializable
+object AudioDecodersRoute
+
 /** 独立全屏页：搜索 */
 @Serializable
 object SearchRoute

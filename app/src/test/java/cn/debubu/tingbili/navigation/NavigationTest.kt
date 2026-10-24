@@ -236,4 +236,19 @@ class NavigationTest {
         composeTestRule.runOnIdle { navController.navigate(LoginRoute) }
         composeTestRule.onNodeWithText("登录哔哩哔哩").assertIsDisplayed()
     }
+
+    @Test
+    fun `audioDecodersRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = OtherSettingsRoute) {
+                composable<OtherSettingsRoute> { Text("other settings") }
+                composable<AudioDecodersRoute> { Text("audio decoders") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(AudioDecodersRoute) }
+        composeTestRule.onNodeWithText("audio decoders").assertIsDisplayed()
+    }
 }

@@ -55,12 +55,6 @@ class OtherSettingsViewModel @Inject constructor(
         }
     }
 
-    /** 本机音频解码器实测列表(MediaCodecList 枚举 audio/ 解码器, 仅展示定位用). */
-    private val _audioDecoders = MutableStateFlow<List<cn.debubu.tingbili.core.media.AudioDecoderInfo>>(emptyList())
-    val audioDecoders: StateFlow<List<cn.debubu.tingbili.core.media.AudioDecoderInfo>> = _audioDecoders.asStateFlow()
-
-    private val _audioDecodersLoading = MutableStateFlow(false)
-    val audioDecodersLoading: StateFlow<Boolean> = _audioDecodersLoading.asStateFlow()
 
     private val _cacheStats = MutableStateFlow(CacheStats())
     val cacheStats: StateFlow<CacheStats> = _cacheStats.asStateFlow()
@@ -75,20 +69,6 @@ class OtherSettingsViewModel @Inject constructor(
 
     init {
         refreshCacheStats()
-        refreshAudioDecoders()
-    }
-
-    /** 重读本机音频解码器(IO 线程枚举, 失败置空不抛). */
-    fun refreshAudioDecoders() {
-        viewModelScope.launch {
-            _audioDecodersLoading.value = true
-            _audioDecoders.value = try {
-                cn.debubu.tingbili.core.media.AudioDecoderInspector.queryAudioDecoders()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            _audioDecodersLoading.value = false
-        }
     }
 
 
