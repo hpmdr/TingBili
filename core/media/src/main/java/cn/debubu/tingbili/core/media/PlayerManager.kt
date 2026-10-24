@@ -8,12 +8,9 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.PlayQueueDao
-import cn.debubu.tingbili.core.data.db.PlayQueueJson
-import cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
-import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,8 +57,24 @@ class PlayerManager @Inject constructor(
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
-    private var queue: List<Track> = emptyList()
-    private var currentIndex: Int = -1
+    // ── 队列：唯一真相源在 QueueManager；这里只读镜像（赋值一律走 manager）──
+    private val queueManager = QueueManager(playQueue, prefs)
+
+    private val queueListener = object : QueueManager.Listener {
+        override fun onQueueChanged(queue: List<Track>, index: Int, sourceTitle: String?) {
+            _state.update {
+                it.copy(
+                    queue = queue,
+                    currentIndex = index,
+                    currentTrack = queue.getOrNull(index),
+                    sourceTitle = sourceTitle,
+                )
+            }
+        }
+    }
+
+    private val queue: List<Track> get() = queueManager.queue
+    private val currentIndex: Int get() = queueManager.currentIndex
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Test hook — inject TestScope to control virtual time for throttle tests. */
@@ -71,6 +84,7 @@ class PlayerManager @Inject constructor(
             // 睡眠任务跟随当前有效作用域：单测注入后切过去，避免旧 Main 作用域泄漏
             value?.let { sleepTimer.attach(it, sleepListener) }
             value?.let { historyTracker.attach(it, historyListener) }
+            value?.let { queueManager.attach(it, queueListener) }
         }
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
     /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
@@ -156,6 +170,7 @@ class PlayerManager @Inject constructor(
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         sleepTimer.attach(scope, sleepListener)
         historyTracker.attach(scope, historyListener)
+        queueManager.attach(scope, queueListener)
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch {
             restoreLastPlayback()
@@ -182,83 +197,23 @@ class PlayerManager @Inject constructor(
     }
 
     /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
+    /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
     suspend fun restoreLastPlayback() {
-        try {
-            // Room 单行快照优先；空表时搬一次 DataStore 旧三键（搬完即删键），之后只走 Room
-            var snapshot = try {
-                playQueue.get()
-            } catch (_: Exception) {
-                null
-            }
-            if (snapshot == null) {
-                val (legacyQueue, legacyIndex, legacyTitle) = try {
-                    prefs.drainLastQueue()
-                } catch (_: Exception) {
-                    Triple(emptyList(), -1, null)
-                }
-                if (legacyQueue.isNotEmpty()) {
-                    snapshot = PlayQueueSnapshotEntity(
-                        tracksJson = PlayQueueJson.encode(legacyQueue.take(100)),
-                        currentIndex = legacyIndex.coerceIn(0, legacyQueue.lastIndex),
-                        sourceTitle = legacyTitle?.takeIf { it.isNotBlank() },
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                    try {
-                        playQueue.save(snapshot)
-                    } catch (_: Exception) {
-                    }
-                }
-            }
-            val savedQueue = snapshot?.let { PlayQueueJson.decode(it.tracksJson) }.orEmpty()
-            if (savedQueue.isEmpty()) return
-            val savedIndex = (snapshot?.currentIndex ?: -1).coerceIn(0, savedQueue.lastIndex)
-            val savedPos = prefs.lastPositionMs.first().coerceAtLeast(0L)
-            val savedSourceTitle = snapshot?.sourceTitle
-            val track = savedQueue.getOrNull(savedIndex) ?: return
-            queue = savedQueue
-            currentIndex = savedIndex
-            val speed = prefs.speed.first()
-            val repeat = prefs.repeatMode.first()
-            val clampedPos = savedPos.coerceIn(0L, track.durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
-            _state.update {
-                it.copy(
-                    queue = savedQueue,
-                    currentIndex = savedIndex,
-                    currentTrack = track,
-                    sourceTitle = savedSourceTitle,
-                    positionMs = clampedPos,
-                    durationMs = track.durationMs,
-                    isPlaying = false,
-                    speed = speed,
-                    repeatMode = repeat
-                )
-            }
-        } catch (_: Exception) {
-            // 损坏数据忽略，保持空状态
+        val r = queueManager.restore() ?: return
+        val track = r.queue.getOrNull(r.index) ?: return
+        _state.update {
+            it.copy(
+                queue = r.queue,
+                currentIndex = r.index,
+                currentTrack = track,
+                sourceTitle = r.sourceTitle,
+                positionMs = r.positionMs,
+                durationMs = track.durationMs,
+                isPlaying = false,
+                speed = r.speed,
+                repeatMode = r.repeatMode
+            )
         }
-    }
-
-    private suspend fun saveQueueSnapshot(tracks: List<Track>, index: Int, sourceTitle: String?) {
-        if (tracks.isEmpty() || index !in tracks.indices) return
-        val capped = if (tracks.size > MAX_QUEUE_SNAPSHOT) tracks.take(MAX_QUEUE_SNAPSHOT) else tracks
-        val snapshot = PlayQueueSnapshotEntity(
-            tracksJson = PlayQueueJson.encode(capped),
-            currentIndex = index.coerceIn(0, capped.lastIndex),
-            sourceTitle = sourceTitle?.takeIf { it.isNotBlank() },
-            updatedAt = System.currentTimeMillis(),
-        )
-        // 单行 Upsert 原子落盘：队列/下标/合集名要么一起新，要么一起旧
-        try {
-            playQueue.save(snapshot)
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun persistQueue() {
-        val q = queue
-        val idx = currentIndex
-        if (q.isEmpty() || idx !in q.indices) return
-        effectiveScope().launch { saveQueueSnapshot(q, idx, _state.value.sourceTitle) }
     }
 
     private fun persistPosition(pos: Long) {
@@ -345,8 +300,7 @@ class PlayerManager @Inject constructor(
             val old = queue
             if (old.isEmpty() || currentIndex !in old.indices) {
                 // 无有效队列：收下新列表等用户点（本来也没在播，不碰 transport）
-                queue = newTracks
-                currentIndex = -1
+                queueManager.adoptTracks(newTracks, title)
                 _state.update { it.copy(queue = newTracks, currentIndex = -1, currentTrack = null, sourceTitle = title) }
                 return QueueRefreshResult(0, 0, 0)
             }
@@ -377,18 +331,8 @@ class PlayerManager @Inject constructor(
                 val nowMs = System.currentTimeMillis()
                 added = spliceTransport(plan, urlMap, urlCache, imageFormat, nowMs)
             }
-            // transport 对不上时只更新 UI（added 按新增 key 数报数，保持旧语义）
-            queue = plan.final
-            currentIndex = plan.playingFinalIdx
-            _state.update {
-                it.copy(
-                    queue = plan.final,
-                    currentIndex = plan.playingFinalIdx,
-                    currentTrack = plan.final.getOrNull(plan.playingFinalIdx),
-                    sourceTitle = title,
-                )
-            }
-            persistQueue()
+            // 队列真相唯一在 QueueManager（同步经 listener）；added 按新增 key 数报数，保持旧语义
+            queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title)
             return QueueRefreshResult(
                 if (transportOk) added else plan.addedIfNoTransport,
                 plan.removed,
@@ -497,8 +441,6 @@ class PlayerManager @Inject constructor(
                     .takeIf { it >= 0 }
                 ?: 0
             val playableTracks = items.map { it.first }
-            queue = playableTracks
-            currentIndex = startIndex
             val resolvedStartPosition = startPositionMs
                 ?.coerceAtLeast(0L)
                 ?.coerceAtMost(playableTracks[startIndex].durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
@@ -506,7 +448,7 @@ class PlayerManager @Inject constructor(
 
             // 持久化队列与起点，供下次冷启动恢复（Room 单行原子快照 + DataStore 进度）
             val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
-            effectiveScope().launch { saveQueueSnapshot(playableTracks, startIndex, resolvedSourceTitle) }
+            queueManager.setActiveQueue(playableTracks, startIndex, resolvedSourceTitle)
             persistPosition(resolvedStartPosition)
             transport.setMediaItems(
                 items.map { (track, url) -> track.toMediaItem(url, imageFormat) },
@@ -717,8 +659,6 @@ class PlayerManager @Inject constructor(
     private var urlRefreshRetry = 0
     private var urlRefreshJob: Job? = null
     private companion object {
-        /** 队列快照上限（与旧 DataStore 版一致，控单行 JSON 大小） */
-        const val MAX_QUEUE_SNAPSHOT = 100
         const val MAX_URL_REFRESH_RETRY = 2
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
     }
@@ -750,7 +690,7 @@ class PlayerManager @Inject constructor(
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val idx = transport.currentMediaItemIndex
                 if (idx in queue.indices) {
-                    currentIndex = idx
+                    queueManager.moveCurrentTo(idx)
                     _state.update {
                         it.copy(
                             currentIndex = idx,
@@ -760,7 +700,6 @@ class PlayerManager @Inject constructor(
                             durationMs = queue[idx].durationMs,
                         )
                     }
-                    persistQueue()
                     // 切歌即时刷一次历史：节流 10s 下，播完一切就落盘，不用等下一 tick
                     effectiveScope().launch { historyTracker.flush() }
                     urlRefreshRetry = 0
