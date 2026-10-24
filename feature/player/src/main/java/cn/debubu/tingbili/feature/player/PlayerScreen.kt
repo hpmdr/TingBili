@@ -522,7 +522,7 @@ private fun PlaybackInfoSheet(
             val initializing = info.decoderName == null && !info.offloadSleeping
             PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
             PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
-            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启但本次未接管（来电/蓝牙/变速/格式等原因），已自动回落，保证不断播")
+            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启，当前不支持，已自动回落")
             PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
