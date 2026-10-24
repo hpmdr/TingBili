@@ -120,6 +120,7 @@ fun PlayerScreen(
     val qualityLabel by vm.audioQualityLabel.collectAsStateWithLifecycle()
     val qualityLine by vm.qualityLine.collectAsStateWithLifecycle()
     val audioOptions by vm.audioOptions.collectAsStateWithLifecycle()
+    val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
@@ -427,6 +428,8 @@ fun PlayerScreen(
                 }
             },
             onDismiss = { showQualitySheet = false },
+            showLoginHint = !loggedIn,
+            onLoginClick = { showQualitySheet = false; onLoginClick() },
         )
     }
 }
@@ -494,9 +497,9 @@ private fun PlaybackInfoSheet(
         ) {
             Text(text = "播放信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            PlaybackInfoRow("解码器", info.decoderName ?: "尚未初始化")
-            PlaybackInfoRow("解码方式", info.decoderKind)
-            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭" else if (info.offloadSleeping) "生效中(DSP 接管)" else "已开启但未接管(变速/蓝牙/格式不支持时自动回落)")
+            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "尚未初始化")
+            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else info.decoderKind)
+            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启但本次未接管（来电/蓝牙/变速/格式等原因），已自动回落，保证不断播")
             PlaybackInfoRow("封装/编码", info.mimeType ?: "未知")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
@@ -508,6 +511,7 @@ private fun PlaybackInfoSheet(
             PlaybackInfoRow("倍速", "${info.speed}x")
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
+                Text(text = "小知识：DSP 卸载就是把解码交给低功耗芯片、主芯片休眠来省电；条件不满足时自动回落，不断播。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 Text(text = "DSP 省电开启时不支持倍速, 已保持 1.0x; 关闭卸载后可变速.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             }
         }
@@ -529,6 +533,8 @@ private fun AudioQualitySheet(
     onRetry: () -> Unit,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
+    showLoginHint: Boolean,
+    onLoginClick: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -540,7 +546,7 @@ private fun AudioQualitySheet(
         ) {
             Text(text = "切换音质", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                text = "高音质需登录；所选档位不可用时自动用可用最高档，不断播",
+                text = "只列出本视频实际提供的档位（从高到低）；换档不断播",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -582,11 +588,37 @@ private fun AudioQualitySheet(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                            }
                                 if (item.selected) {
                                     Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                } else if (item.locked) {
-                                    Text(text = "去登录", color = MaterialTheme.colorScheme.primary)
                                 }
+                        }
+                    }
+                    if (showLoginHint) {
+                        Surface(
+                            onClick = onLoginClick,
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "登录解锁更高音质",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "192K / 杜比 / Hi-Res 需登录（部分需大会员）",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(text = "去登录 ›", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }

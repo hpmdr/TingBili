@@ -34,7 +34,7 @@ PiliPlus `VideoUtils.findTargetAudio`（`lib/utils/video_utils.dart`）取
 
 ## 3. 登录门槛（诚实展示，不欺骗）
 
-- 面板按 canonical 六档全列：服务端本次返回里有的标可用，没有的标“当前不可用”。
+- 面板只列服务端本次返回的可用档（动态、分视频），从高到低，✓ 落在有效档；未登录时底部给“登录解锁更高音质”入口（192K/杜比/Hi-Res），列表里不再出现点不了的档。
 - `requiresLogin` 档（192K 及以上）未登录点选：Toast“该音质需登录后使用，请先登录”
   并跳登录页；已登录可照常选（无会员时服务端不给杜比/Hi-Res，自动回落，不断播）。
 - 与字幕共用同一登录态（`AuthRepository.sessionFlow`）。

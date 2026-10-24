@@ -507,24 +507,33 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 面板只列本视频实际拿到的档位（服务端已按登录/会员态过滤，未登录通常只有 64K/132K），
+     * 从高到低排，✓ 落在按偏好选中的有效档。拿不到更高档时屏端用底部“登录解锁”入口引导
+     * （见 AudioQualitySheet showLoginHint），列表里不再出现点不了的档位。
+     */
     private fun buildOptions(raw: List<DashAudio>, prefer: Int, loggedIn: Boolean): AudioOptionsUi.Ready {
-        val available = raw.map { it.id }.toSet()
-        val effective = raw.pickAudio(prefer)?.id
-        val rows = AudioQuality.values.map { q ->
-            val has = available.contains(q.code)
-            val needLogin = q.requiresLogin && !loggedIn
-            AudioOptionUi(
-                code = q.code,
-                title = q.desc + if (has) "" else "（当前不可用）",
-                subTitle = when {
-                    q.vipOnly -> "需登录·大会员"
-                    q.requiresLogin -> "需登录"
-                    else -> "免登录"
-                },
-                locked = needLogin,
-                selected = q.code == (effective ?: prefer),
+        if (raw.isEmpty()) {
+            val q = AudioQuality.fromCode(prefer)
+            return AudioOptionsUi.Ready(
+                listOf(AudioOptionUi(prefer, q.desc, "本视频仅单轨", locked = false, selected = true)),
+                prefer,
             )
         }
+        val effective = raw.pickAudio(prefer)?.id
+        val rows = raw
+            .sortedWith(compareByDescending<DashAudio> { AudioQuality.fromCode(it.id).rank }.thenByDescending { it.bandwidth })
+            .distinctBy { it.id }
+            .map { a ->
+                val q = AudioQuality.fromCode(a.id)
+                AudioOptionUi(
+                    code = a.id,
+                    title = q.desc,
+                    subTitle = if (a.bandwidth > 0) "约 ${a.bandwidth / 1000} kbps" else "本视频提供",
+                    locked = false,
+                    selected = a.id == (effective ?: prefer),
+                )
+            }
         return AudioOptionsUi.Ready(rows, effective)
     }
 
