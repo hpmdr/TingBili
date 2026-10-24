@@ -22,6 +22,7 @@ import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.search.SearchScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
+import cn.debubu.tingbili.feature.mine.CacheScreen
 import cn.debubu.tingbili.feature.mine.BiliFavDetailScreen
 import cn.debubu.tingbili.feature.mine.BiliFavFoldersScreen
 import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
@@ -130,8 +131,11 @@ fun AppRootNavHost(
         composable<OtherSettingsRoute> {
             OtherSettingsScreen(
                 onBack = { navController.popBackStack() },
-                onOpenAudioDecoders = { navController.navigate(AudioDecodersRoute) },
+                onOpenCache = { navController.navigate(CacheRoute) },
             )
+        }
+        composable<CacheRoute> {
+            CacheScreen(onBack = { navController.popBackStack() })
         }
         composable<AudioDecodersRoute> {
             AudioDecodersScreen(onBack = { navController.popBackStack() })

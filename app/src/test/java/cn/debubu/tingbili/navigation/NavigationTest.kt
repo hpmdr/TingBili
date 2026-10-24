@@ -253,6 +253,21 @@ class NavigationTest {
     }
 
     @Test
+    fun `cacheRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = OtherSettingsRoute) {
+                composable<OtherSettingsRoute> { Text("storage") }
+                composable<CacheRoute> { Text("cache") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(CacheRoute) }
+        composeTestRule.onNodeWithText("cache").assertIsDisplayed()
+    }
+
+    @Test
     fun `qualityRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {

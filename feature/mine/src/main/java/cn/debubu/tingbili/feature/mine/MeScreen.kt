@@ -160,7 +160,7 @@ fun MeScreen(
                     icon = Icons.Filled.Tune,
                     iconTint = Color(0xFF8B5CF6),
                     iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
-                    title = "其他设置",
+                    title = "存储与缓存",
                     subtitle = "图片格式、缓存清理",
                     onClick = onOpenOtherSettings
                 )

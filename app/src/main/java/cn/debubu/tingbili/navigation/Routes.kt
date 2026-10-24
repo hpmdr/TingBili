@@ -30,9 +30,13 @@ object AppearanceRoute
 @Serializable
 object SettingsRoute
 
-/** 二级页：其他设置（图片格式 / 音频缓存） */
+/** 二级页：存储与缓存（用量总览 / 图片格式 / 首页推荐词） */
 @Serializable
 object OtherSettingsRoute
+
+/** 二级页：缓存管理（存储与缓存 → 缓存管理进入，唯一入口） */
+@Serializable
+object CacheRoute
 
 /** 二级页：默认音质（播放设置 → 默认音质进入，唯一入口） */
 @Serializable
