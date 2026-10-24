@@ -160,28 +160,24 @@ class PlayerManager @Inject constructor(
      */
 
 
-    /** offload 开关镜像(Service 侧做实时下发, 这里只做倍速互斥; 默认开, 随 prefs 缺省 true). */
-    @Volatile
-    private var offloadEnabled = false
+    // ── 音频管线策略：offload×倍速互斥 + 开关镜像（选型/下发逻辑在组件内）──
+    private val audioPolicy = AudioPipelinePolicy(prefs, transport)
+
+    private val audioListener = object : AudioPipelinePolicy.Listener {
+        override fun currentSpeed(): Float = _state.value.speed
+        override fun onSpeedResetTo1x() { _state.update { it.copy(speed = 1f) } }
+    }
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         sleepTimer.attach(scope, sleepListener)
         historyTracker.attach(scope, historyListener)
         queueManager.attach(scope, queueListener)
+        audioPolicy.attach(scope, audioListener)
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch {
             restoreLastPlayback()
             restoreSleepTimer()
         }
-        // 硬解开关实时镜像：解码器每次建实例都查最新值，切换后下一首生效，无需重建播放器
-        scope.launch {
-            prefs.audioHwDecode.collect { PreferHardwareAudioDecoderSelector.preferHardware = it }
-        }
-        // offload 开关实时镜像: 开时若倍速非 1.0x 则回 1.0x(DSP 管线不支持变速)
-        scope.launch {
-            prefs.audioOffload.collect { applyAudioOffload(it) }
-        }
-        // DataStore playurl 大 Map 一次性搬进 Room（读完即删键，之后不再写入旧位置）
         scope.launch {
             try {
                 val legacy = prefs.drainPlayUrlCache()
@@ -532,28 +528,18 @@ class PlayerManager @Inject constructor(
 
     /**
      * offload 开启时 DSP 管线不支持变速: 非 1.0x 请求直接拒绝并提示, 不断播.
-     * 开关打开瞬间若正处变速, 由 applyAudioOffload 一次性回 1.0x.
+     * 开关打开瞬间若正处变速, 由 AudioPipelinePolicy 一次性回 1.0x.
+     */
+    /**
+     * offload 开启时 DSP 管线不支持变速: 非 1.0x 请求直接拒绝并提示, 不断播.
+     * 开关打开瞬间若正处变速, 由 AudioPipelinePolicy 一次性回 1.0x.
      */
     suspend fun setSpeed(speed: Float) {
-        val clamped = speed.coerceIn(0.5f, 3.0f)
-        if (offloadEnabled && clamped != 1f) {
-            _state.update { it.copy(errorMessage = "DSP 省电开启时不支持倍速，已保持 1.0x") }
-            return
-        }
-        prefs.setSpeed(clamped)
-        transport.setPlaybackSpeed(clamped)
-        _state.update { it.copy(speed = clamped, errorMessage = null) }
-    }
-
-    private suspend fun applyAudioOffload(enabled: Boolean) {
-        offloadEnabled = enabled
-        if (enabled && _state.value.speed != 1f) {
-            prefs.setSpeed(1f)
-            try {
-                transport.setPlaybackSpeed(1f)
-            } catch (_: Exception) {
-            }
-            _state.update { it.copy(speed = 1f) }
+        when (val r = audioPolicy.requestSpeed(speed)) {
+            is AudioPipelinePolicy.SpeedResult.Applied ->
+                _state.update { it.copy(speed = r.speed, errorMessage = null) }
+            AudioPipelinePolicy.SpeedResult.BlockedByOffload ->
+                _state.update { it.copy(errorMessage = "DSP 省电开启时不支持倍速，已保持 1.0x") }
         }
     }
 
@@ -585,6 +571,7 @@ class PlayerManager @Inject constructor(
         historyTracker.release()
         urlRefreshJob?.cancel(); urlRefreshJob = null
         sleepTimer.release()
+        audioPolicy.release()
     }
 
     private var urlRefreshRetry = 0
