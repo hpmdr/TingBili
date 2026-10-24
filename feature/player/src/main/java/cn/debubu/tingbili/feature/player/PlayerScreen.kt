@@ -414,6 +414,7 @@ fun PlayerScreen(
         PlaybackInfoSheet(
             info = pipelineInfo,
             qualityLine = qualityLine,
+            hasTrack = trackUi.track != null,
             onDismiss = { showInfoSheet = false },
         )
     }
@@ -479,12 +480,16 @@ private fun PlayerMoreSheet(
     }
 }
 
-/** 播放信息: 解码器/方式/offload/格式/倍速, 只读展示. */
+/**
+ * 播放信息：有在播时展示管线快照（解码器/方式/offload/格式/倍速），只读。
+ * 暂无在播时切空态：技术行整组隐藏，只留开关与偏好行 + 一句引导，不再满屏"未知"。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
     qualityLine: String,
+    hasTrack: Boolean,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -497,22 +502,41 @@ private fun PlaybackInfoSheet(
         ) {
             Text(text = "播放信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "尚未初始化")
-            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else info.decoderKind)
+            if (!hasTrack) {
+                PlaybackInfoRow("当前状态", "暂无在播")
+                Text(
+                    text = "播一集后，这里会显示解码器、格式、码率等真实管线参数；下面是当前开关与偏好，随时可改。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(Modifier.height(4.dp))
+                PlaybackInfoRow(
+                    "DSP 卸载",
+                    if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）"
+                    else "已开启，播放时条件满足会自动接管"
+                )
+                PlaybackInfoRow("音质", qualityLine)
+                PlaybackInfoRow("倍速", "${info.speed}x")
+            } else {
+            // 有在播：管线参数尚未就绪时显示"读取中…"（如切集瞬间），不写"未知"吓人。
+            val initializing = info.decoderName == null && !info.offloadSleeping
+            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
+            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
             PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启但本次未接管（来电/蓝牙/变速/格式等原因），已自动回落，保证不断播")
-            PlaybackInfoRow("封装/编码", info.mimeType ?: "未知")
+            PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
             val bitrateKbps = info.bitrateKbps
-            PlaybackInfoRow("码率", if (bitrateKbps != null) "$bitrateKbps kbps" else "未知")
+            PlaybackInfoRow("码率", if (bitrateKbps != null) "$bitrateKbps kbps" else "读取中…")
             PlaybackInfoRow("音质", qualityLine)
-            PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "未知")
-            PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "未知")
+            PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "读取中…")
+            PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "读取中…")
             PlaybackInfoRow("倍速", "${info.speed}x")
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
                 Text(text = "小知识：DSP 卸载就是把解码交给低功耗芯片、主芯片休眠来省电；条件不满足时自动回落，不断播。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 Text(text = "DSP 省电开启时不支持倍速, 已保持 1.0x; 关闭卸载后可变速.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
             }
         }
     }
