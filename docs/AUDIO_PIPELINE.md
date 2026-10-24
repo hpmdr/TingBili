@@ -80,11 +80,11 @@ L2 CPU 软解（OMX.google.* / c2.android.*）
 | 决策 | 落点 |
 |---|---|
 | 音频限域硬解重排（HW > 未知 > SW，同组保系统原序） | `core/media/.../PreferHardwareAudioDecoderSelector.kt` |
-| 开关实时镜像（硬解下一首生效；offload 由 Service 实时下发，下一首生效） | `core/media/.../PlayerManager.kt` + `core/media/.../TingBiliPlaybackService.kt` |
+| 开关实时镜像（硬解下一首生效；offload 由 Service 实时下发，下一首生效） | core/media/.../AudioPipelinePolicy.kt（镜像收集）+ PlayerManager.kt（facade 转发）+ TingBiliPlaybackService.kt |
 | offload 意愿（ENABLED/gapless 开/变速关）+ decoderFallback 显式开 | `core/media/.../ServicePlayerModule.kt` |
 | 真进 DSP / 真实解码器名 / 音频格式打点 | `TingBiliPlaybackService` → `AudioPipelineMonitor` |
 | 两开关默认开（§6 决策 1；开关住播放与音频设置） | `PreferencesRepository`（缺省 `true`）+ `feature/mine/.../SettingsScreen.kt` / `SettingsViewModel.kt` |
-| offload 开启时禁用倍速（§6 决策 4） | `PlayerManager.setSpeed` 钳制 + 错误提示 |
+| offload 开启时禁用倍速（§6 决策 4） | AudioPipelinePolicy.requestSpeed 决策 + PlayerManager.setSpeed 报提示 |
 | 播放页右上 ⋮ → 播放信息（解码器/方式/码率/采样率/声道/offload 态） | `feature/player/.../PlayerScreen.kt` + `PlayerViewModel.pipelineInfo` |
 | 其他设置 → 本机音频解码器独立页（`AudioDecodersRoute`） | `core/media/.../AudioDecoderInspector.kt` + `feature/mine/.../AudioDecodersScreen.kt` / `AudioDecodersViewModel.kt` |
 

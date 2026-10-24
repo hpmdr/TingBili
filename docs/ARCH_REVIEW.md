@@ -121,3 +121,10 @@ feature:* → core:ui + core:data + core:media + data:bilibili   ← 每个 feat
 
 - 第 4 项（缓存搬家）关闭：真机数据 `HomeSnapshot 4.4KB / Subtitle 200KB(50集上限几MB) / PlayUrl 39KB`——Room 现状合理，**文件缓存不做**；只修两处主线程 JSON/IO（见 PERF_AUDIT 当日条目）。`AppCacheManager` stats 已在 IO，无需 `core:cache` 模块。
 - 剩余结构项：队列真相长期（纯 Room 队列表）暂缓；ThemeConfig/AppState 拆分暂缓（已评估无收益）。架构 Top5 实质收官，剩下按 PERF Top10 消尾即可。
+
+## 落地进度（2026-10-24，播放核心拆分 @5948080）
+
+- 播放核心 A 全拆收官（详见 docs/PLAYBACK_CORE_REVIEW.md）：PlayerManager 1090→666 行，变薄 facade（只做编排+状态合入）。
+- 新组件：QueueRefreshPlanner（刷新计划纯函数）/ SleepTimer（时间逻辑+Store 口）/ HistoryTracker（单 tick 合并位置轮询与历史节流）/ QueueManager（队列唯一真相源，内存+Room 快照+恢复）/ PlayUrlPipeline（cid 补齐+解析+组装+刷新+可恢复判定）/ AudioPipelinePolicy（offload×倍速互斥+开关镜像）/ PlaybackEventHandler（切歌/播停/缓冲/错误回调+重试决策）。transport 只做渲染镜像，对不上时只更新 UI。
+- 对外 API 零变化（PlayerViewModel 零改）；单测 74（27 个旧行为锁全绿 + 47 个新单测）；eature 仍只认 core 接口。
+- 第 3 项（队列真相）短期目标达成：唯一真相源收进 QueueManager，mirror 对齐只剩 transport 渲染镜像；纯 Room 播放队列表（长期）仍暂缓。

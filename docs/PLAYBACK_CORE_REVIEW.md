@@ -6,6 +6,13 @@
 > 本文方法：`PlayerManager.kt`（1090 行）逐段精读 + Media3 官方文档/UAMP 标杆对照。
 > 按 AGENTS.md 约定：先落设计文档，等拍板再动手，本次不改一行实现代码。
 
+## 落地状态（2026-10-24：A 全拆已执行）
+
+- 8 个提交：5d9acce Planner 纯函数 → ac777b SleepTimer → 17bb111 HistoryTracker 单 tick → f2e537 QueueManager → d1ddf37 PlayUrlPipeline → d2e948 AudioPipelinePolicy → 5948080 PlaybackEventHandler。
+- PlayerManager 1090→666 行：facade 只剩编排（play/refreshQueue 编排 + transport 控件 + 状态合入），§5 的 7 个组件全部落地（另加 PlaybackEventHandler 事件与重试决策）。
+- 单测 74 全绿：27 个旧行为锁（睡眠×6/刷新×3/历史节流/403 刷新/恢复等）一个没动全过 + 47 个新单测；对外 API 零变化，PlayerViewModel 零改。
+- §6 步骤 7（删一次性搬家代码）暂缓：等确认线上无旧版用户后再动。
+
 ## 1. 业界播放核心长什么样（标杆）
 
 ### 1.1 Media3 官方分层：Service 持 Player，UI 只经 Controller
