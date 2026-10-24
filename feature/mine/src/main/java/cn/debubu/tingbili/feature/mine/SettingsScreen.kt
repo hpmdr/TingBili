@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,7 +23,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +31,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -51,12 +48,13 @@ import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 
-/** 二级页：播放设置（步长 / 字幕 / 解码开关 / 默认音质）。主题在「外观」，缓存在「存储与缓存」。 */
+/** 二级页：播放设置（步长 / 字幕 / 解码开关）。默认音质独立页，主题在「外观」，缓存在「存储与缓存」。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAudioDecoders: () -> Unit,
+    onOpenQuality: () -> Unit,
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
@@ -66,7 +64,6 @@ fun SettingsScreen(
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
     var showStepSheet by remember { mutableStateOf(false) }
     var showSubtitleDialog by remember { mutableStateOf(false) }
-    var showQualitySheet by remember { mutableStateOf(false) }
     val darkTheme = LocalDarkTheme.current
 
     TingBiliScaffold(
@@ -158,7 +155,7 @@ fun SettingsScreen(
                         title = "默认音质",
                         subtitle = "高档需登录/会员，拿不到自动回落",
                         value = AudioQuality.fromCode(audioQuality).shortDesc,
-                        onClick = { showQualitySheet = true }
+                        onClick = onOpenQuality
                     )
                 }
             }
@@ -177,13 +174,6 @@ fun SettingsScreen(
             current = subtitleScale,
             onSelect = { vm.setSubtitleScale(it); showSubtitleDialog = false },
             onDismiss = { showSubtitleDialog = false }
-        )
-    }
-    if (showQualitySheet) {
-        DefaultQualitySheet(
-            current = audioQuality,
-            onSelect = { vm.setAudioQuality(it); showQualitySheet = false },
-            onDismiss = { showQualitySheet = false },
         )
     }
 }
@@ -263,63 +253,4 @@ private fun SubtitleScaleDialog(
             TextButton(onClick = onDismiss) { Text("关闭") }
         }
     )
-}
-
-/** 默认音质档位说明见 AUDIO_QUALITY.md（门槛只做标注，落盘不拦，播放时拿不到自动回落）。 */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DefaultQualitySheet(
-    current: Int,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(text = "默认音质", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = "新播放默认用这档，实际能拿到哪档由登录和会员状态决定，拿不到自动回落。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            AudioQuality.values.forEach { q ->
-                val selected = q.code == current
-                Surface(
-                    onClick = { onSelect(q.code) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = q.desc,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            )
-                            Text(
-                                text = if (q.vipOnly) "需登录/大会员" else if (q.requiresLogin) "需登录" else "免登录",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (selected) {
-                            Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

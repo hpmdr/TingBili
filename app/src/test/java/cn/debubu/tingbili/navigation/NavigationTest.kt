@@ -251,4 +251,19 @@ class NavigationTest {
         composeTestRule.runOnIdle { navController.navigate(AudioDecodersRoute) }
         composeTestRule.onNodeWithText("audio decoders").assertIsDisplayed()
     }
+
+    @Test
+    fun `qualityRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = SettingsRoute) {
+                composable<SettingsRoute> { Text("settings") }
+                composable<QualityRoute> { Text("quality") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(QualityRoute) }
+        composeTestRule.onNodeWithText("quality").assertIsDisplayed()
+    }
 }

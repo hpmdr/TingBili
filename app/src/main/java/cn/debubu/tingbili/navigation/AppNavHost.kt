@@ -28,6 +28,7 @@ import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
 import cn.debubu.tingbili.feature.mine.BiliToviewScreen
 import cn.debubu.tingbili.feature.mine.MeScreen
 import cn.debubu.tingbili.feature.mine.OtherSettingsScreen
+import cn.debubu.tingbili.feature.mine.QualityScreen
 import cn.debubu.tingbili.feature.mine.SettingsScreen
 
 @Composable
@@ -120,7 +121,11 @@ fun AppRootNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenAudioDecoders = { navController.navigate(AudioDecodersRoute) },
+                onOpenQuality = { navController.navigate(QualityRoute) },
             )
+        }
+        composable<QualityRoute> {
+            QualityScreen(onBack = { navController.popBackStack() })
         }
         composable<OtherSettingsRoute> {
             OtherSettingsScreen(

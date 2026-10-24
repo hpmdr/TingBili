@@ -184,6 +184,7 @@ fun SettingRadioRow(
     subtitle: String? = null,
     selected: Boolean,
     onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -218,5 +219,6 @@ fun SettingRadioRow(
                 Text(subtitle, fontSize = 11.sp, color = Color.Gray)
             }
         }
+        trailing?.invoke()
     }
 }
