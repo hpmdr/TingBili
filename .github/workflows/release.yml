@@ -19,6 +19,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 中文更新说明要读上一个 tag 以来的提交，必须全量历史（默认浅克隆读不到）
+          fetch-depth: 0
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
@@ -94,8 +97,24 @@ jobs:
             echo "Release $TAG 已存在：先去 Releases 页删除再重打" >&2
             exit 1
           fi
+          # 中文更新说明：上一个 tag 以来的提交（去 conventional 前缀）+ 下载校验指引。
+          PREV="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+          {
+            echo "## 更新内容"
+            echo ""
+            git log "$RANGE" --pretty=format:'- %s' --reverse | sed -E 's/^- (feat|fix|docs|test|refactor|chore)(\([^)]*\))?: /- /'
+            echo ""
+            echo ""
+            echo "## 下载与校验"
+            echo ""
+            echo "- 手机浏览器直接打开下面的 apk 安装即可（正式签名，可覆盖更新）。"
+            echo "- 校验包完整性：`sha256sum -c <apk 文件名>.sha256`。"
+            echo "- debug 包与 release 包签名不同：之前装过 debug 版的需先卸载再装（本地听书进度会丢，B 站歌单不受影响）。"
+          } > /tmp/notes.md
+          cat /tmp/notes.md
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --notes "手动发版 $TAG" "$APK" "$APK.sha256"
+            gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --notes-file /tmp/notes.md "$APK" "$APK.sha256"
           else
-            gh release create "$TAG" --title "$TAG" --generate-notes "$APK" "$APK.sha256"
+            gh release create "$TAG" --title "$TAG" --notes-file /tmp/notes.md "$APK" "$APK.sha256"
           fi
