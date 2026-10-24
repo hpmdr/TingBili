@@ -115,6 +115,7 @@ fun PlayerScreen(
     val progUi by vm.progressUi.collectAsStateWithLifecycle()
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
     val pipelineBadge by vm.pipelineBadge.collectAsStateWithLifecycle()
+    val pipelineInfo by vm.pipelineInfo.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
@@ -133,6 +134,7 @@ fun PlayerScreen(
     var showChapterSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
+    var showInfoSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -385,6 +387,10 @@ fun PlayerScreen(
         PlayerMoreSheet(
             refreshing = isRefreshing,
             onRefresh = { vm.refreshBv() },
+            onInfo = {
+                showMoreSheet = false
+                showInfoSheet = true
+            },
             onDetail = {
                 trackUi.track?.bvid?.takeIf { it.isNotBlank() }?.let(onDetailClick)
                 showMoreSheet = false
@@ -396,14 +402,21 @@ fun PlayerScreen(
             onDismiss = { showMoreSheet = false },
         )
     }
+    if (showInfoSheet) {
+        PlaybackInfoSheet(
+            info = pipelineInfo,
+            onDismiss = { showInfoSheet = false },
+        )
+    }
 }
 
-/** 右上 ⋮ 动作表：刷新当前内容 / 查看 BV 详情 / 播放设置（切字幕/定时等仍在原位） */
+/** 右上 ⋮ 动作表：刷新当前内容 / 播放信息 / 查看 BV 详情 / 播放设置（切字幕/定时等仍在原位） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerMoreSheet(
     refreshing: Boolean,
     onRefresh: () -> Unit,
+    onInfo: () -> Unit,
     onDetail: () -> Unit,
     onSettings: () -> Unit,
     onDismiss: () -> Unit,
@@ -425,6 +438,11 @@ private fun PlayerMoreSheet(
             )
             PlayerMoreRow(
                 icon = Icons.Filled.Info,
+                label = "播放信息",
+                onClick = onInfo,
+            )
+            PlayerMoreRow(
+                icon = Icons.Filled.List,
                 label = "查看 BV 详情",
                 onClick = onDetail,
             )
@@ -434,6 +452,50 @@ private fun PlayerMoreSheet(
                 onClick = onSettings,
             )
         }
+    }
+}
+
+/** 播放信息: 解码器/方式/offload/格式/倍速, 只读展示. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaybackInfoSheet(
+    info: cn.debubu.tingbili.core.media.PipelineInfo,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(text = "播放信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            PlaybackInfoRow("解码器", info.decoderName ?: "尚未初始化")
+            PlaybackInfoRow("解码方式", info.decoderKind)
+            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭" else if (info.offloadSleeping) "生效中(DSP 接管)" else "已开启但未接管(变速/蓝牙/格式不支持时自动回落)")
+            PlaybackInfoRow("封装/编码", info.mimeType ?: "未知")
+            val codecs = info.codecs
+            if (codecs != null) PlaybackInfoRow("编码参数", codecs)
+            val bitrateKbps = info.bitrateKbps
+            PlaybackInfoRow("码率", if (bitrateKbps != null) "$bitrateKbps kbps" else "未知")
+            PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "未知")
+            PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "未知")
+            PlaybackInfoRow("倍速", "${info.speed}x")
+            if (info.offloadEnabled) {
+                Spacer(Modifier.height(4.dp))
+                Text(text = "DSP 省电开启时不支持倍速, 已保持 1.0x; 关闭卸载后可变速.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackInfoRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.width(96.dp))
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

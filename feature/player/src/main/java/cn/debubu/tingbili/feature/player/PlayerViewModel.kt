@@ -284,6 +284,18 @@ class PlayerViewModel @Inject constructor(
     ) { decoder, sleeping -> pipelineBadge(decoder, sleeping) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    /** 播放信息快照: 解码器/方式/offload/格式/倍速, 右上播放信息入口读取. */
+    val pipelineInfo: StateFlow<cn.debubu.tingbili.core.media.PipelineInfo> = combine(
+        player.state,
+        cn.debubu.tingbili.core.media.AudioPipelineMonitor.decoderName,
+        cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadSleeping,
+        cn.debubu.tingbili.core.media.AudioPipelineMonitor.audioFormat,
+        prefs.audioOffload,
+    ) { s, decoder, sleeping, format, offloadOn ->
+        cn.debubu.tingbili.core.media.PipelineInfo.of(decoder, sleeping, offloadOn, format, s.speed)
+    }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cn.debubu.tingbili.core.media.PipelineInfo())
+
     /**
      * 全量聚合（单测与旧调用兼容用）：生产屏幕改收 trackUi/progressUi/lyricUi，
      * 此处无生产订阅者；事件函数一律读 player.state，禁止回退到 uiState.value。
