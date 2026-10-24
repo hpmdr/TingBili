@@ -5,7 +5,7 @@ import androidx.media3.common.Format
 
 /**
  * 播放信息快照: 播放页右上播放信息入口读取展示.
- * 解码方式判定与 feature/player 的 pipelineBadge 同规则
+ * 解码方式判定规则
  * (c2.android./OMX.google. 为软解, 其余具名解码器视为硬解, 未知返回未知).
  */
 data class PipelineInfo(

@@ -281,12 +281,6 @@ class PlayerViewModel @Inject constructor(
     }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LyricUiState())
 
-    /** 管线徽标：解码器初始化/切歌时更新，offload 睡眠态变化时更新。 */
-    val pipelineBadge: StateFlow<String?> = combine(
-        cn.debubu.tingbili.core.media.AudioPipelineMonitor.decoderName,
-        cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadSleeping,
-    ) { decoder, sleeping -> pipelineBadge(decoder, sleeping) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** 播放信息快照: 解码器/方式/offload/格式/倍速, 右上播放信息入口读取. */
     val pipelineInfo: StateFlow<cn.debubu.tingbili.core.media.PipelineInfo> = combine(
