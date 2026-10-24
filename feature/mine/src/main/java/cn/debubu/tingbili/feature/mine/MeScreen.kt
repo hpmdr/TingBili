@@ -63,6 +63,7 @@ import cn.debubu.tingbili.core.ui.component.SettingRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
+import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
 private val BiliPink = Color(0xFFFB7299)
@@ -78,6 +79,7 @@ private val BiliBlue = Color(0xFF00A1D6)
 fun MeScreen(
     onOpenAppearance: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenQuality: () -> Unit,
     onOpenOtherSettings: () -> Unit,
     onOpenBiliFav: () -> Unit,
     onOpenBiliHistory: () -> Unit,
@@ -92,6 +94,12 @@ fun MeScreen(
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
     val totalListenMs by vm.totalListenMs.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+    val stepSec by vm.stepSec.collectAsStateWithLifecycle()
+    val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
+    val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
+    val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
+    val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
+    val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     var showAbout by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
@@ -138,8 +146,7 @@ fun MeScreen(
                     iconTint = Color(0xFF6366F1),
                     iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
                     title = "外观设置",
-                    subtitle = "主题色、界面选项",
-                    trailing = { Text("主题适配", color = BiliPink, fontSize = 12.sp) },
+                    subtitle = "${darkModeLabel(darkMode)} · ${themeModeLabel(themeMode)}",
                     onClick = onOpenAppearance
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -147,9 +154,18 @@ fun MeScreen(
                     icon = Icons.Filled.Settings,
                     iconTint = Color(0xFF10B981),
                     iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
-                    title = "播放与音频设置",
-                    subtitle = "步长、定时关闭",
+                    title = "播放设置",
+                    subtitle = "步长 ${stepSec}s · 字幕${subtitleScaleLabel(subtitleScale)}",
                     onClick = onOpenSettings
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                SettingRow(
+                    icon = Icons.Filled.Headphones,
+                    iconTint = Color(0xFFFB7299),
+                    iconBg = if (darkTheme) Color(0xFF3B1220) else Color(0xFFFFF0F5),
+                    title = "音质与解码",
+                    subtitle = "${AudioQuality.fromCode(audioQuality).shortDesc} · 硬解${if (audioHwDecode) "开" else "关"}",
+                    onClick = onOpenQuality
                 )
             }
 
@@ -161,7 +177,7 @@ fun MeScreen(
                     iconTint = Color(0xFF8B5CF6),
                     iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
                     title = "存储与缓存",
-                    subtitle = "图片格式、缓存清理",
+                    subtitle = "${formatCacheGb(cacheBytes)} · ${imageFormat.name}",
                     onClick = onOpenOtherSettings
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -467,6 +483,18 @@ private fun androidx.compose.foundation.layout.RowScope.GridItem(
     }
 }
 
+
+private fun darkModeLabel(mode: cn.debubu.tingbili.core.data.model.DarkMode): String = when (mode) {
+    cn.debubu.tingbili.core.data.model.DarkMode.LIGHT -> "浅色"
+    cn.debubu.tingbili.core.data.model.DarkMode.DARK -> "深色"
+    else -> "跟随系统"
+}
+
+private fun themeModeLabel(mode: cn.debubu.tingbili.core.data.model.ThemeMode): String = when (mode) {
+    cn.debubu.tingbili.core.data.model.ThemeMode.SYSTEM -> "跟随系统"
+    cn.debubu.tingbili.core.data.model.ThemeMode.CUSTOM -> "自定义"
+    else -> "默认粉"
+}
 
 // ── 关于对话框 ────────────────────────────────────────
 

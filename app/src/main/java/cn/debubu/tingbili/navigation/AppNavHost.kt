@@ -99,6 +99,7 @@ fun AppRootNavHost(
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
+                    onOpenQuality = { navController.navigate(QualityRoute) },
                     onOpenOtherSettings = { navController.navigate(OtherSettingsRoute) },
                     onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
                     onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },

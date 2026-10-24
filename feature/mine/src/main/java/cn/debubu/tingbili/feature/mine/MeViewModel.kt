@@ -7,6 +7,8 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
+import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +44,26 @@ class MeViewModel @Inject constructor(
 
     val darkMode: StateFlow<DarkMode> = prefs.darkMode.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM
+    )
+
+    /** 设置入口动态副标题用：播放步长 / 字幕缩放 / 音质偏好 / 硬解开关 / 图片格式 / 主题模式 */
+    val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 15
+    )
+    val subtitleScale: StateFlow<Float> = prefs.subtitleScale.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), 1f
+    )
+    val audioQuality: StateFlow<Int> = prefs.audioQuality.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_AUDIO_QUALITY
+    )
+    val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+    val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF
+    )
+    val themeMode: StateFlow<ThemeMode> = prefs.themeMode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DEFAULT
     )
 
     /** 头部明暗快捷切换：当前为暗（含跟随系统且系统暗）则切浅色，否则切深色 */
