@@ -84,6 +84,7 @@ L2 CPU 软解（OMX.google.* / c2.android.*）
 | offload 意愿（ENABLED/gapless 开/变速关）+ decoderFallback 显式开 | `core/media/.../ServicePlayerModule.kt` |
 | 真进 DSP / 真实解码器名 / 音频格式打点 | `TingBiliPlaybackService` → `AudioPipelineMonitor` |
 | 两开关默认开（§6 决策 1；开关住播放与音频设置） | `PreferencesRepository`（缺省 `true`）+ `feature/mine/.../SettingsScreen.kt` / `SettingsViewModel.kt` |
+| 音质偏好/面板/qn 下发/rank 精选（详见 AUDIO_QUALITY.md） | `data/bilibili/.../AudioQuality.kt` + `BiliRepository.getPlayUrl/getAudioOptions` + `PlayerManager.refreshCurrentUrl` + `feature/player/.../PlayerViewModel+PlayerScreen` |
 | offload 开启时禁用倍速（§6 决策 4） | AudioPipelinePolicy.requestSpeed 决策 + PlayerManager.setSpeed 报提示 |
 | 播放页右上 ⋮ → 播放信息（解码器/方式/码率/采样率/声道/offload 态） | `feature/player/.../PlayerScreen.kt` + `PlayerViewModel.pipelineInfo` |
 | 其他设置 → 本机音频解码器独立页（`AudioDecodersRoute`） | `core/media/.../AudioDecoderInspector.kt` + `feature/mine/.../AudioDecodersScreen.kt` / `AudioDecodersViewModel.kt` |
