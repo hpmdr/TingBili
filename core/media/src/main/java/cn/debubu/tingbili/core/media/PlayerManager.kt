@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.PlayQueueDao
@@ -29,11 +28,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Queue owner + playback controller. Single source of truth for UI.
@@ -111,6 +105,9 @@ class PlayerManager @Inject constructor(
             prefs.setLastPosition(pos)
         }
     }
+    // ── 直链管线：cid 补齐 + 解析 + 组装 + 刷新（类 MediaSource 数据源层）──
+    private val playUrlPipeline = PlayUrlPipeline(playUrls, catalog, artwork, playUrlCache)
+
     private val playMutex = Mutex()
 
     // ── 睡眠定时：时间逻辑在 SleepTimer；PlayerManager 只做状态合入 + 到点暂停 ──
@@ -197,7 +194,6 @@ class PlayerManager @Inject constructor(
     }
 
     /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
-    /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
     suspend fun restoreLastPlayback() {
         val r = queueManager.restore() ?: return
         val track = r.queue.getOrNull(r.index) ?: return
@@ -221,64 +217,7 @@ class PlayerManager @Inject constructor(
         effectiveScope().launch { prefs.setLastPosition(pos.coerceAtLeast(0L)) }
     }
 
-    /**
-     * playurl 批量解析：持久缓存命中即用，未命中并发补（限 4 并发防风控），结果回写。
-     * 返回 track→url（解析失败的项直接丢掉，调用方跳过）。
-     */
-    private suspend fun resolveUrls(tracks: List<Track>): Map<Track, String> {
-        if (tracks.isEmpty()) return emptyMap()
-        val nowMs = System.currentTimeMillis()
-        val urlCache = try {
-            playUrlCache.getAll().associateBy { it.key }
-        } catch (_: Exception) {
-            emptyMap()
-        }
-        val out = mutableMapOf<Track, String>()
-        val missing = mutableListOf<Track>()
-        for (t in tracks) {
-            val hit = urlCache["${t.bvid}:${t.cid}"]?.takeIf { it.isFresh(nowMs) }?.url
-            if (hit.isNullOrBlank()) missing.add(t) else out[t] = hit
-        }
-        if (missing.isNotEmpty()) {
-            val semaphore = Semaphore(4)
-            val fetched = supervisorScope {
-                missing.map { track ->
-                    async {
-                        runCatching {
-                            semaphore.withPermit {
-                                val url = playUrls.resolve(track.bvid, track.cid)?.takeIf { it.isNotBlank() }
-                                if (url != null) track to url else null
-                            }
-                        }.getOrNull()
-                    }
-                }.awaitAll().filterNotNull()
-            }
-            if (fetched.isNotEmpty()) {
-                playUrlCache.putAll(
-                    fetched.map { (t, u) -> PlayUrlCacheEntity("${t.bvid}:${t.cid}", u, nowMs) }
-                )
-                playUrlCache.pruneExpired(nowMs - PlayUrlCacheEntity.TTL_MS)
-                playUrlCache.pruneOverflow(PlayUrlCacheEntity.MAX_ENTRIES)
-                fetched.forEach { (t, u) -> out[t] = u }
-            }
-        }
-        return out
-    }
 
-    /** Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它） */
-    private fun Track.toMediaItem(url: String, imageFormat: ImageFormat): MediaItem =
-        MediaItem.Builder()
-            .setUri(url)
-            .setMediaId("$bvid:$cid")
-            .setCustomCacheKey("$bvid:$cid")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(author)
-                    .setArtworkUri(artwork.artwork(cover, imageFormat))
-                    .build()
-            )
-            .build()
 
     /** 队列刷新结果：给 Toast 文案用（added>0 报新增，否则报已是最新/已更新） */
     data class QueueRefreshResult(val added: Int, val removed: Int, val updated: Int)
@@ -321,7 +260,7 @@ class PlayerManager @Inject constructor(
                 }
                 // 增/改：按最终顺序走一遍（B 站分 P 只增删不重排，走位必然对齐；
                 // 万一重排，对不上就停手：UI 照新，transport 不再动，绝不插出重复项）
-                val urlMap = resolveUrls(plan.addedTracks)
+                val urlMap = playUrlPipeline.resolveUrls(plan.addedTracks)
                 val imageFormat = prefs.imageFormat.first()
                 val urlCache = try {
                     playUrlCache.getAll().associateBy { it.key }
@@ -364,7 +303,7 @@ class PlayerManager @Inject constructor(
                         ?.takeIf { it.isFresh(nowMs) }?.url
                     if (url != null) {
                         try {
-                            transport.replaceMediaItem(i, item.toMediaItem(url, imageFormat))
+                            transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, url, imageFormat))
                         } catch (_: Exception) {
                         }
                     }
@@ -374,7 +313,7 @@ class PlayerManager @Inject constructor(
             if (expected.any { it.queueKey() == item.queueKey() }) break // 重排：停手保平安
             val url = urlMap[item] ?: continue // 新增解析失败：UI 和 transport 都跳过该集
             try {
-                transport.addMediaItem(i, item.toMediaItem(url, imageFormat))
+                transport.addMediaItem(i, playUrlPipeline.buildItem(item, url, imageFormat))
             } catch (_: Exception) {
                 continue
             }
@@ -420,11 +359,11 @@ class PlayerManager @Inject constructor(
             }
 
             // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
-            val resolved = tracks.map { t -> if (t.cid == 0L) resolveCid(t) else t }
+            val resolved = tracks.map { t -> if (t.cid == 0L) playUrlPipeline.resolveCid(t) else t }
 
             // playurl 批量解析（缓存命中即用、未命中并发补，见 resolveUrls）；失败项跳过。
             // 冷启动/重装恢复时缓存命中则 0 网络解析、秒开。
-            val urlMap = resolveUrls(resolved)
+            val urlMap = playUrlPipeline.resolveUrls(resolved)
             val imageFormat = prefs.imageFormat.first()
             val items = resolved.mapNotNull { track ->
                 urlMap[track]?.let { track to it }
@@ -451,7 +390,7 @@ class PlayerManager @Inject constructor(
             queueManager.setActiveQueue(playableTracks, startIndex, resolvedSourceTitle)
             persistPosition(resolvedStartPosition)
             transport.setMediaItems(
-                items.map { (track, url) -> track.toMediaItem(url, imageFormat) },
+                items.map { (track, url) -> playUrlPipeline.buildItem(track, url, imageFormat) },
                 startIndex,
                 resolvedStartPosition,
             )
@@ -512,14 +451,6 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    /** cid=0（搜索结果）时经目录解析第一个分P 的真实 cid */
-    private suspend fun resolveCid(track: Track): Track =
-        catalog.tracksOf(track.bvid).firstOrNull()?.let { first ->
-            track.copy(
-                cid = first.cid,
-                durationMs = first.durationMs.takeIf { it > 0L } ?: track.durationMs,
-            )
-        } ?: track
 
     fun pause() {
         // 先对表再停：内存 position 最多滞后一个 poll 周期，直接落盘会丢半秒
@@ -671,12 +602,9 @@ class PlayerManager @Inject constructor(
             if (!transport.isPlaying) return@launch
             val pos = transport.currentPosition
             // 解析失败（null/空）沿用旧 URI：下次错误时再重试
-            val newUrl = playUrls.resolve(track.bvid, track.cid)
+            val newUrl = playUrlPipeline.refreshUrl(track)
             if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
-                        effectiveScope().launch {
-                            playUrlCache.putAll(listOf(PlayUrlCacheEntity("${track.bvid}:${track.cid}", newUrl, System.currentTimeMillis())))
-                        }
-                        val newItem = track.toMediaItem(newUrl, prefs.imageFormat.first())
+                        val newItem = playUrlPipeline.buildItem(track, newUrl, prefs.imageFormat.first())
                         transport.replaceMediaItem(currentIndex, newItem)
                     }
         }
@@ -726,12 +654,7 @@ class PlayerManager @Inject constructor(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val isRecoverable = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-                    || error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
-                    || error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
-                    || error.errorCodeName.contains("403", ignoreCase = true)
-                    || error.message?.contains("403") == true
-                    || error.message?.contains("expire", ignoreCase = true) == true
+                val isRecoverable = playUrlPipeline.isRecoverable(error)
                 if (!isRecoverable || urlRefreshRetry >= MAX_URL_REFRESH_RETRY) {
                     _state.update { it.copy(isLoading = false, errorMessage = error.message ?: "播放出错") }
                     return
@@ -746,28 +669,15 @@ class PlayerManager @Inject constructor(
                     }
                     val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
                     // 解析失败（null/空）与旧 Result.Error 同义：报刷新失败，下次错误再重试
-                    val newUrl = playUrls.resolve(track.bvid, track.cid)
+                    val newUrl = playUrlPipeline.refreshUrl(track)
                     if (newUrl.isNullOrBlank()) {
                                 _state.update { it.copy(isLoading = false, errorMessage = "音源刷新失败") }
                                 return@launch
                             }
                             val imageFormat = prefs.imageFormat.first()
-                            val newItem = MediaItem.Builder()
-                                .setUri(newUrl)
-                                .setMediaId("${track.bvid}:${track.cid}")
-                                .setCustomCacheKey("${track.bvid}:${track.cid}")
-                                .setMediaMetadata(
-                                    MediaMetadata.Builder()
-                                        .setTitle(track.title)
-                                        .setArtist(track.author)
-                                        .setArtworkUri(artwork.artwork(track.cover, imageFormat))
-                                        .build()
-                                ).build()
+                            val newItem = playUrlPipeline.buildItem(track, newUrl, imageFormat)
                             val idx = currentIndex
                             if (idx in queue.indices) {
-                                effectiveScope().launch {
-                                    playUrlCache.putAll(listOf(PlayUrlCacheEntity("${track.bvid}:${track.cid}", newUrl, System.currentTimeMillis())))
-                                }
                                 transport.replaceMediaItem(idx, newItem)
                                 transport.prepare()
                                 transport.seekTo(pos)
