@@ -905,15 +905,9 @@ private fun PlaybackProgressBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = formatMs(shownPositionMs),
+                text = formatMs(shownPositionMs) + " / " + formatMs(durationMs),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = formatMs(durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
             Spacer(Modifier.weight(1f))
             Text(
@@ -924,6 +918,7 @@ private fun PlaybackProgressBar(
         }
 
         Slider(
+            modifier = Modifier.offset(y = (-6).dp),
             value = shownRatio,
             onValueChange = { if (enabled) dragRatio = it },
             onValueChangeFinished = {
@@ -1248,7 +1243,7 @@ private fun MiniLyricCard(
                                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                                     ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth(),
@@ -1261,7 +1256,7 @@ private fun MiniLyricCard(
                                     ),
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth(),
@@ -1273,7 +1268,7 @@ private fun MiniLyricCard(
                                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                                     ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth(),
@@ -1285,7 +1280,7 @@ private fun MiniLyricCard(
                                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                                     ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth(),
