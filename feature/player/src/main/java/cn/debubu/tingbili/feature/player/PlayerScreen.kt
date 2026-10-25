@@ -148,7 +148,7 @@ fun PlayerScreen(
 
     val coverModel = trackUi.track?.cover
         ?.takeIf { it.isNotBlank() }
-        ?.biliImage(BiliImageVariant.LargeSquare, imageFormat)
+        ?.biliImage(BiliImageVariant.PlayerHero, imageFormat)
     Box(modifier = Modifier.fillMaxSize()) {
         // 沉浸背景：同一张封面做模糊底，主题罩子保证深浅主题都压得住字
         AsyncImage(
@@ -196,7 +196,7 @@ fun PlayerScreen(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 10f)
+                    .aspectRatio(16f / 9f)
                     .shadow(18.dp, RoundedCornerShape(16.dp), clip = false)
                     .clip(RoundedCornerShape(16.dp))
                     .border(

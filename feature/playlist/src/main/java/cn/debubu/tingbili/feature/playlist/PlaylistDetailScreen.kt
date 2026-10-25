@@ -224,7 +224,7 @@ fun PlaylistDetailScreen(
                                 tonalElevation = 0.dp
                             ) {
                                 AsyncImage(
-                                    model = pl.cover.orEmpty().biliImage(256, 256, imageFormat),
+                                    model = pl.cover.orEmpty().biliImage(BiliImageVariant.MediumSquare, imageFormat),
                                     contentDescription = null,
                                     modifier = Modifier.size(96.dp),
                                     contentScale = ContentScale.Crop

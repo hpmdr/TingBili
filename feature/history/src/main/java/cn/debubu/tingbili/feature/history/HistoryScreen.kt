@@ -142,8 +142,8 @@ private fun HistoryRow(
                 model = coverUrl,
                 contentDescription = null,
                 modifier = Modifier
-                    .width(108.dp)
-                    .height(64.dp)
+                    .width(120.dp)
+                    .height(68.dp)
                     .clip(RoundedCornerShape(10.dp)),
                 contentScale = ContentScale.Crop
             )

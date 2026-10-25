@@ -486,7 +486,7 @@ private fun DetailContent(
 private fun RelatedRow(track: Track, onClick: () -> Unit) {
     val imageFormat = LocalImageFormat.current
     val coverUrl = remember(track.cover, imageFormat) {
-        track.cover.biliImage(232, 144, imageFormat)
+        track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat)
     }
     val durationText = remember(track.durationMs) {
         if (track.durationMs > 0L) formatDuration(track.durationMs) else null
@@ -498,7 +498,7 @@ private fun RelatedRow(track: Track, onClick: () -> Unit) {
             AsyncImage(
                 model = coverUrl,
                 contentDescription = null,
-                modifier = Modifier.width(116.dp).height(72.dp).clip(RoundedCornerShape(10.dp)),
+                modifier = Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)),
                 contentScale = ContentScale.Crop
             )
             if (durationText != null) {
@@ -513,7 +513,7 @@ private fun RelatedRow(track: Track, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f).height(72.dp), verticalArrangement = Arrangement.SpaceBetween) {
+        Column(modifier = Modifier.weight(1f).height(68.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.bodyMedium,
