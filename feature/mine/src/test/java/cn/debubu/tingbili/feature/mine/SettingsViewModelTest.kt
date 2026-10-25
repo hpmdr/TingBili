@@ -74,6 +74,13 @@ class SettingsViewModelTest {
         assertEquals(5, prefs.stepSec.first())
     }
 
+    @Test fun `sleep finish chapter persists`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs)
+        vm.setSleepFinishChapter(true)
+        advanceUntilIdle()
+        assertEquals(true, prefs.sleepFinishChapter.first())
+    }
+
     @Test fun `audio quality persists and coerces unknown`() = runTest(dispatcher) {
         val vm = SettingsViewModel(prefs)
         assertEquals(30232, prefs.audioQuality.first())

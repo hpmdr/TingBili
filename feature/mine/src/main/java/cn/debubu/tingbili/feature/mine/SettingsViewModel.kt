@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「播放与音频设置」：步长 + 字幕字号（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与缓存在 OtherSettingsViewModel。 */
+/** 「播放设置」：步长 + 字幕字号 + 睡眠偏好 + 解码开关 + 默认音质（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与推荐词在通用设置，缓存在存储设置。 */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository
@@ -29,6 +29,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setSubtitleScale(v) }
     }
 
+    /** 睡眠定时「到点后播完本章再停」默认开关（落盘；播放页定时弹窗沿用，下次定时生效） */
+    val sleepFinishChapter: StateFlow<Boolean> = prefs.sleepFinishChapter.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+    fun setSleepFinishChapter(v: Boolean) {
+        viewModelScope.launch { prefs.setSleepFinishChapter(v) }
+    }
 
     /** DSP 音频卸载开关（默认开；切换后下一首生效，开启时不支持倍速） */
     val audioOffload: StateFlow<Boolean> = prefs.audioOffload.stateIn(

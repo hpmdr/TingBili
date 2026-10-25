@@ -1,27 +1,21 @@
 package cn.debubu.tingbili.feature.mine
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -34,15 +28,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,28 +50,24 @@ import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
-/** 二级页：存储与缓存（图片格式 / 缓存管理入口 / 首页推荐词）。解码器入口已搬到播放设置。 */
+/** 二级页：通用设置（B 站图片格式 / 首页推荐词 / 关于）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OtherSettingsScreen(
+fun GeneralSettingsScreen(
     onBack: () -> Unit,
-    onOpenCache: () -> Unit,
-    vm: OtherSettingsViewModel = hiltViewModel()
+    vm: GeneralSettingsViewModel = hiltViewModel()
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
-    val stats by vm.cacheStats.collectAsStateWithLifecycle()
-    val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     var showImageDialog by remember { mutableStateOf(false) }
     var showKeywordsDialog by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     val darkTheme = LocalDarkTheme.current
-
-    LaunchedEffect(Unit) { vm.refreshCacheStats() }
 
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(
-                title = "存储与缓存",
+                title = "通用设置",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -94,28 +84,6 @@ fun OtherSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column {
-                SettingSectionLabel("用量")
-                SettingsGroup {
-                    CacheUsageCard(
-                        audioBytes = stats.audioBytes,
-                        imageBytes = stats.imageBytes,
-                        subtitleBytes = stats.subtitleBytes,
-                        cacheMaxMb = cacheMaxMb
-                    )
-                    SettingDivider()
-                    SettingRow(
-                        icon = Icons.Filled.CleaningServices,
-                        iconTint = Color(0xFFF59E0B),
-                        iconBg = if (darkTheme) Color(0xFF2E2306) else Color(0xFFFFF7E6),
-                        title = "缓存管理",
-                        subtitle = "分别清理 · 上限设置 · 全部清空",
-                        value = formatCacheSize(stats.totalBytes),
-                        onClick = onOpenCache
-                    )
-                }
-            }
-
             Column {
                 SettingSectionLabel("图片")
                 SettingsGroup {
@@ -145,6 +113,20 @@ fun OtherSettingsScreen(
                     )
                 }
             }
+
+            Column {
+                SettingSectionLabel("关于")
+                SettingsGroup {
+                    SettingRow(
+                        icon = Icons.Filled.Info,
+                        iconTint = Color(0xFF06B6D4),
+                        iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
+                        title = "关于",
+                        subtitle = "版本信息 · 免责声明",
+                        onClick = { showAbout = true }
+                    )
+                }
+            }
         }
     }
 
@@ -163,68 +145,8 @@ fun OtherSettingsScreen(
             onDismiss = { showKeywordsDialog = false }
         )
     }
-}
-
-@Composable
-private fun CacheUsageCard(
-    audioBytes: Long,
-    imageBytes: Long,
-    subtitleBytes: Long,
-    cacheMaxMb: Int
-) {
-    val total = audioBytes + imageBytes + subtitleBytes
-    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("共占用约 ${formatCacheSize(total)}", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "上限 ${if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB"}（仅音频）",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-        ) {
-            if (audioBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(audioBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFFFB7299))
-                )
-            }
-            if (imageBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(imageBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFF06B6D4))
-                )
-            }
-            if (subtitleBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(subtitleBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFFD97706))
-                )
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "音频 ${formatCacheSize(audioBytes)} · 图片 ${formatCacheSize(imageBytes)} · 字幕 ${formatCacheSize(subtitleBytes)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
-        )
+    if (showAbout) {
+        AboutDialog(onDismiss = { showAbout = false })
     }
 }
 
@@ -246,12 +168,14 @@ private fun ImageFormatDialog(
                     selected = current == ImageFormat.AVIF,
                     onClick = { onSelect(ImageFormat.AVIF) }
                 )
+                SettingDivider()
                 SettingRadioRow(
                     title = "WebP",
                     subtitle = "均衡",
                     selected = current == ImageFormat.WEBP,
                     onClick = { onSelect(ImageFormat.WEBP) }
                 )
+                SettingDivider()
                 SettingRadioRow(
                     title = "JPEG",
                     subtitle = "兜底，遇到白图时切这个",
@@ -336,4 +260,34 @@ private fun imageFormatLabel(format: ImageFormat): String = when (format) {
     ImageFormat.AVIF -> "AVIF"
     ImageFormat.WEBP -> "WebP"
     ImageFormat.JPEG -> "JPEG"
+}
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val version = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) { "1.0" }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("关于") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+                Text(
+                    "非哔哩哔哩官方应用，与 B 站无关；内容与账号数据均来自哔哩哔哩，如有侵权请联系删除。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } }
+    )
 }

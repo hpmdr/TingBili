@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -33,14 +32,12 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,15 +69,14 @@ private val BiliBlue = Color(0xFF00A1D6)
 
 /**
  * 「我的」Tab（B 站风格）：
- * 沉浸式渐变头部（未登录用户卡）→ 悬浮四宫格数据卡 → 分组设置列表 → 登录按钮。
- * 登录暂未开放（扫码登录单独立项），相关交互统一 Toast 占位。
+ * 沉浸式渐变头部 → 悬浮四宫格数据卡 → 设置入口（外观 / 播放 / 存储 / 通用）→ 登录按钮。
  */
 @Composable
 fun MeScreen(
     onOpenAppearance: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenQuality: () -> Unit,
-    onOpenOtherSettings: () -> Unit,
+    onOpenStorage: () -> Unit,
+    onOpenGeneral: () -> Unit,
     onOpenBiliFav: () -> Unit,
     onOpenBiliHistory: () -> Unit,
     onOpenBiliToview: () -> Unit,
@@ -97,11 +93,11 @@ fun MeScreen(
     val stepSec by vm.stepSec.collectAsStateWithLifecycle()
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
-    val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
+    val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
+    val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
-    var showAbout by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
 
     val placeholder: (String) -> Unit = { msg ->
@@ -133,7 +129,7 @@ fun MeScreen(
                 onBiliFav = onOpenBiliFav,
                 onBiliHistory = onOpenBiliHistory,
                 onBiliToview = onOpenBiliToview,
-                onCache = onOpenOtherSettings
+                onCache = onOpenStorage
             )
         }
 
@@ -155,39 +151,30 @@ fun MeScreen(
                     iconTint = Color(0xFF10B981),
                     iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
                     title = "播放设置",
-                    subtitle = "步长 ${stepSec}s · 字幕${subtitleScaleLabel(subtitleScale)}",
+                    subtitle = "步长 ${stepSec}s · 字幕${subtitleScaleLabel(subtitleScale)} · ${AudioQuality.fromCode(audioQuality).shortDesc}",
                     onClick = onOpenSettings
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                SettingRow(
-                    icon = Icons.Filled.Headphones,
-                    iconTint = Color(0xFFFB7299),
-                    iconBg = if (darkTheme) Color(0xFF3B1220) else Color(0xFFFFF0F5),
-                    title = "音质与解码",
-                    subtitle = "${AudioQuality.fromCode(audioQuality).shortDesc} · 硬解${if (audioHwDecode) "开" else "关"}",
-                    onClick = onOpenQuality
                 )
             }
 
             Spacer(Modifier.height(16.dp))
-            SettingSectionLabel("系统与账户")
+            SettingSectionLabel("空间与通用")
             SettingsGroup {
+                SettingRow(
+                    icon = Icons.Filled.Download,
+                    iconTint = Color(0xFFF59E0B),
+                    iconBg = if (darkTheme) Color(0xFF2E2306) else Color(0xFFFFF7E6),
+                    title = "存储与缓存",
+                    subtitle = "已用 ${formatCacheGb(cacheBytes)} · 上限 ${if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB"}",
+                    onClick = onOpenStorage
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                 SettingRow(
                     icon = Icons.Filled.Tune,
                     iconTint = Color(0xFF8B5CF6),
                     iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
-                    title = "存储与缓存",
-                    subtitle = "${formatCacheGb(cacheBytes)} · ${imageFormat.name}",
-                    onClick = onOpenOtherSettings
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                SettingRow(
-                    icon = Icons.Filled.Info,
-                    iconTint = Color(0xFF06B6D4),
-                    iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
-                    title = "关于",
-                    subtitle = "版本信息 · 免责声明",
-                    onClick = { showAbout = true }
+                    title = "通用设置",
+                    subtitle = "${imageFormat.name} · ${homeKeywords.size}个推荐词",
+                    onClick = onOpenGeneral
                 )
             }
 
@@ -215,10 +202,6 @@ fun MeScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
-    }
-
-    if (showAbout) {
-        AboutDialog(onDismiss = { showAbout = false })
     }
 
     if (showLogoutConfirm) {
@@ -499,35 +482,6 @@ private fun themeModeLabel(mode: cn.debubu.tingbili.core.data.model.ThemeMode): 
 // ── 关于对话框 ────────────────────────────────────────
 
 @Composable
-private fun AboutDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val version = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (_: Exception) { "1.0" }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("关于") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-                Text(
-                    "非哔哩哔哩官方应用，与 B 站无关；内容与账号数据均来自哔哩哔哩，如有侵权请联系删除。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } }
-    )
-}
-
 private fun formatCacheGb(bytes: Long): String = when {
     bytes <= 0L -> "0 MB"
     bytes >= 1024L * 1024L * 1024L -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))

@@ -1,7 +1,9 @@
 package cn.debubu.tingbili.feature.mine
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,12 +46,12 @@ import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：缓存管理（存储与缓存 → 缓存管理进入，唯一入口）。 */
+/** 二级页：存储与缓存（用量总览 / 分别清理 / 音频上限 / 全部清空，单页）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CacheScreen(
+fun StorageSettingsScreen(
     onBack: () -> Unit,
-    vm: OtherSettingsViewModel = hiltViewModel()
+    vm: StorageSettingsViewModel = hiltViewModel()
 ) {
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
@@ -66,7 +70,7 @@ fun CacheScreen(
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(
-                title = "缓存管理",
+                title = "存储与缓存",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -84,6 +88,18 @@ fun CacheScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Column {
+                SettingSectionLabel("用量")
+                SettingsGroup {
+                    CacheUsageCard(
+                        audioBytes = stats.audioBytes,
+                        imageBytes = stats.imageBytes,
+                        subtitleBytes = stats.subtitleBytes,
+                        cacheMaxMb = cacheMaxMb
+                    )
+                }
+            }
+
             Column {
                 SettingSectionLabel("分别清理")
                 SettingsGroup {
@@ -155,7 +171,7 @@ fun CacheScreen(
                                 color = Color(0xFFDC2626)
                             )
                             Text(
-                                "音频 + 图片 + 字幕，需二次确认",
+                                "清除音频 + 图片 + 字幕全部缓存，该操作不可撤销",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
@@ -185,6 +201,69 @@ fun CacheScreen(
             dismissButton = {
                 TextButton(onClick = { showClearAll = false }) { Text("取消") }
             }
+        )
+    }
+}
+
+@Composable
+private fun CacheUsageCard(
+    audioBytes: Long,
+    imageBytes: Long,
+    subtitleBytes: Long,
+    cacheMaxMb: Int
+) {
+    val total = audioBytes + imageBytes + subtitleBytes
+    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("共占用约 ${formatCacheSize(total)}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "上限 ${if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB"}（仅音频）",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+        ) {
+            if (audioBytes > 0L) {
+                Box(
+                    modifier = Modifier
+                        .weight(audioBytes.toFloat())
+                        .height(8.dp)
+                        .background(Color(0xFFFB7299))
+                )
+            }
+            if (imageBytes > 0L) {
+                Box(
+                    modifier = Modifier
+                        .weight(imageBytes.toFloat())
+                        .height(8.dp)
+                        .background(Color(0xFF06B6D4))
+                )
+            }
+            if (subtitleBytes > 0L) {
+                Box(
+                    modifier = Modifier
+                        .weight(subtitleBytes.toFloat())
+                        .height(8.dp)
+                        .background(Color(0xFFD97706))
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "音频 ${formatCacheSize(audioBytes)} · 图片 ${formatCacheSize(imageBytes)} · 字幕 ${formatCacheSize(subtitleBytes)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
         )
     }
 }

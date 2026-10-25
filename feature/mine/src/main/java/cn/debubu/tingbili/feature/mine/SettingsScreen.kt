@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.HighQuality
@@ -48,7 +49,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 
-/** 二级页：播放设置（步长 / 字幕 / 解码开关）。默认音质独立页，主题在「外观」，缓存在「存储与缓存」。 */
+/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码开关 / 默认音质入口）。主题在「外观」，存储在「存储与缓存」，图片与推荐词在「通用设置」。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -62,6 +63,7 @@ fun SettingsScreen(
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
+    val sleepFinishChapter by vm.sleepFinishChapter.collectAsStateWithLifecycle()
     var showStepSheet by remember { mutableStateOf(false) }
     var showSubtitleDialog by remember { mutableStateOf(false) }
     val darkTheme = LocalDarkTheme.current
@@ -107,6 +109,21 @@ fun SettingsScreen(
                         subtitle = "全屏与迷你字幕同步缩放",
                         value = subtitleScaleLabel(subtitleScale),
                         onClick = { showSubtitleDialog = true }
+                    )
+                }
+            }
+
+            Column {
+                SettingSectionLabel("睡眠偏好")
+                SettingsGroup {
+                    SettingSwitchRow(
+                        icon = Icons.Filled.Bedtime,
+                        iconTint = Color(0xFF6366F1),
+                        iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
+                        title = "到点后播完本章再停",
+                        subtitle = "下次睡眠定时的默认选项，进行中的定时不受影响",
+                        checked = sleepFinishChapter,
+                        onCheckedChange = { vm.setSleepFinishChapter(it) }
                     )
                 }
             }

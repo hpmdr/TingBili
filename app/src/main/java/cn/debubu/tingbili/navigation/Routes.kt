@@ -26,17 +26,17 @@ object MeRoute
 @Serializable
 object AppearanceRoute
 
-/** 二级页：播放设置（步长 / 字幕 / 解码 / 默认音质） */
+/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码 / 默认音质） */
 @Serializable
 object SettingsRoute
 
-/** 二级页：存储与缓存（用量总览 / 图片格式 / 首页推荐词） */
+/** 二级页：存储与缓存（用量总览 / 分别清理 / 音频上限 / 全部清空，单页）。 */
 @Serializable
-object OtherSettingsRoute
+object StorageRoute
 
-/** 二级页：缓存管理（存储与缓存 → 缓存管理进入，唯一入口） */
+/** 二级页：通用设置（图片格式 / 首页推荐词 / 关于）。 */
 @Serializable
-object CacheRoute
+object GeneralRoute
 
 /** 二级页：默认音质（播放设置 → 默认音质进入，唯一入口） */
 @Serializable

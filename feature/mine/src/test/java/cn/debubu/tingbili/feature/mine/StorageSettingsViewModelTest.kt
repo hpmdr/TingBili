@@ -56,7 +56,7 @@ import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-class OtherSettingsViewModelTest {
+class StorageSettingsViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
     private lateinit var prefs: PreferencesRepository
@@ -155,7 +155,7 @@ class OtherSettingsViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val file = context.preferencesDataStoreFile("test_other_settings_${System.nanoTime()}")
+        val file = context.preferencesDataStoreFile("test_storage_settings_${System.nanoTime()}")
         if (file.exists()) file.delete()
         val dataStore = PreferenceDataStoreFactory.create(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
@@ -179,14 +179,14 @@ class OtherSettingsViewModelTest {
     }
 
     @Test fun `set cache max persists`() = runTest(dispatcher) {
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         vm.setCacheMaxMb(1024)
         advanceUntilIdle()
         assertEquals(1024, prefs.cacheMaxMb.first())
     }
 
     @Test fun `cache max coerced in range 100 to 2048`() = runTest(dispatcher) {
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         vm.setCacheMaxMb(10000)
         advanceUntilIdle()
         assertEquals(2048, prefs.cacheMaxMb.first())
@@ -197,14 +197,14 @@ class OtherSettingsViewModelTest {
 
     @Test fun `stats exposed from manager`() = runTest(dispatcher) {
         fakeManager.stats = CacheStats(audioBytes = 1000, imageBytes = 2000, subtitleBytes = 300, subtitleCount = 2)
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         advanceUntilIdle()
         assertEquals(3300L, vm.cacheStats.first().totalBytes)
         assertEquals(2, vm.cacheStats.first().subtitleCount)
     }
 
     @Test fun `clear audio excludes nothing when idle`() = runTest(dispatcher) {
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         vm.clearAudioCache()
         advanceUntilIdle()
         assertNull(fakeManager.lastExclude)
@@ -212,7 +212,7 @@ class OtherSettingsViewModelTest {
     }
 
     @Test fun `clear audio excludes playing key`() = runTest(dispatcher) {
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         try {
             player.play(listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null)), 0)
             runCurrent()
@@ -227,7 +227,7 @@ class OtherSettingsViewModelTest {
     }
 
     @Test fun `clear images and subtitles report results`() = runTest(dispatcher) {
-        val vm = OtherSettingsViewModel(prefs, fakeManager, player)
+        val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         vm.clearImageCache()
         advanceUntilIdle()
         assertTrue(vm.notice.first()?.contains("图片") == true)

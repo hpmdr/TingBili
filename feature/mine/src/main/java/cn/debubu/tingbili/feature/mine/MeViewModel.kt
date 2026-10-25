@@ -46,7 +46,7 @@ class MeViewModel @Inject constructor(
         viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM
     )
 
-    /** 设置入口动态副标题用：播放步长 / 字幕缩放 / 音质偏好 / 硬解开关 / 图片格式 / 主题模式 */
+    /** 设置入口动态副标题用：播放步长 / 字幕缩放 / 音质偏好 / 图片格式 / 推荐词 / 缓存上限 / 主题模式 */
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 15
     )
@@ -56,11 +56,16 @@ class MeViewModel @Inject constructor(
     val audioQuality: StateFlow<Int> = prefs.audioQuality.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_AUDIO_QUALITY
     )
-    val audioHwDecode: StateFlow<Boolean> = prefs.audioHwDecode.stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), true
-    )
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF
+    )
+    /** 首页推荐词数量（通用设置副标题用） */
+    val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_HOME_KEYWORDS
+    )
+    /** 音频缓存上限（存储副标题用） */
+    val cacheMaxMb: StateFlow<Int> = prefs.cacheMaxMb.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_CACHE_MAX_MB
     )
     val themeMode: StateFlow<ThemeMode> = prefs.themeMode.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.DEFAULT

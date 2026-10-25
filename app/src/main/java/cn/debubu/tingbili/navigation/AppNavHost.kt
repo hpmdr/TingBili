@@ -22,13 +22,13 @@ import cn.debubu.tingbili.feature.playlist.PlaylistScreen
 import cn.debubu.tingbili.feature.search.SearchScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
-import cn.debubu.tingbili.feature.mine.CacheScreen
+import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
 import cn.debubu.tingbili.feature.mine.BiliFavDetailScreen
 import cn.debubu.tingbili.feature.mine.BiliFavFoldersScreen
 import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
 import cn.debubu.tingbili.feature.mine.BiliToviewScreen
 import cn.debubu.tingbili.feature.mine.MeScreen
-import cn.debubu.tingbili.feature.mine.OtherSettingsScreen
+import cn.debubu.tingbili.feature.mine.StorageSettingsScreen
 import cn.debubu.tingbili.feature.mine.QualityScreen
 import cn.debubu.tingbili.feature.mine.SettingsScreen
 
@@ -99,8 +99,8 @@ fun AppRootNavHost(
                 MeScreen(
                     onOpenAppearance = { navController.navigate(AppearanceRoute) },
                     onOpenSettings = { navController.navigate(SettingsRoute) },
-                    onOpenQuality = { navController.navigate(QualityRoute) },
-                    onOpenOtherSettings = { navController.navigate(OtherSettingsRoute) },
+                    onOpenStorage = { navController.navigate(StorageRoute) },
+                    onOpenGeneral = { navController.navigate(GeneralRoute) },
                     onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
                     onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
                     onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
@@ -129,14 +129,11 @@ fun AppRootNavHost(
         composable<QualityRoute> {
             QualityScreen(onBack = { navController.popBackStack() })
         }
-        composable<OtherSettingsRoute> {
-            OtherSettingsScreen(
-                onBack = { navController.popBackStack() },
-                onOpenCache = { navController.navigate(CacheRoute) },
-            )
+        composable<StorageRoute> {
+            StorageSettingsScreen(onBack = { navController.popBackStack() })
         }
-        composable<CacheRoute> {
-            CacheScreen(onBack = { navController.popBackStack() })
+        composable<GeneralRoute> {
+            GeneralSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable<AudioDecodersRoute> {
             AudioDecodersScreen(onBack = { navController.popBackStack() })

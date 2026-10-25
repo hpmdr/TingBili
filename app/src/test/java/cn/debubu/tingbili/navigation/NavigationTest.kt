@@ -243,8 +243,8 @@ class NavigationTest {
         composeTestRule.setContent {
             navController = TestNavHostController(LocalContext.current)
             navController.navigatorProvider.addNavigator(ComposeNavigator())
-            NavHost(navController = navController, startDestination = OtherSettingsRoute) {
-                composable<OtherSettingsRoute> { Text("other settings") }
+            NavHost(navController = navController, startDestination = SettingsRoute) {
+                composable<SettingsRoute> { Text("settings") }
                 composable<AudioDecodersRoute> { Text("audio decoders") }
             }
         }
@@ -253,18 +253,33 @@ class NavigationTest {
     }
 
     @Test
-    fun `cacheRoute resolves in nav graph`() {
+    fun `storageRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {
             navController = TestNavHostController(LocalContext.current)
             navController.navigatorProvider.addNavigator(ComposeNavigator())
-            NavHost(navController = navController, startDestination = OtherSettingsRoute) {
-                composable<OtherSettingsRoute> { Text("storage") }
-                composable<CacheRoute> { Text("cache") }
+            NavHost(navController = navController, startDestination = MeRoute) {
+                composable<MeRoute> { Text("me") }
+                composable<StorageRoute> { Text("storage") }
             }
         }
-        composeTestRule.runOnIdle { navController.navigate(CacheRoute) }
-        composeTestRule.onNodeWithText("cache").assertIsDisplayed()
+        composeTestRule.runOnIdle { navController.navigate(StorageRoute) }
+        composeTestRule.onNodeWithText("storage").assertIsDisplayed()
+    }
+
+    @Test
+    fun `generalRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = MeRoute) {
+                composable<MeRoute> { Text("me") }
+                composable<GeneralRoute> { Text("general") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(GeneralRoute) }
+        composeTestRule.onNodeWithText("general").assertIsDisplayed()
     }
 
     @Test
