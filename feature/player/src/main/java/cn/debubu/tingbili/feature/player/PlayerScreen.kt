@@ -265,6 +265,7 @@ fun PlayerScreen(
                     currentIndex = lyrUi.currentLyricIndex,
                     status = lyrUi.subtitleLoadState,
                     fontScale = lyrUi.subtitleScale,
+                    modifier = Modifier.fillMaxSize(),
                     onCardClick = {
                         when (lyrUi.subtitleLoadState) {
                             SubtitleLoadState.Ready -> lyricFullscreen = true
@@ -1103,7 +1104,7 @@ private fun AuxItem(
     }
 }
 
-/** 封面态迷你实时字幕：上一行 + 当前行 + 下两行。点击行为按字幕状态分流 */
+/** 封面态实时字幕卡：撑满剩余高度，上2下6窗口 + 当前行自动跟随；空态居中。点击行为按字幕状态分流 */
 @Composable
 private fun MiniLyricCard(
     lyrics: List<cn.debubu.tingbili.data.bilibili.model.LyricLine>,
@@ -1111,20 +1112,30 @@ private fun MiniLyricCard(
     status: SubtitleLoadState,
     onCardClick: () -> Unit,
     fontScale: Float = 1f,
+    modifier: Modifier = Modifier,
 ) {
-    val prev = lyrics.getOrNull(currentIndex - 1)?.text
+    // Window of 2 above + 6 below: card fills remaining height, lyrics fill viewport, current line auto-follows
+    val windowStart = (currentIndex - 2).coerceAtLeast(0)
+    val window = remember(lyrics, windowStart) {
+        lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 9))
+    }
+    val listState = rememberLazyListState()
+    val target = (currentIndex - windowStart).coerceIn(0, (window.size - 1).coerceAtLeast(0))
+    LaunchedEffect(target, windowStart) {
+        if (window.isNotEmpty()) listState.scrollToItem(target)
+    }
     val current = lyrics.getOrNull(currentIndex)?.text
-    val next1 = lyrics.getOrNull(currentIndex + 1)?.text
-    val next2 = lyrics.getOrNull(currentIndex + 2)?.text
     Surface(
         onClick = onCardClick,
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -1157,11 +1168,11 @@ private fun MiniLyricCard(
             }
             when (status) {
                 SubtitleLoadState.Loading -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxWidth(),
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
                     ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -1170,93 +1181,116 @@ private fun MiniLyricCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    }
                 }
                 SubtitleLoadState.NoAuth -> {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
                     Text(
                         text = "登录后查看字幕",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    }
                 }
                 SubtitleLoadState.Error -> {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
                     Text(
                         text = "字幕加载失败，点击重试",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
+                    }
                 }
                 SubtitleLoadState.Empty -> {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
                     Text(
                         text = "暂无字幕",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    }
                 }
                 SubtitleLoadState.Ready -> if (current == null) {
-                    Text(
-                        text = "暂无字幕",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "暂无字幕",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 66.dp)
-                        .verticalScroll(rememberScrollState()),
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                if (!prev.isNullOrBlank()) {
-                    Text(
-                        text = prev,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Start,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Text(
-                    text = current,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = MaterialTheme.typography.titleMedium.fontSize * fontScale,
-                    ),
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Start,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (!next1.isNullOrBlank()) {
-                    Text(
-                        text = next1,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Start,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (!next2.isNullOrBlank()) {
-                    Text(
-                        text = next2,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Start,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                    itemsIndexed(window, key = { idx, line -> line.timeMs * 100 + idx }) { idx, line ->
+                        if (line.text.isNotBlank()) {
+                            val globalIdx = windowStart + idx
+                            if (globalIdx < currentIndex) {
+                                Text(
+                                    text = line.text,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else if (globalIdx == currentIndex) {
+                                Text(
+                                    text = line.text,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = MaterialTheme.typography.titleMedium.fontSize * fontScale,
+                                    ),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else if (globalIdx <= currentIndex + 3) {
+                                Text(
+                                    text = line.text,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                Text(
+                                    text = line.text,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Start,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
                 }
                 }
             }
