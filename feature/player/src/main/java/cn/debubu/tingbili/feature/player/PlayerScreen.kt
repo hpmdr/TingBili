@@ -196,7 +196,7 @@ fun PlayerScreen(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .aspectRatio(16f / 10f)
                     .shadow(18.dp, RoundedCornerShape(16.dp), clip = false)
                     .clip(RoundedCornerShape(16.dp))
                     .border(
