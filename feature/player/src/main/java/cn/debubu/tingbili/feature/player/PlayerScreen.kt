@@ -406,6 +406,7 @@ fun PlayerScreen(
             info = pipelineInfo,
             qualityLine = qualityLine,
             hasTrack = trackUi.track != null,
+            isActive = trackUi.isPlaying || trackUi.isLoading,
             showBack = infoReturnToMore,
             onBack = {
                 showInfoSheet = false
@@ -542,7 +543,7 @@ private fun MoreBareRow(
 }
 /**
  * 播放信息二级页（A4 极简，随更多菜单同语言）：‹ 返回上一级，音频 / 播放分组 K-V + 小知识。
- * 只读；暂无在播时技术行整组隐藏，只留开关与偏好行 + 一句引导。
+ * 只读；未在播（无节目/暂停态未起播）时技术行整组隐藏，只留开关与偏好行 + 一句引导。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -550,6 +551,7 @@ private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
     qualityLine: String,
     hasTrack: Boolean,
+    isActive: Boolean,
     showBack: Boolean = true,
     onBack: () -> Unit,
     onDismiss: () -> Unit,
@@ -585,10 +587,10 @@ private fun PlaybackInfoSheet(
                         .padding(horizontal = if (showBack) 56.dp else 0.dp),
                 )
             }
-            if (!hasTrack) {
-                PlaybackInfoRow("当前状态", "暂无在播")
+            if (!hasTrack || !isActive) {
+                PlaybackInfoRow("当前状态", if (!hasTrack) "暂无在播" else "尚未播放")
                 Text(
-                    text = "播一集后，这里会显示解码器、格式、码率等真实管线参数；下面是当前开关与偏好，随时可改。",
+                    text = "开始播放后，这里会显示解码器、格式、码率等真实管线参数；下面是当前开关与偏好，随时可改。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -601,7 +603,7 @@ private fun PlaybackInfoSheet(
                 PlaybackInfoRow("音质", qualityLine)
                 PlaybackInfoRow("倍速", "${info.speed}x")
             } else {
-            // 有在播：管线参数尚未就绪时显示"读取中…"（如切集瞬间），不写"未知"吓人。
+            // 播放中：管线参数尚未就绪时显示"读取中…"（如切集/缓冲瞬间），不写"未知"吓人。
             MoreGroupTitle("音频")
             val initializing = info.decoderName == null && !info.offloadSleeping
             PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
