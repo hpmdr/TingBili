@@ -15,7 +15,7 @@
 - 倍速完整控制与睡眠定时倒计时仍在播放页，设置页只放偏好默认（`sleepFinishChapter`）。
 ## 缓存上限（方案一，2026-10-25）
 
-- 设置页滑杆只定**音频**上限，档位 500MB / 1GB / 1.5GB / 2GB（步长 500MB），拖动预览、松手落盘（`StorageSettingsScreen` + `StorageSettingsViewModel.LIMIT_OPTIONS_MB`）。
+- 设置页“共用上限”行点选弹滚轮弹窗定**音频**上限，档位 500MB / 1GB / 1.5GB / 2GB（步长 500MB），滚轮预览、确定落盘（`CacheLimitSheet` + `WheelPicker`，与睡眠定时同语言；`WheelPicker` 下沉在 `core/ui`，两处共用）。
 - 图片盘上限按音频上限 1/4 自动派生，封顶 256MB（`PreferencesRepository.imageCacheMaxMb`），`TingBiliApp` 的 Coil 工厂在启动时读取；目录沿用 Coil 默认（`cacheDir/coil3_disk_cache`），存量保留。
 - 字幕走 Room 裁 50 集（几 MB），不参与配额。
 - 音频（Media3 evictor）与图片（Coil DiskCache）上限都在构造时固定，调整后需重启生效。
