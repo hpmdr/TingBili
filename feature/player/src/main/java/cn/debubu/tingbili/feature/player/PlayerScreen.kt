@@ -256,8 +256,9 @@ fun PlayerScreen(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                contentAlignment = Alignment.TopCenter,
             ) {
                 MiniLyricCard(
                     lyrics = lyrUi.lyrics,
