@@ -305,6 +305,14 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "有声书", "悬疑小说", "多人有声")
         const val MIN_CACHE_MAX_MB = 100
         const val MAX_CACHE_MAX_MB = 2048
+        /** 图片盘缓存上限封顶（方案一：图片按音频上限 1/4 派生，见 imageCacheMaxMb） */
+        const val IMAGE_CACHE_MAX_MB = 256
+
+        /**
+         * 图片盘缓存派生上限 = 音频上限的 1/4，上封顶 [IMAGE_CACHE_MAX_MB]。
+         * 字幕走 Room 裁 50 集（几 MB），不参与配额。
+         */
+        fun imageCacheMaxMb(audioMaxMb: Int): Int = minOf(audioMaxMb / 4, IMAGE_CACHE_MAX_MB)
         val LAST_QUEUE_JSON = stringPreferencesKey("last_queue_json")
         val LAST_INDEX = intPreferencesKey("last_index")
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")

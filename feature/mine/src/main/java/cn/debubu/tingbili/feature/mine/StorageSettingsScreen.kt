@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.component.SettingDivider
@@ -58,6 +61,11 @@ fun StorageSettingsScreen(
     val notice by vm.notice.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearAll by remember { mutableStateOf(false) }
+
+    // 上限滑杆：拖动只改本地预览，松手落盘（存量档外值就近吸附显示）
+    val options = StorageSettingsViewModel.LIMIT_OPTIONS_MB
+    var previewIdx by remember(cacheMaxMb) { mutableIntStateOf(StorageSettingsViewModel.nearestLimitIdx(cacheMaxMb)) }
+    val previewMb = options[previewIdx]
 
     LaunchedEffect(Unit) { vm.refreshCacheStats() }
     LaunchedEffect(notice) {
@@ -127,29 +135,38 @@ fun StorageSettingsScreen(
             }
 
             Column {
-                SettingSectionLabel("音频上限（调整后重启生效）")
+                SettingSectionLabel("缓存上限（调整后重启生效）")
                 SettingsGroup {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         Text(
-                            "当前上限 " + if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB",
+                            "共用上限 " + StorageSettingsViewModel.limitLabel(previewMb),
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "只管音频；调小后超量部分在使用中按最近最少使用逐出。总数=音频+图片+字幕磁盘，直链等小量数据不计。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Slider(
+                            value = previewIdx.toFloat(),
+                            onValueChange = { previewIdx = it.roundToInt().coerceIn(options.indices) },
+                            valueRange = 0f..(options.size - 1).toFloat(),
+                            steps = options.size - 2,
+                            onValueChangeFinished = { vm.setCacheMaxMb(options[previewIdx]) }
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(100, 200, 500, 1024, 2048).forEach { max ->
-                                FilterChip(
-                                    selected = cacheMaxMb == max,
-                                    onClick = { vm.setCacheMaxMb(max) },
-                                    label = { Text(if (max >= 1024) "${max / 1024}GB" else "${max}MB") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            options.forEach { option ->
+                                Text(
+                                    StorageSettingsViewModel.limitLabel(option),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
                                 )
                             }
                         }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "滑杆定音频缓存上限（拖动预览，松手保存）；图片缓存按上限 1/4 自动配给（封顶 256MB）；字幕只留最近 50 集；上限在启动时读取，调整后重启生效。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -221,7 +238,7 @@ private fun CacheUsageCard(
         ) {
             Text("共占用约 ${formatCacheSize(total)}", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "上限 ${if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB"}（仅音频）",
+                "音频 ${StorageSettingsViewModel.limitLabel(cacheMaxMb)} · 图片 ${StorageSettingsViewModel.limitLabel(PreferencesRepository.imageCacheMaxMb(cacheMaxMb))}",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )

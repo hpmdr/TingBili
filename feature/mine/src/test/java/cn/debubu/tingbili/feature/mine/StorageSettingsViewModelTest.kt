@@ -195,6 +195,21 @@ class StorageSettingsViewModelTest {
         assertEquals(100, prefs.cacheMaxMb.first())
     }
 
+    @Test fun `limit options snap to nearest`() = runTest(dispatcher) {
+        assertEquals(listOf(500, 1000, 1500, 2000), StorageSettingsViewModel.LIMIT_OPTIONS_MB)
+        assertEquals(0, StorageSettingsViewModel.nearestLimitIdx(100))
+        assertEquals(0, StorageSettingsViewModel.nearestLimitIdx(500))
+        assertEquals(1, StorageSettingsViewModel.nearestLimitIdx(1000))
+        assertEquals(3, StorageSettingsViewModel.nearestLimitIdx(2048))
+    }
+
+    @Test fun `limit labels`() = runTest(dispatcher) {
+        assertEquals("500MB", StorageSettingsViewModel.limitLabel(500))
+        assertEquals("1000MB", StorageSettingsViewModel.limitLabel(1000))
+        assertEquals("1.5GB", StorageSettingsViewModel.limitLabel(1500))
+        assertEquals("2GB", StorageSettingsViewModel.limitLabel(2000))
+    }
+
     @Test fun `stats exposed from manager`() = runTest(dispatcher) {
         fakeManager.stats = CacheStats(audioBytes = 1000, imageBytes = 2000, subtitleBytes = 300, subtitleCount = 2)
         val vm = StorageSettingsViewModel(prefs, fakeManager, player)

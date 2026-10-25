@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「存储设置」：用量统计与缓存清理（音频 / 图片 / 字幕分别统计清理）+ 音频缓存上限。 */
+/** 「存储设置」：用量统计与缓存清理（音频 / 图片 / 字幕分别统计清理）+ 缓存上限滑杆（音频档位，图片按 1/4 派生）。 */
 @HiltViewModel
 class StorageSettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository,
@@ -31,6 +31,21 @@ class StorageSettingsViewModel @Inject constructor(
 
     fun setCacheMaxMb(v: Int) {
         viewModelScope.launch { prefs.setCacheMaxMb(v) }
+    }
+
+    companion object {
+        /** 上限滑杆档位（MB）：步长 500MB，用户拍板 */
+        val LIMIT_OPTIONS_MB = listOf(500, 1000, 1500, 2000)
+
+        /** 存量值就近吸附到档位（老用户 100/200 等档外值也能正常显示） */
+        fun nearestLimitIdx(mb: Int): Int =
+            LIMIT_OPTIONS_MB.withIndex().minByOrNull { (_, o) -> kotlin.math.abs(o - mb) }?.index ?: 0
+
+        /** 档位短标签：500MB / 1GB / 1.5GB / 2GB（档外老值如 100MB 也能显示） */
+        fun limitLabel(mb: Int): String = if (mb < 1024) "${mb}MB" else {
+            val tenth = (mb * 10 + 512) / 1024
+            if (tenth % 10 == 0) "${tenth / 10}GB" else "${tenth / 10}.${tenth % 10}GB"
+        }
     }
 
     private val _cacheStats = MutableStateFlow(CacheStats())
