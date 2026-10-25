@@ -217,7 +217,7 @@ fun PlayerScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = trackUi.track?.author?.takeIf { it.isNotBlank() }?.let { "UP主 · $it" }.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
@@ -250,14 +250,14 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
         if (!lyricFullscreen) {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(top = 12.dp),
+                    .padding(top = 8.dp),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 MiniLyricCard(
@@ -293,6 +293,8 @@ fun PlayerScreen(
             }
         }
 
+        Spacer(Modifier.height(10.dp))
+
         PlaybackProgressBar(
             positionMs = progUi.positionMs,
             bufferedPositionMs = progUi.bufferedPositionMs,
@@ -301,7 +303,7 @@ fun PlayerScreen(
             onSeek = vm::seekTo,
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -374,7 +376,7 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
 
         // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 音质 / 倍速
         PlayerAuxBar(
