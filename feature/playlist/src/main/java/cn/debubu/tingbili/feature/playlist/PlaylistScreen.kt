@@ -125,7 +125,7 @@ private fun PlaylistCard(
                 }
             } else {
                 AsyncImage(
-                    model = playlist.cover.orEmpty().biliImage(BiliImageVariant.MediumSquare, imageFormat),
+                    model = playlist.cover.orEmpty().biliImage(BiliImageVariant.ListThumb, imageFormat),
                     contentDescription = null,
                     modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop

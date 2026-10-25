@@ -112,7 +112,7 @@ private fun DismissableBarContent(
     val imageFormat = LocalImageFormat.current
     // 槽位每 500ms 跟进度重组一次：URL 与文案缓存，不重复拼串
     val coverUrl = remember(track.cover, imageFormat) {
-        track.cover.biliImage(BiliImageVariant.MediumSquare, imageFormat)
+        track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat)
     }
     val title = remember(track) {
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }

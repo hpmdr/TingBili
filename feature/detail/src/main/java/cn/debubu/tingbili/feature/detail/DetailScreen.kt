@@ -201,7 +201,7 @@ private fun DetailContent(
     val imageFormat = LocalImageFormat.current
     // 头部重活只随 video 变：progress 每秒推，组合内 SDF/format 每秒跑纯属浪费
     val coverUrl = remember(video.pic, imageFormat) {
-        video.pic.takeIf { it.isNotBlank() }?.biliImage(BiliImageVariant.DetailHero, imageFormat)
+        video.pic.takeIf { it.isNotBlank() }?.biliImage(BiliImageVariant.LargeCover, imageFormat)
     }
     val subLine = remember(video.tname, video.pubdate) {
         buildString {

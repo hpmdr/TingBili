@@ -148,7 +148,7 @@ fun PlayerScreen(
 
     val coverModel = trackUi.track?.cover
         ?.takeIf { it.isNotBlank() }
-        ?.biliImage(BiliImageVariant.PlayerHero, imageFormat)
+        ?.biliImage(BiliImageVariant.LargeCover, imageFormat)
     Box(modifier = Modifier.fillMaxSize()) {
         // 沉浸背景：同一张封面做模糊底，主题罩子保证深浅主题都压得住字
         AsyncImage(

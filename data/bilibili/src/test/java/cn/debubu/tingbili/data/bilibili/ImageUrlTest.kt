@@ -28,8 +28,8 @@ class ImageUrlTest {
             base.biliImage(BiliImageVariant.ListThumb, "avif"),
         )
         assertEquals(
-            "$base@256w_256h_1c.webp",
-            base.biliImage(BiliImageVariant.MediumSquare, "webp"),
+            "$base@960w_540h_1c.webp",
+            base.biliImage(BiliImageVariant.LargeCover, "webp"),
         )
     }
 }

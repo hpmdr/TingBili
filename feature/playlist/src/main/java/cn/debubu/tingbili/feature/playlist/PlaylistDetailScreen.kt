@@ -189,7 +189,7 @@ fun PlaylistDetailScreen(
                         )
                     } else {
                         AsyncImage(
-                            model = pl.cover.orEmpty().biliImage(BiliImageVariant.DetailHero, imageFormat),
+                            model = pl.cover.orEmpty().biliImage(BiliImageVariant.LargeCover, imageFormat),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
@@ -224,7 +224,7 @@ fun PlaylistDetailScreen(
                                 tonalElevation = 0.dp
                             ) {
                                 AsyncImage(
-                                    model = pl.cover.orEmpty().biliImage(BiliImageVariant.MediumSquare, imageFormat),
+                                    model = pl.cover.orEmpty().biliImage(BiliImageVariant.ListThumb, imageFormat),
                                     contentDescription = null,
                                     modifier = Modifier.size(96.dp),
                                     contentScale = ContentScale.Crop

@@ -35,12 +35,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.dto.BiliFavFolder
 import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -117,6 +119,7 @@ fun BiliFavFoldersScreen(
     val error by vm.error.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
     val hasMore by vm.hasMore.collectAsStateWithLifecycle()
+    val imageFormat = LocalImageFormat.current
     androidx.compose.runtime.LaunchedEffect(session?.uid) { vm.load() }
     TingBiliScaffold(topBar = { TingBiliTopAppBar(title = "B站收藏", navigationIcon = { BackNavIcon(onBack = onBack) }) }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -139,7 +142,7 @@ fun BiliFavFoldersScreen(
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 AsyncImage(
-                                    model = folder.cover.biliImage(192, 120),
+                                    model = folder.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
                                     contentDescription = null,
                                     modifier = Modifier.size(width = 96.dp, height = 60.dp).clip(MaterialTheme.shapes.medium),
                                     contentScale = ContentScale.Crop,
