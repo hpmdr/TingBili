@@ -2,7 +2,11 @@ package cn.debubu.tingbili.feature.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -26,13 +30,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
@@ -56,7 +62,6 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -141,6 +146,33 @@ fun PlayerScreen(
     var infoReturnToMore by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
 
+    val coverModel = trackUi.track?.cover
+        ?.takeIf { it.isNotBlank() }
+        ?.biliImage(BiliImageVariant.LargeSquare, imageFormat)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 沉浸背景：同一张封面做模糊底，主题罩子保证深浅主题都压得住字
+        AsyncImage(
+            model = coverModel,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(28.dp)
+                .alpha(0.35f),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.72f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.background,
+                        ),
+                    ),
+                ),
+        )
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -159,20 +191,22 @@ fun PlayerScreen(
 
         if (!lyricFullscreen) {
             AsyncImage(
-                model = trackUi.track?.cover
-                    ?.takeIf { it.isNotBlank() }
-                    ?.biliImage(BiliImageVariant.LargeSquare, imageFormat),
+                model = coverModel,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .fillMaxWidth(0.76f)
-                    .widthIn(max = 320.dp)
-                    .aspectRatio(1f)
-                    .shadow(18.dp, RoundedCornerShape(24.dp), clip = false)
-                    .clip(RoundedCornerShape(24.dp)),
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .shadow(18.dp, RoundedCornerShape(16.dp), clip = false)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        RoundedCornerShape(16.dp),
+                    ),
             )
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = playerChapterLabel(trackUi.track),
@@ -296,14 +330,27 @@ fun PlayerScreen(
                     CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
                 }
             } else {
-                FilledIconButton(
-                    onClick = { vm.toggle() },
-                    modifier = Modifier.size(64.dp),
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.tertiary,
+                                ),
+                            ),
+                        )
+                        .clickable(onClick = { vm.toggle() }),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = if (trackUi.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (trackUi.isPlaying) "暂停" else "播放",
-                        modifier = Modifier.size(34.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(36.dp),
                     )
                 }
             }
@@ -343,6 +390,7 @@ fun PlayerScreen(
         )
 
         Spacer(Modifier.height(8.dp))
+    }
     }
 
     if (showTimerSheet) {
@@ -848,11 +896,20 @@ private fun PlaybackProgressBar(
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = "${formatMs(shownPositionMs)} / ${formatMs(durationMs)}",
+                text = formatMs(shownPositionMs),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = formatMs(durationMs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
             Spacer(Modifier.weight(1f))
             Text(
@@ -966,55 +1023,61 @@ private fun PlayerAuxBar(
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
     val idleColor = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AuxItem(
-            icon = Icons.Filled.Timer,
-            label = sleepLabel,
-            tint = if (sleepActive) activeColor else idleColor,
-            contentDescription = "睡眠定时",
-            onClick = onTimerClick,
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            modifier = Modifier.padding(vertical = 4.dp),
         )
-        if (showSubtitleEntry) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             AuxItem(
-                icon = Icons.Filled.ClosedCaption,
-                label = "字幕",
+                icon = Icons.Filled.Timer,
+                label = sleepLabel,
+                tint = if (sleepActive) activeColor else idleColor,
+                contentDescription = "睡眠定时",
+                onClick = onTimerClick,
+            )
+            if (showSubtitleEntry) {
+                AuxItem(
+                    icon = Icons.Filled.ClosedCaption,
+                    label = "字幕",
+                    tint = idleColor,
+                    contentDescription = "切换字幕",
+                    onClick = onSubtitleClick,
+                )
+            }
+            AuxItem(
+                icon = Icons.Filled.List,
+                label = "章节",
                 tint = idleColor,
-                contentDescription = "切换字幕",
-                onClick = onSubtitleClick,
+                contentDescription = "章节目录",
+                onClick = onChapterClick,
+            )
+            AuxItem(
+                icon = Icons.Filled.Speed,
+                label = speedLabel,
+                tint = if (speedLabel != "倍速") activeColor else idleColor,
+                contentDescription = "倍速",
+                onClick = onSpeedClick,
+            )
+            AuxItem(
+                icon = Icons.Filled.HighQuality,
+                label = qualityLabel,
+                tint = idleColor,
+                contentDescription = "音质",
+                onClick = onQualityClick,
+            )
+            AuxItem(
+                icon = Icons.Filled.Info,
+                label = "信息",
+                tint = idleColor,
+                contentDescription = "播放信息",
+                onClick = onInfoClick,
             )
         }
-        AuxItem(
-            icon = Icons.Filled.List,
-            label = "章节",
-            tint = idleColor,
-            contentDescription = "章节目录",
-            onClick = onChapterClick,
-        )
-        AuxItem(
-            icon = Icons.Filled.Speed,
-            label = speedLabel,
-            tint = idleColor,
-            contentDescription = "倍速",
-            onClick = onSpeedClick,
-        )
-        AuxItem(
-            icon = Icons.Filled.HighQuality,
-            label = qualityLabel,
-            tint = idleColor,
-            contentDescription = "音质",
-            onClick = onQualityClick,
-        )
-        AuxItem(
-            icon = Icons.Filled.Info,
-            label = "信息",
-            tint = idleColor,
-            contentDescription = "播放信息",
-            onClick = onInfoClick,
-        )
     }
 }
 
@@ -1054,8 +1117,9 @@ private fun MiniLyricCard(
     val next2 = lyrics.getOrNull(currentIndex + 2)?.text
     Surface(
         onClick = onCardClick,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -1072,7 +1136,7 @@ private fun MiniLyricCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "实时字幕",
+                    text = "实时 AI 字幕",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -1134,6 +1198,13 @@ private fun MiniLyricCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 66.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                 if (!prev.isNullOrBlank()) {
                     Text(
                         text = prev,
@@ -1141,7 +1212,7 @@ private fun MiniLyricCard(
                             fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
+                        textAlign = TextAlign.Start,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
@@ -1154,7 +1225,7 @@ private fun MiniLyricCard(
                     ),
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Start,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
@@ -1166,7 +1237,7 @@ private fun MiniLyricCard(
                             fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                        textAlign = TextAlign.Start,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
@@ -1179,11 +1250,12 @@ private fun MiniLyricCard(
                             fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
+                        textAlign = TextAlign.Start,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
                 }
                 }
             }
