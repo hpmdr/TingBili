@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
@@ -137,6 +138,7 @@ fun PlayerScreen(
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var infoReturnToMore by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
 
     Column(
@@ -337,6 +339,7 @@ fun PlayerScreen(
             onChapterClick = { showChapterSheet = true },
             onQualityClick = { vm.loadAudioOptions(); showQualitySheet = true },
             onSpeedClick = vm::cycleSpeed,
+            onInfoClick = { infoReturnToMore = false; showInfoSheet = true },
         )
 
         Spacer(Modifier.height(8.dp))
@@ -383,6 +386,7 @@ fun PlayerScreen(
             refreshing = isRefreshing,
             onRefresh = { vm.refreshBv() },
             onInfo = {
+                infoReturnToMore = true
                 showMoreSheet = false
                 showInfoSheet = true
             },
@@ -402,6 +406,7 @@ fun PlayerScreen(
             info = pipelineInfo,
             qualityLine = qualityLine,
             hasTrack = trackUi.track != null,
+            showBack = infoReturnToMore,
             onBack = {
                 showInfoSheet = false
                 showMoreSheet = true
@@ -544,6 +549,7 @@ private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
     qualityLine: String,
     hasTrack: Boolean,
+    showBack: Boolean = true,
     onBack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -555,14 +561,16 @@ private fun PlaybackInfoSheet(
                 .padding(bottom = 32.dp),
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.CenterStart),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回更多操作",
-                    )
+                if (showBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回更多操作",
+                        )
+                    }
                 }
                 Text(
                     text = "播放信息",
@@ -572,7 +580,7 @@ private fun PlaybackInfoSheet(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .fillMaxWidth()
-                        .padding(horizontal = 56.dp),
+                        .padding(horizontal = if (showBack) 56.dp else 0.dp),
                 )
             }
             if (!hasTrack) {
@@ -945,6 +953,7 @@ private fun PlayerAuxBar(
     onChapterClick: () -> Unit,
     onQualityClick: () -> Unit,
     onSpeedClick: () -> Unit,
+    onInfoClick: () -> Unit,
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
     val idleColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -989,6 +998,13 @@ private fun PlayerAuxBar(
             tint = idleColor,
             contentDescription = "音质",
             onClick = onQualityClick,
+        )
+        AuxItem(
+            icon = Icons.Filled.Info,
+            label = "信息",
+            tint = idleColor,
+            contentDescription = "播放信息",
+            onClick = onInfoClick,
         )
     }
 }
