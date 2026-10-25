@@ -160,6 +160,7 @@ class PlayerManagerTest {
         prefs = PreferencesRepository(dataStore)
         fakeResolvers = FakeMediaResolvers()
         playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), fakePlayQueue, context)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
     }
 
     @Test
@@ -419,21 +420,23 @@ class PlayerManagerTest {
         // 默认开 offload 会钳住倍速: 先关, 再放行主 looper 让镜像同步
         prefs.setAudioOffload(false)
         shadowOf(Looper.getMainLooper()).idle()
-        playerManager.setSpeed(1.5f)
+        assertTrue(playerManager.setSpeed(1.5f))
         assertEquals(1.5f, fakePlayer.capturedSpeed, 0.001f)
         assertEquals(1.5f, prefs.speed.first(), 0.001f)
     }
 
     @Test
-    fun `setSpeed blocked when offload enabled`() = runTest {
+    fun `setSpeed blocked when offload engaged`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
         shadowOf(Looper.getMainLooper()).idle()
-        playerManager.setSpeed(1.5f)
+        assertEquals(false, playerManager.setSpeed(1.5f))
         assertEquals(1f, fakePlayer.capturedSpeed, 0.001f)
         assertEquals(1f, prefs.speed.first(), 0.001f)
-        assertEquals("DSP 省电开启时不支持倍速，已保持 1.0x", playerManager.state.value.errorMessage)
+        assertEquals(null, playerManager.state.value.errorMessage)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
         playerManager.release()
     }
 

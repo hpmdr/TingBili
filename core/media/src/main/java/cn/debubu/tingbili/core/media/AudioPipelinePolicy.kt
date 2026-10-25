@@ -8,13 +8,15 @@ import kotlinx.coroutines.launch
 /**
  * 音频管线策略：硬解/Offload 开关镜像 + 倍速互斥，不碰 _state（经 Listener 同步）。
  *
- * - offload 开启时 DSP 管线不支持变速：非 1.0x 请求直接拒绝（调用方提示，不断播）；
- * - 开关打开瞬间若正处变速，一次性回 1.0x；
+ * - offload 生效（DSP 真正接管）时不支持变速：非 1.0x 直接拒绝（调用方提示，不断播）；
+ * - 只开开关但 DSP 未接管（设备不支持，已自动回落）时不限速；
+ * - 开关打开瞬间（且 DSP 已接管）若正处变速，一次性回 1.0x；
  * - 硬解开关实时镜像到解码器选择器，切换后下一首生效，无需重建播放器。
  */
 class AudioPipelinePolicy(
     private val prefs: PreferencesRepository,
     private val transport: PlayerHandle,
+    private val isOffloadActive: () -> Boolean = { AudioPipelineMonitor.offloadSleeping.value },
 ) {
     interface Listener {
         fun currentSpeed(): Float
@@ -41,7 +43,7 @@ class AudioPipelinePolicy(
         jobs += scope.launch {
             prefs.audioHwDecode.collect { PreferHardwareAudioDecoderSelector.preferHardware = it }
         }
-        // offload 开关实时镜像：开时若倍速非 1.0x 则回 1.0x（DSP 管线不支持变速）
+        // offload 开关实时镜像：生效中（DSP 已接管）若倍速非 1.0x 则回 1.0x（DSP 管线不支持变速）
         jobs += scope.launch {
             prefs.audioOffload.collect { applyAudioOffload(it) }
         }
@@ -52,12 +54,12 @@ class AudioPipelinePolicy(
         jobs.clear()
     }
     /**
-     * 倍速请求：钳 0.5x~3.0x；offload 开启时非 1.0x 直接拒绝（BlockedByOffload，不断播）。
-     * 调用方按结果更新 UI（Applied→清错，Blocked→提示“DSP 省电开启时不支持倍速”）。
+     * 倍速请求：钳 0.5x~3.0x；offload 生效中非 1.0x 直接拒绝（BlockedByOffload，不断播）。
+     * 调用方按结果更新 UI（Applied→清错，Blocked→提示“DSP 省电生效中不支持倍速”）。
      */
     suspend fun requestSpeed(speed: Float): SpeedResult {
         val clamped = speed.coerceIn(0.5f, 3.0f)
-        if (offloadEnabled && clamped != 1f) return SpeedResult.BlockedByOffload
+        if (offloadEnabled && isOffloadActive() && clamped != 1f) return SpeedResult.BlockedByOffload
         prefs.setSpeed(clamped)
         try {
             transport.setPlaybackSpeed(clamped)
@@ -68,7 +70,7 @@ class AudioPipelinePolicy(
 
     private suspend fun applyAudioOffload(enabled: Boolean) {
         offloadEnabled = enabled
-        if (enabled && listener?.currentSpeed() != 1f) {
+        if (enabled && isOffloadActive() && listener?.currentSpeed() != 1f) {
             prefs.setSpeed(1f)
             try {
                 transport.setPlaybackSpeed(1f)

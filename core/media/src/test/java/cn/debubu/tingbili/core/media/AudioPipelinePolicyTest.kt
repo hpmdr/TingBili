@@ -70,6 +70,7 @@ class AudioPipelinePolicyTest {
         transport = FakeTransport()
         listener = FakeListener()
         policy = AudioPipelinePolicy(prefs, transport)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
     }
 
     @Test
@@ -86,9 +87,10 @@ class AudioPipelinePolicyTest {
     }
 
     @Test
-    fun `offload on blocks non-1x`() = runTest {
+    fun `offload engaged blocks non-1x`() = runTest {
         policy.attach(this, listener)
         prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
         runCurrent()
         assertEquals(true, policy.offloadEnabled)
         val r = policy.requestSpeed(1.5f)
@@ -98,9 +100,24 @@ class AudioPipelinePolicyTest {
     }
 
     @Test
+    fun `offload on but fallback allows speed`() = runTest {
+        policy.attach(this, listener)
+        prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        runCurrent()
+        assertEquals(true, policy.offloadEnabled)
+        val r = policy.requestSpeed(1.5f)
+        assertTrue(r is AudioPipelinePolicy.SpeedResult.Applied)
+        assertEquals(1.5f, (r as AudioPipelinePolicy.SpeedResult.Applied).speed)
+        assertEquals(1.5f, transport.speed, 0.001f)
+        policy.release()
+    }
+
+    @Test
     fun `offload on resets playing speed to 1x`() = runTest {
         listener.speed = 2f
         transport.speed = 2f
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
         policy.attach(this, listener)
         prefs.setAudioOffload(true)
         runCurrent()
@@ -108,6 +125,22 @@ class AudioPipelinePolicyTest {
         policy.release()
         assertEquals(1f, prefs.speed.first(), 0.001f)
         assertEquals(1, listener.resets)
+        policy.release()
+    }
+
+    @Test
+    fun `offload on without engage does not reset speed`() = runTest {
+        listener.speed = 2f
+        transport.speed = 2f
+        prefs.setSpeed(2f)
+        policy.attach(this, listener)
+        prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        runCurrent()
+        assertEquals(2f, transport.speed, 0.001f)
+        assertEquals(0, listener.resets)
+        policy.release()
+        assertEquals(2f, prefs.speed.first(), 0.001f)
         policy.release()
     }
 

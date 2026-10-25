@@ -435,12 +435,14 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** 倍速循环切换：0.5 → 1.0 → 1.5 → 2.0 → 3.0 */
+    /** 倍速循环切换：1.0 → 1.25 → 1.5 → 2.0；DSP 接管中被拦截时弹 Toast（字幕上方内联提示用户注意不到）。 */
     fun cycleSpeed() {
         val steps = listOf(1.0f, 1.25f, 1.5f, 2.0f)
         val cur = player.state.value.speed
         val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
-        viewModelScope.launch { player.setSpeed(next) }
+        viewModelScope.launch {
+            if (!player.setSpeed(next)) _message.value = "DSP 省电生效中不支持倍速，已保持 1.0x"
+        }
     }
     // ---------- 音质（播放页底部第四入口；档位定义见 data:bilibili AudioQuality，对标 PiliPlus） ----------
 

@@ -8,6 +8,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.media.AudioPipelineMonitor
 import cn.debubu.tingbili.core.media.PlayerHandle
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliApi
@@ -331,6 +332,22 @@ class PlayerViewModelTest {
         runCurrent()
         advanceTimeBy(200)
         assertEquals("刷新失败，已保留旧数据", vm.message.value)
+    }
+
+    @Test
+    fun `speed blocked by engaged offload toasts instead of inline error`() = runTest(dispatcher) {
+        // 回归：DSP 未接管只开开关时倍速可用；真正接管中被拦截走 Toast，不写字幕上方内联区
+        prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
+        runCurrent()
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        vm.cycleSpeed()
+        runCurrent()
+        advanceTimeBy(100)
+        assertEquals("DSP 省电生效中不支持倍速，已保持 1.0x", vm.message.value)
+        assertEquals(null, player.state.value.errorMessage)
+        assertEquals(1f, player.state.value.speed)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
     }
 
     @Test

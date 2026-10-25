@@ -394,7 +394,7 @@ class PlayerManager @Inject constructor(
             transport.prepare()
             transport.play()
 
-            // Restore preferences: speed（经 AudioPipelinePolicy：offload 开时存量变速也钳回 1.0x）、repeatMode
+            // Restore preferences: speed（经 AudioPipelinePolicy：DSP 已接管时存量变速才钳回 1.0x）、repeatMode
             val speed = when (val r = audioPolicy.requestSpeed(prefs.speed.first())) {
                 is AudioPipelinePolicy.SpeedResult.Applied -> r.speed
                 AudioPipelinePolicy.SpeedResult.BlockedByOffload -> 1f
@@ -530,19 +530,17 @@ class PlayerManager @Inject constructor(
     }
 
     /**
-     * offload 开启时 DSP 管线不支持变速: 非 1.0x 请求直接拒绝并提示, 不断播.
-     * 开关打开瞬间若正处变速, 由 AudioPipelinePolicy 一次性回 1.0x.
+     * offload 生效（DSP 真正接管）时不支持变速: 非 1.0x 请求直接拒绝, 不断播.
+     * 开关打开瞬间（且 DSP 已接管）若正处变速, 由 AudioPipelinePolicy 一次性回 1.0x.
+     * @return true=已应用；false=正被 DSP 接管拦截（调用方负责 Toast 提示，state 里不留内联错误）。
      */
-    /**
-     * offload 开启时 DSP 管线不支持变速: 非 1.0x 请求直接拒绝并提示, 不断播.
-     * 开关打开瞬间若正处变速, 由 AudioPipelinePolicy 一次性回 1.0x.
-     */
-    suspend fun setSpeed(speed: Float) {
-        when (val r = audioPolicy.requestSpeed(speed)) {
-            is AudioPipelinePolicy.SpeedResult.Applied ->
+    suspend fun setSpeed(speed: Float): Boolean {
+        return when (val r = audioPolicy.requestSpeed(speed)) {
+            is AudioPipelinePolicy.SpeedResult.Applied -> {
                 _state.update { it.copy(speed = r.speed, errorMessage = null) }
-            AudioPipelinePolicy.SpeedResult.BlockedByOffload ->
-                _state.update { it.copy(errorMessage = "DSP 省电开启时不支持倍速，已保持 1.0x") }
+                true
+            }
+            AudioPipelinePolicy.SpeedResult.BlockedByOffload -> false
         }
     }
 

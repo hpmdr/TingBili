@@ -619,7 +619,11 @@ private fun PlaybackInfoSheet(
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
                 Text(text = "小知识：DSP 卸载就是把解码交给低功耗芯片、主芯片休眠来省电；条件不满足时自动回落，不断播。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                Text(text = "DSP 省电开启时不支持倍速, 已保持 1.0x; 关闭卸载后可变速.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                if (info.offloadSleeping) {
+                    Text(text = "DSP 省电生效中不支持倍速，已保持 1.0x；退出接管后可变速。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                } else {
+                    Text(text = "当前已自动回落到 CPU 解码，倍速可用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                }
             }
             }
         }
@@ -1571,4 +1575,4 @@ private fun formatChapterDuration(durationMs: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-}
+}
