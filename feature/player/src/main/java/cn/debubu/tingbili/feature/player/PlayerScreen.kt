@@ -76,6 +76,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.first
+import androidx.compose.foundation.interaction.DragInteraction
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -1294,6 +1298,34 @@ private fun FullscreenLyricsList(
     isLoading: Boolean,
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // 用户接管：手指拖动时暂停自动跟随，松手且静置几秒后才回到高亮行；
+    // 跟随是程序化滚动，不产生 DragInteraction，不会和这里互相误触。
+    var followSuspended by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        var resumeJob: Job? = null
+        try {
+            listState.interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is DragInteraction.Start -> {
+                        resumeJob?.cancel()
+                        resumeJob = null
+                        followSuspended = true
+                    }
+                    is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                        resumeJob?.cancel()
+                        resumeJob = launch {
+                            // 惯性滚动走完再开始计时，避免还在滑就被拽回高亮
+                            snapshotFlow { listState.isScrollInProgress }.first { !it }
+                            delay(FOLLOW_RESUME_DELAY_MS)
+                            followSuspended = false
+                        }
+                    }
+                }
+            }
+        } finally {
+            resumeJob?.cancel()
+        }
+    }
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -1303,7 +1335,9 @@ private fun FullscreenLyricsList(
         // 不依赖 scrollToItem 的 offset 语义（真机证明其负偏移在冷/热布局下都落不到中央，
         // 只会把目标行晾在底边），scrollBy 是纯相对位移无歧义；到首尾时自然钳制。
         // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态只滚一次会定错位置
-        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerPadding) {
+        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerPadding, followSuspended) {
+            // 用户正在看别处：别抢滚动；恢复时 key 变化会重跑，自然回到高亮行
+            if (followSuspended) return@LaunchedEffect
             val idx = state.currentLyricIndex
             if (idx < 0 || idx >= state.lyrics.size) return@LaunchedEffect
             // 瞬时跟随不用动画：动画会被下一句打断，越跟越偏
@@ -1377,6 +1411,9 @@ private fun FullscreenLyricsList(
         }
     }
 }
+
+/** 全屏字幕：松手后静置这么久无操作，才自动回到高亮行 */
+private const val FOLLOW_RESUME_DELAY_MS = 4000L
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable

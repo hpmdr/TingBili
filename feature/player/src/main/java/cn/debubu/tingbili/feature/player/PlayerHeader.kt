@@ -15,7 +15,7 @@ internal fun playerHeaderTitle(track: Track?): String =
         ?: "未播放"
 
 /**
- * 封面下方章节行：分 P 序号已知时加中文集数前缀（`第1集 · M 1-30`），
+ * 封面下方章节行：分 P 序号已知时加前缀（`第 1 P · M 1-30`），
  * 让用户一眼看懂这是正在听的这一集；单集/序号未知时与 [chapterLabel] 一致。
  * 只看序号不看总数：整单播放时队列 track 的 pageCount 常是默认值，
  * 但“上次听到 P1”这种文案本就只认序号，这里保持一致。
@@ -23,6 +23,6 @@ internal fun playerHeaderTitle(track: Track?): String =
 internal fun playerChapterLabel(track: Track?): String {
     val name = track?.title?.takeIf { it.isNotBlank() } ?: return "未播放"
     val pageIndex = track.pageIndex
-    return if (pageIndex != null && pageIndex > 0) "第${pageIndex}集 · $name"
+    return if (pageIndex != null && pageIndex > 0) "第 $pageIndex P · $name"
     else chapterLabel(name, pageIndex, track.pageCount)
 }
