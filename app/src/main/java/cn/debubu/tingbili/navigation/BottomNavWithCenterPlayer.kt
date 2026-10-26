@@ -178,6 +178,8 @@ private fun MiniPlayerSlot(
         visible = visibility.isReserved(trackKey),
         scrollVisible = visibility.scrollVisible,
         floating = floating,
+        // 手机悬浮：底部直角贴紧底栏连成一体
+        bottomFlush = true,
         modifier = modifier,
         onDismiss = { visibility.dismiss(trackKey) },
     )

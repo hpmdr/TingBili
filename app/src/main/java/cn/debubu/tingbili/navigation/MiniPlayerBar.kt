@@ -65,8 +65,9 @@ import kotlinx.coroutines.launch
  * → 圆形播放键（唯一强调色）。
  * - [visible] 只管有无（无曲目/手动关闭才变，滚动时不变）；
  * - [scrollVisible] 只做位移+淡出，不改布局：内容内边距全程不动，滑到底不弹；
- * - [floating] 悬浮卡片样式：16dp 圆角 + 阴影，盖在内容上，列表从它后面滚过；
+ * - [floating] 悬浮卡片样式：圆角 + 阴影，盖在内容上，列表从它后面滚过；
  *   为 false 时是贴底全宽矩形（与底栏连成一体）。
+ * - [bottomFlush] 只在悬浮时有效：底部直角、顶部 16dp 圆角，视觉上与底栏连成一体。
  * - 条上上滑超过阈值（或快速上甩）触发 [onDismiss]，关闭≠暂停，音乐继续播，
  *   切歌后自动回来；
  * - 无曲目时由调用方隐藏（不占位）。
@@ -84,6 +85,7 @@ fun MiniPlayerBar(
     visible: Boolean = true,
     scrollVisible: Boolean = true,
     floating: Boolean = false,
+    bottomFlush: Boolean = false,
     onDismiss: () -> Unit = {},
 ) {
     if (track == null) return
@@ -108,6 +110,7 @@ fun MiniPlayerBar(
             onDismiss = onDismiss,
             scrollVisible = scrollVisible,
             floating = floating,
+            bottomFlush = bottomFlush,
         )
     }
 }
@@ -125,6 +128,7 @@ private fun DismissableBarContent(
     onDismiss: () -> Unit,
     scrollVisible: Boolean = true,
     floating: Boolean = false,
+    bottomFlush: Boolean = false,
 ) {
     val imageFormat = LocalImageFormat.current
     // 槽位每 500ms 跟进度重组一次：URL 与文案缓存，不重复拼串
@@ -207,7 +211,11 @@ private fun DismissableBarContent(
                     }
                 },
             ),
-        shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape,
+        shape = when {
+            !floating -> RectangleShape
+            bottomFlush -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+            else -> RoundedCornerShape(16.dp)
+        },
         // 悬浮时与内容分离：圆角卡片 + 阴影；贴底时与底栏同色连成一体
         color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = if (floating) 3.dp else 0.dp,
