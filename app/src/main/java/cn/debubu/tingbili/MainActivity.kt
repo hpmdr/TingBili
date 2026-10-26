@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -193,7 +192,6 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                         visibility = miniPlayerVisibility,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(start = 12.dp, end = 12.dp)
                             .fillMaxWidth(),
                     )
                 }
