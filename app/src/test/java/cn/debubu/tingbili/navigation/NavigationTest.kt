@@ -185,6 +185,28 @@ class NavigationTest {
     }
 
     @Test
+    fun `mini bar scroll hide keeps layout slot`() {
+        // 滚动隐藏只做位移：节点仍在（占位），列表内边距不动，滑到底不弹
+        var scrollVisible by mutableStateOf(true)
+        composeTestRule.setContent {
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = true,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {},
+                visible = true,
+                scrollVisible = scrollVisible
+            )
+        }
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertIsDisplayed()
+        scrollVisible = false
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeBy(2000)
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertExists()
+    }
+
+    @Test
     fun `mini bar swipe down does not dismiss`() {
         var dismissed = 0
         composeTestRule.setContent {

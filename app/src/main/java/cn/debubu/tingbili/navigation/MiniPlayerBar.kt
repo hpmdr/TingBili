@@ -63,9 +63,9 @@ import kotlinx.coroutines.launch
 /**
  * 贴底 mini 播放条：全宽矩形、与底栏同色实底（视觉连成一体）+ 底边 3dp 进度线。
  * 层级只有三层：标题（主）→ 章节 + 等宽时间（次/辅）→ 圆形播放键（唯一强调色）。
- * - [visible] 为 false 时向上收起、不占位（滚动联动隐藏 + 手动关闭都走这里）；
- *   注：曾试过滚动只改位移以省重测，但会留一块底色死区（slot 占位不塌），
- *   实测不如收起干净，已回滚；滚动时的过渡重测仅 250ms，可接受。
+ * - [visible] 只管占位（无曲目/手动关闭才变，滚动时不变，避免列表底部弹跳）；
+ * - [scrollVisible] 只做位移+淡出，不改布局：下滑到底时底栏高度不动，内容不重测；
+ *   隐藏时槽位会留出与内容同色的空隙（为不弹付出的代价），显示时滑回原位；
  * - 条上上滑超过阈值（或快速上甩）触发 [onDismiss]，关闭≠暂停，音乐继续播，
  *   切歌后自动回来；
  * - 无曲目时由调用方隐藏（不占位）。
@@ -81,6 +81,7 @@ fun MiniPlayerBar(
     positionMs: Long = 0L,
     durationMs: Long = 0L,
     visible: Boolean = true,
+    scrollVisible: Boolean = true,
     onDismiss: () -> Unit = {},
 ) {
     if (track == null) return
@@ -101,6 +102,7 @@ fun MiniPlayerBar(
             onOpen = onOpen,
             onDismiss = onDismiss,
             modifier = modifier,
+            scrollVisible = scrollVisible,
         )
     }
 }
@@ -117,6 +119,7 @@ private fun DismissableBarContent(
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    scrollVisible: Boolean = true,
 ) {
     val imageFormat = LocalImageFormat.current
     // 槽位每 500ms 跟进度重组一次：URL 与文案缓存，不重复拼串
@@ -137,26 +140,49 @@ private fun DismissableBarContent(
     }
     val offsetY = remember { Animatable(0f) }
     var barHeightPx by remember { mutableFloatStateOf(0f) }
-    // 滚动隐藏只改位移：Scaffold 内边距不动，内容不重测
+    // 滚动隐藏只改位移：Scaffold 内边距不动，内容不重测、不弹跳
+    val scrollOffsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     // 切歌后复位（上滑关闭是按首歌记忆的）
-    LaunchedEffect(trackKey) { offsetY.snapTo(0f) }
+    LaunchedEffect(trackKey) {
+        offsetY.snapTo(0f)
+        scrollOffsetY.snapTo(0f)
+    }
+    // 滚动显隐：下滑到底也不改布局，只把条子滑到底栏后面并淡出
+    LaunchedEffect(scrollVisible, barHeightPx) {
+        if (barHeightPx > 0f) {
+            if (scrollVisible) {
+                scrollOffsetY.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(250))
+            } else {
+                scrollOffsetY.animateTo(barHeightPx, animationSpec = androidx.compose.animation.core.tween(250))
+            }
+        } else {
+            scrollOffsetY.snapTo(0f)
+        }
+    }
     val dismissThreshold = max(72f, barHeightPx * DISMISS_FRACTION)
 
     Surface(
         onClick = onOpen,
+        enabled = scrollVisible,
         modifier = modifier
             .fillMaxWidth()
             .testTag("miniPlayerBar")
             .onSizeChanged { barHeightPx = it.height.toFloat() }
             .graphicsLayer {
-                translationY = offsetY.value
-                // 上滑（负位移）与滚隐（正位移）各自淡出，相乘叠加
-                alpha = if (barHeightPx > 0f) {
+                translationY = offsetY.value + scrollOffsetY.value
+                // 上滑关闭（负位移）与滚动隐藏（正位移）各自淡出，相乘叠加
+                val dragAlpha = if (barHeightPx > 0f) {
                     (1f + offsetY.value / barHeightPx).coerceIn(0f, 1f)
                 } else {
                     1f
                 }
+                val scrollAlpha = if (barHeightPx > 0f) {
+                    (1f - scrollOffsetY.value / barHeightPx).coerceIn(0f, 1f)
+                } else {
+                    1f
+                }
+                alpha = dragAlpha * scrollAlpha
             }
             .draggable(
                 orientation = Orientation.Vertical,

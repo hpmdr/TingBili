@@ -162,7 +162,9 @@ private fun MiniPlayerSlot(
         },
         positionMs = state.positionMs,
         durationMs = state.durationMs,
-        visible = visibility.isVisible(trackKey),
+        // 占位只看曲目/手动关闭，滚动显隐只走位移：滑到底内边距不动，就不弹了
+        visible = visibility.isReserved(trackKey),
+        scrollVisible = visibility.scrollVisible,
         onDismiss = { visibility.dismiss(trackKey) },
     )
 }

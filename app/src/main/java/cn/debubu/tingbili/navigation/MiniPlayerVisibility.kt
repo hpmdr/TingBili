@@ -43,8 +43,12 @@ class MiniPlayerVisibility {
         dismissedKey = trackKey
     }
 
+    /** 有曲目且未被手动关闭：决定是否占位（只在切歌/关闭时变，不在滚动时变）。 */
+    fun isReserved(trackKey: String?): Boolean =
+        trackKey != null && dismissedKey != trackKey
+
     fun isVisible(trackKey: String?): Boolean =
-        trackKey != null && dismissedKey != trackKey && scrollVisible
+        isReserved(trackKey) && scrollVisible
 
     companion object {
         /** 滚动死区，避免手指微抖导致条子闪烁 */
