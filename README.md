@@ -33,15 +33,21 @@
 
 ## 截图看看
 
-| 首页推荐 | 播放页 |
-|---|---|
-| <img src="docs/screenshots/home.jpg" width="270"> | <img src="docs/screenshots/player.jpg" width="270"> |
-| 听书推荐流，搜一下就有 | 字幕跟读、倍速、定时、快进快退都在这 |
+> 深色 / 浅色跟随系统，深浅两套都适配。下面先看最核心的**播放页**，再看其他页面（浅色）。
 
-| 我的收藏 | 播放历史 |
+### 播放页
+
+| 深色 | 浅色 |
 |---|---|
-| <img src="docs/screenshots/playlist.jpg" width="270"> | <img src="docs/screenshots/history.jpg" width="270"> |
-| 自建歌单、合集一键成辑 | 每个节目都记住上次听到哪 |
+| <img src="docs/screenshots/player.jpg" width="270"> | <img src="docs/screenshots/player_light.jpg" width="270"> |
+| 字幕跟读、高亮，点一句跳一句 | 定时、倍速、快进快退、章节都在底下一排 |
+
+### 其他页面
+
+| 首页推荐 | 我的收藏 | 播放历史 |
+|---|---|---|
+| <img src="docs/screenshots/home_light.jpg" width="180"> | <img src="docs/screenshots/playlist_light.jpg" width="180"> | <img src="docs/screenshots/history_light.jpg" width="180"> |
+| 听书推荐流，搜一下就有 | 自建歌单、合集一键成辑 | 每个节目都记住上次听到哪 |
 
 ## 下载安装
 
