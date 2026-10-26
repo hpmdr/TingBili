@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.feature.mine
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,10 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -141,12 +145,30 @@ fun BiliFavFoldersScreen(
                             modifier = Modifier.fillMaxWidth().clickable { onFolderClick(folder.id, folder.title) },
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                AsyncImage(
-                                    model = folder.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(width = 96.dp, height = 60.dp).clip(MaterialTheme.shapes.medium),
-                                    contentScale = ContentScale.Crop,
-                                )
+                                val thumbModifier = Modifier
+                                    .size(width = 96.dp, height = 60.dp)
+                                    .clip(MaterialTheme.shapes.medium)
+                                if (folder.cover.isBlank()) {
+                                    // B站只给"夹内第一条"的封面，首条失效时该字段为空（空夹子同理），这里用占位图
+                                    Box(
+                                        modifier = thumbModifier.background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Album,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(28.dp),
+                                        )
+                                    }
+                                } else {
+                                    AsyncImage(
+                                        model = folder.cover.biliImage(BiliImageVariant.ListThumb, imageFormat),
+                                        contentDescription = null,
+                                        modifier = thumbModifier,
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                }
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(folder.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
