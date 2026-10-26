@@ -55,12 +55,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
 import cn.debubu.tingbili.core.ui.component.SettingRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
+import cn.debubu.tingbili.data.bilibili.dto.biliImage
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
 private val BiliPink = Color(0xFFFB7299)
@@ -298,8 +301,13 @@ private fun MeHeader(
             ),
         ) {
             if (session != null && session.face.isNotBlank()) {
+                // 头像走统一 Avatar 档，别直接拉 B 站原图（64dp 用原图纯浪费流量/内存）
+                val imageFormat = LocalImageFormat.current
+                val faceUrl = remember(session.face, imageFormat) {
+                    session.face.biliImage(BiliImageVariant.Avatar, imageFormat)
+                }
                 coil3.compose.AsyncImage(
-                    model = session.face,
+                    model = faceUrl,
                     contentDescription = "用户头像",
                     modifier = Modifier
                         .size(64.dp)

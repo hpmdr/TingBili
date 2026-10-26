@@ -6,10 +6,11 @@ import cn.debubu.tingbili.core.data.model.ImageFormat
  * B 站图片 CDN 支持的常用展示规格。尺寸不能超过源图，否则 CDN 可能直接返回原图。
  */
 enum class BiliImageVariant(val width: Int, val height: Int) {
-    /** Small: rows/folders/squares share one URL (squares crop locally), shared disk cache */
+    /** Small: rows/folders/squares/playlist banner/notification share one URL (squares crop locally) */
     ListThumb(480, 270),
-    /** Big: player/detail hero/playlist header share one URL, 16:9 zero crop */
+    /** Big: only player (fg + blur bg) and video detail hero share one URL, 16:9 zero crop */
     LargeCover(960, 540),
+    /** Avatars only (UP / me), not a cover size */
     Avatar(96, 96),
 }
 

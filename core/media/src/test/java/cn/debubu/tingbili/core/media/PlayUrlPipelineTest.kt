@@ -42,7 +42,7 @@ class PlayUrlPipelineTest {
             return nextUrl
         }
         override suspend fun tracksOf(bvid: String): List<Track> = catalog
-        override fun artwork(cover: String, format: ImageFormat, width: Int, height: Int): android.net.Uri? = null
+        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
     }
 
     private lateinit var cache: FakeCache

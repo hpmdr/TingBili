@@ -189,7 +189,8 @@ fun PlaylistDetailScreen(
                         )
                     } else {
                         AsyncImage(
-                            model = pl.cover.orEmpty().biliImage(BiliImageVariant.LargeCover, imageFormat),
+                            // 横幅是模糊+半透明底，用小图档即可：与前景小封面共用同一 URL
+                            model = pl.cover.orEmpty().biliImage(BiliImageVariant.ListThumb, imageFormat),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,

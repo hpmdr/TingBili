@@ -96,16 +96,18 @@ fun AppRootNavHost(
                 popEnterTransition = TabFadeEnter,
                 popExitTransition = TabFadeExit,
             ) {
-                MeScreen(
-                    onOpenAppearance = { navController.navigate(AppearanceRoute) },
-                    onOpenSettings = { navController.navigate(SettingsRoute) },
-                    onOpenStorage = { navController.navigate(StorageRoute) },
-                    onOpenGeneral = { navController.navigate(GeneralRoute) },
-                    onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
-                    onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
-                    onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
-                    onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-                )
+                ImageFormatScope(mainViewModel) {
+                    MeScreen(
+                        onOpenAppearance = { navController.navigate(AppearanceRoute) },
+                        onOpenSettings = { navController.navigate(SettingsRoute) },
+                        onOpenStorage = { navController.navigate(StorageRoute) },
+                        onOpenGeneral = { navController.navigate(GeneralRoute) },
+                        onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
+                        onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
+                        onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
+                        onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                    )
+                }
             }
         }
         // 独立全屏页：无底栏（登录）
@@ -139,35 +141,43 @@ fun AppRootNavHost(
             AudioDecodersScreen(onBack = { navController.popBackStack() })
         }
         composable<BiliFavFoldersRoute> {
-            BiliFavFoldersScreen(
-                onBack = { navController.popBackStack() },
-                onFolderClick = { id, title -> navController.navigate(BiliFavDetailRoute(id, title)) },
-                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-            )
+            ImageFormatScope(mainViewModel) {
+                BiliFavFoldersScreen(
+                    onBack = { navController.popBackStack() },
+                    onFolderClick = { id, title -> navController.navigate(BiliFavDetailRoute(id, title)) },
+                    onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                )
+            }
         }
         composable<BiliFavDetailRoute> { entry ->
             val args = entry.toRoute<BiliFavDetailRoute>()
-            BiliFavDetailScreen(
-                mediaId = args.mediaId,
-                title = args.title,
-                onBack = { navController.popBackStack() },
-                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-            )
+            ImageFormatScope(mainViewModel) {
+                BiliFavDetailScreen(
+                    mediaId = args.mediaId,
+                    title = args.title,
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                    onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                )
+            }
         }
         composable<BiliHistoryRoute> {
-            BiliHistoryScreen(
-                onBack = { navController.popBackStack() },
-                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-            )
+            ImageFormatScope(mainViewModel) {
+                BiliHistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                    onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                )
+            }
         }
         composable<BiliToviewRoute> {
-            BiliToviewScreen(
-                onBack = { navController.popBackStack() },
-                onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-            )
+            ImageFormatScope(mainViewModel) {
+                BiliToviewScreen(
+                    onBack = { navController.popBackStack() },
+                    onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                    onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
+                )
+            }
         }
         composable<SearchRoute> {
             ImageFormatScope(mainViewModel) {

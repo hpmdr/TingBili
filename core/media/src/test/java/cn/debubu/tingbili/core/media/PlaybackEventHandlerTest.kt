@@ -54,7 +54,7 @@ class PlaybackEventHandlerTest {
     class FakeResolvers : PlayUrlResolver, CatalogResolver, ArtworkResolver {
         override suspend fun resolve(bvid: String, cid: Long): String? = null
         override suspend fun tracksOf(bvid: String): List<Track> = emptyList()
-        override fun artwork(cover: String, format: ImageFormat, width: Int, height: Int): android.net.Uri? = null
+        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
     }
 
     class FakeListener(var queue: List<Track> = emptyList()) : PlaybackEventHandler.Listener {

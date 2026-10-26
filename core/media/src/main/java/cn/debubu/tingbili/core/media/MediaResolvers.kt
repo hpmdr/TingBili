@@ -21,6 +21,9 @@ interface CatalogResolver {
 }
 
 interface ArtworkResolver {
-    /** 封面 CDN 裁剪（B 站 @WxH 规格）；空封面返回 null。 */
-    fun artwork(cover: String, format: ImageFormat, width: Int = 480, height: Int = 480): Uri?
+    /**
+     * 通知栏/锁屏/车机封面。封面尺寸由实现方按"统一小图档"决定（与列表共用同一 URL，
+     * 不额外引入第三种尺寸）；空封面返回 null。
+     */
+    fun artwork(cover: String, format: ImageFormat): Uri?
 }

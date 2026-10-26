@@ -9,6 +9,7 @@ import cn.debubu.tingbili.core.media.ArtworkResolver
 import cn.debubu.tingbili.core.media.CatalogResolver
 import cn.debubu.tingbili.core.media.PlayUrlResolver
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -41,6 +42,8 @@ class BiliMediaResolvers @Inject constructor(
             is Result.Error -> emptyList()
         }
 
-    override fun artwork(cover: String, format: ImageFormat, width: Int, height: Int): Uri? =
-        cover.takeIf { it.isNotBlank() }?.biliImage(width, height, format)?.let(Uri::parse)
+    override fun artwork(cover: String, format: ImageFormat): Uri? =
+        cover.takeIf { it.isNotBlank() }
+            ?.biliImage(BiliImageVariant.ListThumb, format)
+            ?.let(Uri::parse)
 }
