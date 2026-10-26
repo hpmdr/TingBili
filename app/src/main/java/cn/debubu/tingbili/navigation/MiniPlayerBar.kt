@@ -261,7 +261,8 @@ private fun DismissableBarContent(
                             Text(
                                 text = timeText,
                                 style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                                // 高亮：与进度线、高亮字幕同色，不再是辅灰
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 modifier = Modifier.testTag("miniTime"),
                             )
