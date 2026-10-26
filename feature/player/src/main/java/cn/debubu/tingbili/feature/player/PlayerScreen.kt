@@ -32,10 +32,9 @@ import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
@@ -147,30 +146,8 @@ fun PlayerScreen(
     val coverModel = trackUi.track?.cover
         ?.takeIf { it.isNotBlank() }
         ?.biliImage(BiliImageVariant.LargeCover, imageFormat)
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 沉浸背景：同一张封面做模糊底，主题罩子保证深浅主题都压得住字
-        AsyncImage(
-            model = coverModel,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(28.dp)
-                .alpha(0.35f),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.72f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
-                            MaterialTheme.colorScheme.background,
-                        ),
-                    ),
-                ),
-        )
+    // 纯色背景：曾试过“全屏模糊封面 + 渐变罩子”，罩子压完几乎看不见，还多一层全屏 RenderEffect，已移除
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -262,6 +239,9 @@ fun PlayerScreen(
                     lyrics = lyrUi.lyrics,
                     currentIndex = lyrUi.currentLyricIndex,
                     status = lyrUi.subtitleLoadState,
+                    label = lyrUi.subtitleLabel,
+                    trackCount = lyrUi.subtitleTracks.size,
+                    onSwitchTrack = { showSubtitleSheet = true },
                     fontScale = lyrUi.subtitleScale,
                     modifier = Modifier.fillMaxSize(),
                     onCardClick = {
@@ -376,15 +356,13 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(6.dp))
 
-        // 底部辅助栏：定时 / 字幕切换 / 章节目录 / 音质 / 倍速
+        // 底部辅助栏固定 5 项：定时 / 章节 / 倍速 / 音质 / 信息（字幕切换在字幕卡头部，避免条目增减导致整排跳动）
         PlayerAuxBar(
             sleepLabel = sleepLabel(progUi.sleepRemainSec, progUi.sleepEndOfChapter),
             sleepActive = progUi.sleepRemainSec != null || progUi.sleepEndOfChapter,
-            showSubtitleEntry = lyrUi.subtitleTracks.size > 1,
             speedLabel = if (trackUi.speed == 1f) "倍速" else "${trackUi.speed}x",
             qualityLabel = qualityLabel,
             onTimerClick = { showTimerSheet = true },
-            onSubtitleClick = { showSubtitleSheet = true },
             onChapterClick = { showChapterSheet = true },
             onQualityClick = { vm.loadAudioOptions(); showQualitySheet = true },
             onSpeedClick = vm::cycleSpeed,
@@ -1008,11 +986,9 @@ private fun sleepLabel(remainSec: Int?, endOfChapter: Boolean): String = when {
 private fun PlayerAuxBar(
     sleepLabel: String,
     sleepActive: Boolean,
-    showSubtitleEntry: Boolean,
     speedLabel: String,
     qualityLabel: String,
     onTimerClick: () -> Unit,
-    onSubtitleClick: () -> Unit,
     onChapterClick: () -> Unit,
     onQualityClick: () -> Unit,
     onSpeedClick: () -> Unit,
@@ -1037,15 +1013,6 @@ private fun PlayerAuxBar(
                 contentDescription = "睡眠定时",
                 onClick = onTimerClick,
             )
-            if (showSubtitleEntry) {
-                AuxItem(
-                    icon = Icons.Filled.ClosedCaption,
-                    label = "字幕",
-                    tint = idleColor,
-                    contentDescription = "切换字幕",
-                    onClick = onSubtitleClick,
-                )
-            }
             AuxItem(
                 icon = Icons.Filled.List,
                 label = "章节",
@@ -1106,18 +1073,21 @@ private fun MiniLyricCard(
     currentIndex: Int,
     status: SubtitleLoadState,
     onCardClick: () -> Unit,
+    label: String? = null,
+    trackCount: Int = 0,
+    onSwitchTrack: () -> Unit = {},
     fontScale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
-    // Window of 2 above + 6 below: card fills remaining height, lyrics fill viewport, current line auto-follows
+    // 窗口固定"上 2 下 6"：锚点取窗口首行（= currentIndex-2）。
+    // 之前锚当前行本身，内容超出视口时会被滚动尾部钳制，字体放大后上方上下文只剩半行。
     val windowStart = (currentIndex - 2).coerceAtLeast(0)
     val window = remember(lyrics, windowStart) {
         lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 9))
     }
     val listState = rememberLazyListState()
-    val target = (currentIndex - windowStart).coerceIn(0, (window.size - 1).coerceAtLeast(0))
-    LaunchedEffect(target, windowStart) {
-        if (window.isNotEmpty()) listState.scrollToItem(target)
+    LaunchedEffect(windowStart, lyrics) {
+        if (window.isNotEmpty()) listState.scrollToItem(0)
     }
     val current = lyrics.getOrNull(currentIndex)?.text
     Surface(
@@ -1134,6 +1104,7 @@ private fun MiniLyricCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val canSwitch = status == SubtitleLoadState.Ready && trackCount > 1
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Filled.ClosedCaption,
@@ -1142,11 +1113,33 @@ private fun MiniLyricCard(
                     modifier = Modifier.size(14.dp),
                 )
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "实时 AI 字幕",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                // 标题写真实轨道名（AI 轨由 label 自带标注）；多轨时可点这里切换，不再占用底部辅助栏
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = if (canSwitch) {
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onSwitchTrack)
+                            .padding(horizontal = 2.dp)
+                    } else {
+                        Modifier
+                    },
+                ) {
+                    Text(
+                        text = label ?: "字幕",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    if (canSwitch) {
+                        Spacer(Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "切换字幕",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 // 只有真有字幕才给全屏入口：没字幕点进去也是空的，直接在外层提示
                 Text(
