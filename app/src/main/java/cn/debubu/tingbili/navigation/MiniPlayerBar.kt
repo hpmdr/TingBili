@@ -61,11 +61,12 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
- * 贴底 mini 播放条：全宽矩形、与底栏同色实底（视觉连成一体）+ 底边 3dp 进度线。
- * 层级只有三层：标题（主）→ 章节 + 等宽时间（次/辅）→ 圆形播放键（唯一强调色）。
- * - [visible] 只管占位（无曲目/手动关闭才变，滚动时不变，避免列表底部弹跳）；
- * - [scrollVisible] 只做位移+淡出，不改布局：下滑到底时底栏高度不动，内容不重测；
- *   隐藏时槽位会留出与内容同色的空隙（为不弹付出的代价），显示时滑回原位；
+ * mini 播放条：底边 3dp 进度线，层级只有三层：标题（主）→ 章节 + 等宽时间（次/辅）
+ * → 圆形播放键（唯一强调色）。
+ * - [visible] 只管有无（无曲目/手动关闭才变，滚动时不变）；
+ * - [scrollVisible] 只做位移+淡出，不改布局：内容内边距全程不动，滑到底不弹；
+ * - [floating] 悬浮卡片样式：16dp 圆角 + 阴影，盖在内容上，列表从它后面滚过；
+ *   为 false 时是贴底全宽矩形（与底栏连成一体）。
  * - 条上上滑超过阈值（或快速上甩）触发 [onDismiss]，关闭≠暂停，音乐继续播，
  *   切歌后自动回来；
  * - 无曲目时由调用方隐藏（不占位）。
@@ -82,14 +83,18 @@ fun MiniPlayerBar(
     durationMs: Long = 0L,
     visible: Boolean = true,
     scrollVisible: Boolean = true,
+    floating: Boolean = false,
     onDismiss: () -> Unit = {},
 ) {
     if (track == null) return
     val trackKey = "${track.bvid}:${track.cid}"
+    // modifier 必须挂在最外层：它是 Box 的直接孩子，align 等 ParentData 才有效；
+    // 挂进里面会被 AnimatedVisibility 隔断，对齐丢失、掉到顶部。
     AnimatedVisibility(
         visible = visible,
         enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
         exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+        modifier = modifier,
     ) {
         DismissableBarContent(
             track = track,
@@ -101,8 +106,8 @@ fun MiniPlayerBar(
             onToggle = onToggle,
             onOpen = onOpen,
             onDismiss = onDismiss,
-            modifier = modifier,
             scrollVisible = scrollVisible,
+            floating = floating,
         )
     }
 }
@@ -118,8 +123,8 @@ private fun DismissableBarContent(
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
     scrollVisible: Boolean = true,
+    floating: Boolean = false,
 ) {
     val imageFormat = LocalImageFormat.current
     // 槽位每 500ms 跟进度重组一次：URL 与文案缓存，不重复拼串
@@ -165,7 +170,7 @@ private fun DismissableBarContent(
     Surface(
         onClick = onOpen,
         enabled = scrollVisible,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .testTag("miniPlayerBar")
             .onSizeChanged { barHeightPx = it.height.toFloat() }
@@ -202,9 +207,10 @@ private fun DismissableBarContent(
                     }
                 },
             ),
-        shape = RectangleShape,
-        // 与 M3 NavigationBar 默认容器同色，拼成一整块实底
+        shape = if (floating) RoundedCornerShape(16.dp) else RectangleShape,
+        // 悬浮时与内容分离：圆角卡片 + 阴影；贴底时与底栏同色连成一体
         color = MaterialTheme.colorScheme.surfaceContainer,
+        shadowElevation = if (floating) 3.dp else 0.dp,
     ) {
         Column {
             Row(

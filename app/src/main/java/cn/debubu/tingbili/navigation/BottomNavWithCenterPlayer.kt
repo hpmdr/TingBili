@@ -1,6 +1,5 @@
 package cn.debubu.tingbili.navigation
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -29,14 +28,12 @@ import cn.debubu.tingbili.core.media.PlayerManager
 
 
 
+/** 主页底栏：只剩 4 个 Tab。mini 条已改为悬浮覆盖层（见 [MiniPlayerOverlay]），不再占布局。 */
 @Composable
-fun BottomNavWithCenterPlayer(
+fun MainBottomNav(
     navController: NavController,
     viewModel: MainViewModel = hiltViewModel(),
-    visibility: MiniPlayerVisibility = rememberMiniPlayerVisibility(),
 ) {
-    val playerManager = viewModel.playerManager
-
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
 
@@ -49,17 +46,7 @@ fun BottomNavWithCenterPlayer(
     // 推荐 tab 双击回顶（onClick lambda 非组合作用域，helper 必须在外层调）
     val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
 
-    Column {
-        // 进度 tick（500ms）只重组这个槽位，底栏 4 个 Tab 不再跟着抖
-        // 图片格式只包 mini 条：切格式不连带底栏 Tab 重组
-        ImageFormatScope(viewModel) {
-            MiniPlayerSlot(
-                playerManager = playerManager,
-                navController = navController,
-                visibility = visibility,
-            )
-        }
-        NavigationBar {
+    NavigationBar {
         NavigationBarItem(
             selected = isHomeSelected,
             onClick = homeTabClick,
@@ -133,6 +120,29 @@ fun BottomNavWithCenterPlayer(
             label = { Text("我的") }
         )
         }
+}
+
+/**
+ * 悬浮 mini 条：盖在内容上，不占布局，列表从它后面滚过。
+ * 显隐只做位移+淡出，内容内边距全程不动。
+ * 进度 tick（500ms）只重组这个槽位，底栏 4 个 Tab 不再跟着抖；
+ * 图片格式只包 mini 条：切格式不连带底栏 Tab 重组。
+ */
+@Composable
+fun MiniPlayerOverlay(
+    navController: NavController,
+    visibility: MiniPlayerVisibility,
+    viewModel: MainViewModel = hiltViewModel(),
+    modifier: Modifier = Modifier,
+) {
+    ImageFormatScope(viewModel) {
+        MiniPlayerSlot(
+            playerManager = viewModel.playerManager,
+            navController = navController,
+            visibility = visibility,
+            modifier = modifier,
+            floating = true,
+        )
     }
 }
 
@@ -146,6 +156,8 @@ private fun MiniPlayerSlot(
     playerManager: PlayerManager,
     navController: NavController,
     visibility: MiniPlayerVisibility,
+    modifier: Modifier = Modifier,
+    floating: Boolean = false,
 ) {
     val state by playerManager.state.collectAsStateWithLifecycle()
     val track = state.currentTrack
@@ -162,9 +174,11 @@ private fun MiniPlayerSlot(
         },
         positionMs = state.positionMs,
         durationMs = state.durationMs,
-        // 占位只看曲目/手动关闭，滚动显隐只走位移：滑到底内边距不动，就不弹了
+        // 悬浮覆盖：有无只看曲目/手动关闭，滚动显隐只走位移，内容内边距全程不动
         visible = visibility.isReserved(trackKey),
         scrollVisible = visibility.scrollVisible,
+        floating = floating,
+        modifier = modifier,
         onDismiss = { visibility.dismiss(trackKey) },
     )
 }

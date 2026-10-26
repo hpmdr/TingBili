@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
@@ -45,7 +46,8 @@ import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
 import cn.debubu.tingbili.navigation.AppRootNavHost
-import cn.debubu.tingbili.navigation.BottomNavWithCenterPlayer
+import cn.debubu.tingbili.navigation.MainBottomNav
+import cn.debubu.tingbili.navigation.MiniPlayerOverlay
 import cn.debubu.tingbili.navigation.MainTabsRoute
 import cn.debubu.tingbili.navigation.MainViewModel
 import cn.debubu.tingbili.navigation.PlayerRoute
@@ -60,7 +62,7 @@ import javax.inject.Inject
 
 /**
  * Main entry with TingBiliTheme + Navigation Compose 2.8 type-safe.
- * Phone: Scaffold + NavigationBar (4 tabs + 贴底 mini 条 via BottomNavWithCenterPlayer).
+ * Phone: Scaffold + NavigationBar (4 tabs) + 悬浮 mini 条盖在内容上（列表从后面滚过）。
  * Tablet/wide: explicit mapping to NavigationRail (Compact -> NavigationBar).
  *         mini player remains centered floating at bottom.
  */
@@ -162,18 +164,13 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                 .nestedScroll(miniPlayerVisibility.connection),
             bottomBar = {
                 if (inMainTabs) {
-                    BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility)
+                    MainBottomNav(navController)
                 }
             }
         ) { innerPadding ->
             // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
             val layoutDirection = LocalLayoutDirection.current
-            AppRootNavHost(
-                navController = navController,
-                startTab = startTab,
-                mainViewModel = mainViewModel,
-                // fillMaxSize 在先：mini 条收起导致 innerPadding.bottom 变小时，
-                // 内容仍填满多出的空间，不露 Scaffold 底色黑条
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
@@ -181,7 +178,26 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                         end = innerPadding.calculateEndPadding(layoutDirection),
                         bottom = innerPadding.calculateBottomPadding()
                     )
-            )
+            ) {
+                AppRootNavHost(
+                    navController = navController,
+                    startTab = startTab,
+                    mainViewModel = mainViewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过；
+                // 显隐只做位移+淡出，内边距全程不动，滑到底不弹
+                if (inMainTabs) {
+                    MiniPlayerOverlay(
+                        navController = navController,
+                        visibility = miniPlayerVisibility,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                            .fillMaxWidth(),
+                    )
+                }
+            }
         }
     } else {
         // 平板：壳常驻（Rail/悬浮 mini 只在主页 Tab 显示，壳内部按目的地切换），

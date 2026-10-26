@@ -185,6 +185,22 @@ class NavigationTest {
     }
 
     @Test
+    fun `mini bar floating renders as overlay`() {
+        composeTestRule.setContent {
+            MiniPlayerBar(
+                track = demoTrack(),
+                isPlaying = true,
+                isLoading = false,
+                onToggle = {},
+                onOpen = {},
+                floating = true
+            )
+        }
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertExists()
+        composeTestRule.onNodeWithTag("miniPlayerBar").assertIsDisplayed()
+    }
+
+    @Test
     fun `mini bar scroll hide keeps layout slot`() {
         // 滚动隐藏只做位移：节点仍在（占位），列表内边距不动，滑到底不弹
         var scrollVisible by mutableStateOf(true)

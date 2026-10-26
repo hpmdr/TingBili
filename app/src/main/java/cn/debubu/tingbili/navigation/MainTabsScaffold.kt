@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
@@ -72,11 +73,24 @@ fun MainTabsScaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
             bottomBar = {
                 if (inTabs) {
-                    BottomNavWithCenterPlayer(navController, visibility = miniPlayerVisibility)
+                    MainBottomNav(navController)
                 }
             }
         ) { innerPadding ->
-            AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize().padding(innerPadding))
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
+                // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过
+                if (inTabs) {
+                    MiniPlayerOverlay(
+                        navController = navController,
+                        visibility = miniPlayerVisibility,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                            .fillMaxWidth(),
+                    )
+                }
+            }
         }
     } else {
         NavigationSuiteScaffold(
