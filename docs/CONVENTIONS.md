@@ -26,7 +26,7 @@ Tab（`MainTabsRoute`：首页/听单/历史/设置，带底栏）与全屏页�
 
 ## 5. 播放 / 数据
 
-- 唯一真相源 `PlayerManager.state: StateFlow<PlaybackState>`，UI 不碰 ExoPlayer。经 `PlaybackConnection（MediaController → 播放 Service）` 间接驱动，ExoPlayer 归 Service 所有。历史键 `bvid+cid`、约 1s 节流；冷启动只恢复、不自动播。
+- 唯一真相源 `PlayerManager.state: StateFlow<PlaybackState>`，UI 不碰 ExoPlayer。经 `PlaybackConnection（MediaController → 播放 Service）` 间接驱动，ExoPlayer 归 Service 所有。历史键 `bvid`（一个 BV 一条，`cid` 只记最近播放的分 P）、约 10s 节流；冷启动只恢复、不自动播。
 - `Track` 去重键 `bvid+cid`；`BV → List<Track>` 走 `ViewDto.toTracks()`。Room `exportSchema=false`，升级手写 `Migration`。DataStore（`PreferencesRepository`）新增键要读写成对、给默认、做钳制。字幕只走 `SubtitleParser + LyricState`。
 - 网络出口统一 `BiliRepository`，`feature` 不直调 `BiliApi`。MVP 无登录。不打 buvid / wbi 日志。
 

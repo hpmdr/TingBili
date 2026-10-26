@@ -37,7 +37,8 @@ object DatabaseModule {
                 TingBiliDatabase.MIGRATION_6_7,
                 TingBiliDatabase.MIGRATION_7_8,
                 TingBiliDatabase.MIGRATION_8_9,
-                TingBiliDatabase.MIGRATION_9_10
+                TingBiliDatabase.MIGRATION_9_10,
+                TingBiliDatabase.MIGRATION_10_11
             )
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()

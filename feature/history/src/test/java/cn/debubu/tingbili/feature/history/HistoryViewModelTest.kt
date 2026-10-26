@@ -119,20 +119,20 @@ class HistoryViewModelTest {
 
     class FakeHistoryDao : HistoryDao {
         private val flow = MutableStateFlow<List<HistoryEntity>>(emptyList())
-        private val map = mutableMapOf<Pair<String, Long>, HistoryEntity>()
+        private val map = mutableMapOf<String, HistoryEntity>()
         override suspend fun save(e: HistoryEntity) {
-            map[e.bvid to e.cid] = e
+            map[e.bvid] = e
             flow.value = map.values.sortedByDescending { it.updatedAt }
         }
-        override suspend fun get(bvid: String, cid: Long): HistoryEntity? = map[bvid to cid]
+        override suspend fun get(bvid: String): HistoryEntity? = map[bvid]
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flow
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flow.map { list -> list.filter { it.bvid == bvid } }
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flow.map { list -> list.filter { it.bvid in bvids } }
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flow.map { list -> list.count { it.updatedAt >= todayStart } }
-        override suspend fun delete(bvid: String, cid: Long) {
-            map.remove(bvid to cid)
+        override suspend fun delete(bvid: String) {
+            map.remove(bvid)
             flow.value = map.values.sortedByDescending { it.updatedAt }
         }
         override suspend fun clearAll() {

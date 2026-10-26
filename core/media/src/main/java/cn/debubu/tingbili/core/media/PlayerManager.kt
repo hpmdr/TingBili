@@ -426,10 +426,10 @@ class PlayerManager @Inject constructor(
             if (startPositionMs != null) {
                 persistPosition(resolvedStartPosition)
             } else {
-                // Resume track at saved history if exists
+                // Resume track at saved history if exists（只在该 BV 最近播放的同一分 P 上续播）
                 val startTrack = playableTracks[startIndex]
-                val saved = historyDao.get(startTrack.bvid, startTrack.cid)
-                if (saved != null && saved.positionMs > 0L) {
+                val saved = historyDao.get(startTrack.bvid)
+                if (saved != null && saved.cid == startTrack.cid && saved.positionMs > 0L) {
                     transport.seekTo(saved.positionMs)
                     _state.update { it.copy(positionMs = saved.positionMs) }
                     persistPosition(saved.positionMs)

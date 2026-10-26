@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [PlaylistEntity::class, PlaylistTrackEntity::class, HistoryEntity::class, HomeSnapshotEntity::class, SubtitleDiskEntity::class, PlayUrlCacheEntity::class, PlayQueueSnapshotEntity::class],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class TingBiliDatabase : RoomDatabase() {
@@ -75,6 +75,22 @@ abstract class TingBiliDatabase : RoomDatabase() {
         val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `PlayQueueSnapshotEntity` (`id` INTEGER NOT NULL, `tracksJson` TEXT NOT NULL, `currentIndex` INTEGER NOT NULL, `sourceTitle` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+        /**
+         * 历史表主键 (bvid,cid) → bvid：一个 BV 只留一条记录。
+         * 同一 BV 的多个分 P 合并为一行，保留 updatedAt 最新的那行（cid/positionMs 取该行），
+         * 累计收听时长按 BV 求和。
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `HistoryEntity_new` (`bvid` TEXT NOT NULL, `cid` INTEGER NOT NULL, `positionMs` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `listenDurationMs` INTEGER NOT NULL, PRIMARY KEY(`bvid`))")
+                db.execSQL(
+                    "INSERT OR REPLACE INTO `HistoryEntity_new` (`bvid`, `cid`, `positionMs`, `updatedAt`, `listenDurationMs`) " +
+                        "SELECT `bvid`, `cid`, `positionMs`, MAX(`updatedAt`), SUM(`listenDurationMs`) FROM `HistoryEntity` GROUP BY `bvid`"
+                )
+                db.execSQL("DROP TABLE `HistoryEntity`")
+                db.execSQL("ALTER TABLE `HistoryEntity_new` RENAME TO `HistoryEntity`")
             }
         }
     }

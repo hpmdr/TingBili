@@ -94,7 +94,7 @@ fun HistoryScreen(
                         track = track,
                         isPending = startingResume && pendingKey == "${item.bvid}:${item.cid}",
                         onResume = { vm.resume(item) },
-                        onDelete = { vm.delete(item.bvid, item.cid) }
+                        onDelete = { vm.delete(item.bvid) }
                     )
                 }
             }

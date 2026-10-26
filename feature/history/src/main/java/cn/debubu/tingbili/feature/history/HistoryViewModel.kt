@@ -102,8 +102,8 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch { dao.clearAll() }
     }
 
-    fun delete(bvid: String, cid: Long) {
-        viewModelScope.launch { dao.delete(bvid, cid) }
+    fun delete(bvid: String) {
+        viewModelScope.launch { dao.delete(bvid) }
     }
 }
 

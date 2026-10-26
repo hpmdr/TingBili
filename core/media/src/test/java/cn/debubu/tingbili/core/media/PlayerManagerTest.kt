@@ -111,16 +111,16 @@ class PlayerManagerTest {
 
     class FakeHistoryDao : HistoryDao {
         val saved = mutableListOf<HistoryEntity>()
-        private val map = mutableMapOf<Pair<String, Long>, HistoryEntity>()
-        override suspend fun save(e: HistoryEntity) { saved.add(e); map[e.bvid to e.cid] = e }
-        override suspend fun get(bvid: String, cid: Long): HistoryEntity? = map[bvid to cid]
+        private val map = mutableMapOf<String, HistoryEntity>()
+        override suspend fun save(e: HistoryEntity) { saved.add(e); map[e.bvid] = e }
+        override suspend fun get(bvid: String): HistoryEntity? = map[bvid]
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(map.values.toList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(map.values.sumOf { it.listenDurationMs })
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid == bvid })
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid in bvids })
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(map.values.count { it.updatedAt >= todayStart })
-        override suspend fun delete(bvid: String, cid: Long) { map.remove(bvid to cid) }
+        override suspend fun delete(bvid: String) { map.remove(bvid) }
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
 
@@ -134,7 +134,7 @@ class PlayerManagerTest {
             return if (seq != null) seq.getOrElse(resolveCalls - 1) { seq.last() } else nextUrl
         }
         override suspend fun tracksOf(bvid: String): List<Track> = emptyList()
-        override fun artwork(cover: String, format: ImageFormat, width: Int, height: Int): android.net.Uri? = null
+        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
     }
 
     private lateinit var fakePlayer: FakePlayerHandle
@@ -510,6 +510,8 @@ class PlayerManagerTest {
         assertTrue(saved.isNotEmpty())
         assertEquals(2L, saved.last().cid)
         assertEquals(2000L, saved.last().positionMs)
+        // 同一 BV 换分 P 只更新同一条历史，不再新增行
+        assertEquals(1, fakeHistory.getAll().size)
         playerManager.release()
     }
 

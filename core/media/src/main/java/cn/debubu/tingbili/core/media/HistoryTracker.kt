@@ -40,7 +40,8 @@ class HistoryTracker(
     // 本地累计收听时长统计：当前条目累计值 + 上次 tick 位置（排除 seek 跳变）
     private var listenAccumMs = 0L
     private var lastTickPos = -1L
-    private var lastListenKey: Pair<String, Long>? = null
+    /** 历史按 BV 归属：同一 BV 换分 P 不算换条目，累计收听接着算 */
+    private var lastListenBvid: String? = null
     private var lastSaveAtMs = 0L
 
     private var scope: CoroutineScope? = null
@@ -83,19 +84,18 @@ class HistoryTracker(
         val l = listener ?: return
         val track = l.currentTrack() ?: return
         val pos = l.statePositionMs()
-        noteProgressKeyChanged(track, pos)
+        if (track.bvid != lastListenBvid) noteProgressKeyChanged(track, pos)
         saveNow(l, pos)
         lastSaveAtMs = clockMs()
     }
 
     /**
-     * tick/force 共用的累计收听记账（无 IO，除了换集时重载已有累计值）。
+     * tick/force 共用的累计收听记账（无 IO，除了换 BV 时重载已有累计值）。
      * force 写不参与累计（seek 落点/切歌瞬间不算收听）。
      */
     private suspend fun noteProgress(l: Listener, pos: Long, force: Boolean) {
         val track = l.currentTrack() ?: return
-        val key = track.bvid to track.cid
-        if (key != lastListenKey) {
+        if (track.bvid != lastListenBvid) {
             noteProgressKeyChanged(track, pos)
         } else if (!force) {
             val delta = pos - lastTickPos
@@ -106,11 +106,11 @@ class HistoryTracker(
 
     private suspend fun noteProgressKeyChanged(track: Track, pos: Long) {
         listenAccumMs = try {
-            historyDao.get(track.bvid, track.cid)?.listenDurationMs ?: 0L
+            historyDao.get(track.bvid)?.listenDurationMs ?: 0L
         } catch (_: Exception) {
             0L
         }
-        lastListenKey = track.bvid to track.cid
+        lastListenBvid = track.bvid
         lastTickPos = pos
     }
 
