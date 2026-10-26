@@ -193,7 +193,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                         visibility = miniPlayerVisibility,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                            .padding(start = 12.dp, end = 12.dp)
                             .fillMaxWidth(),
                     )
                 }
