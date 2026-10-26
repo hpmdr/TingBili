@@ -141,10 +141,11 @@ private fun HistoryRow(
             AsyncImage(
                 model = coverUrl,
                 contentDescription = null,
+                // 正方封面：横/方/竖源都只居中裁掉边缘，主体不断头；
+                // 96dp 与右侧三段文字等高，不再显小
                 modifier = Modifier
-                    .width(120.dp)
-                    .height(68.dp)
-                    .clip(RoundedCornerShape(10.dp)),
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -190,7 +191,9 @@ private fun HistoryRow(
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        // 细线上末端圆点像脏点，去掉（与 mini 条一致）
+                        drawStopIndicator = {},
                     )
                 }
             }

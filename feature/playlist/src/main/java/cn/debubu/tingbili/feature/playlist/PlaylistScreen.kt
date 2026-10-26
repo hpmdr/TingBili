@@ -111,7 +111,7 @@ private fun PlaylistCard(
             if (playlist.cover.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(96.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
@@ -120,14 +120,15 @@ private fun PlaylistCard(
                         Icons.Default.Album,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(40.dp)
                     )
                 }
             } else {
                 AsyncImage(
                     model = playlist.cover.orEmpty().biliImage(BiliImageVariant.ListThumb, imageFormat),
                     contentDescription = null,
-                    modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)),
+                    // 正方 96dp：与右侧四段文字等高，横图只裁左右不压扁
+                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
             }
