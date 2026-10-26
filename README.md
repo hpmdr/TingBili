@@ -1,67 +1,64 @@
-# TingBili — 哔哩哔哩专用音频播放器
+# TingBili — 把 B 站当听书 App 用
 
 [![CI](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml/badge.svg)](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Non--Commercial%20%2B%20Disclaimer-orange)](./LICENSE)
 
-> 音频优先 · 轻量常驻 · 歌单驱动。解决 B 站官方“听视频”臃肿（GB级内存）、以视频为中心的痛点，专为听书/听音乐设计。
+> B 站上有海量的有声小说、多人有声剧、播客和公开课，可惜官方客户端是为「看视频」做的。
+> TingBili 只做一件事：**让你像用听书 / 播客 App 一样，听 B 站的声音**——熄屏、后台、断点续播、定时关闭。
 
-- 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 37 / compileSdk 37 / Java 17`
-- 技术栈：Kotlin + Compose (Material3, dynamicColor) + Navigation + Hilt + Room + DataStore + Media3 + Retrofit/OkHttp + Coil + Paging3
-  （依赖与插件版本统一在 `gradle/libs.versions.toml` 维护，文档里不再重复，免得两处跑偏）
-- 架构：`app` 壳 + `core:ui/media/data` + `feature:home/playlist/history/player/settings` + `data:bilibili`（特性模块化 Clean Architecture）
+## 为什么做这个
 
-## 下载（尝鲜/分享给朋友）
+平时喜欢在 B 站听有声书，但用官方客户端「听视频」有几个难受的地方：
+
+- **太重了**：官方客户端功能越来越多，同一台手机实测，打开后内存占用 PSS 五六百兆、RSS 接近 1GB。只是想睡前听个故事，手机却在发热耗电。
+- **为看视频设计**：界面、推荐、交互全围绕画面来，熄屏听就是个附带功能。
+- **长音频不好管**：几十上百小时的有声剧，听到哪了、下次接着听，都得自己记。
+
+所以做了 TingBili：**不要视频画面，只要声音、字幕和进度**。同一台手机实测，TingBili 在后台播放时私有内存只有一百兆左右，前台使用也只有官方客户端的一半上下（机型、版本不同会有差异，欢迎自己用 `dumpsys meminfo` 验证）。
+
+轻，是因为我们压根不解码视频、不渲染弹幕、不预加载一堆和「听」无关的东西。
+
+## 它能帮你做什么
+
+- 📻 **海量有声内容随便听**：首页有听书推荐，搜一下就有——有声小说、多人有声剧、播客、公开课，B 站上有声音的都能听。
+- 🌙 **熄屏、后台稳定播**：锁屏、蓝牙耳机、线控都能用；来电话、拔耳机自动暂停，忙完回来接着听。
+- 🔖 **断点续播**：几十小时的长视频，听到一半退出，下次打开自动从上次的位置继续，不用自己记。
+- 😴 **睡前定时关**：15 / 30 / 60 / 90 分钟或自定义时长，到点自动停，安心睡。
+- ⏩ **倍速 + 快进快退**：0.5~3 倍速，5~60 秒自定义步进，跳过片头、回听细节都方便。
+- 💬 **字幕当电子书看**：字幕逐行滚动、高亮跟随，点任意一句就跳到那一句；没听清的地方看一眼就行。
+- 📚 **自建歌单**：喜欢的书、合集一键成辑，增删改、排序、拖拽都行；多 P 系列自动整理成一集一集。
+- 🔗 **B 站账号打通（扫码登录）**：收藏夹、稍后再看、观看历史同步过来，在哪收藏的都不丢。
+- 📦 **省流量、省空间**：只拉音频流，不下视频画面；离线缓存上限自己定，WiFi 下好书再慢慢听。
+- 🎨 **看着顺眼**：支持跟随系统取色，也有默认 B 站粉和自定义颜色，手机平板自适应布局。
+
+## 截图看看
+
+| 首页推荐 | 播放页 |
+|---|---|
+| <img src="docs/screenshots/home.jpg" width="270"> | <img src="docs/screenshots/player.jpg" width="270"> |
+| 听书推荐流，搜一下就有 | 字幕跟读、倍速、定时、快进快退都在这 |
+
+| 我的收藏 | 播放历史 |
+|---|---|
+| <img src="docs/screenshots/playlist.jpg" width="270"> | <img src="docs/screenshots/history.jpg" width="270"> |
+| 自建歌单、合集一键成辑 | 每个节目都记住上次听到哪 |
+
+## 下载安装
+
 - 去本仓库右侧 **Releases** 下最新版的 `TingBili_*_android.apk`（如 `TingBili_0.1.0_android.apk`，附 `.sha256` 校验），手机浏览器打开直接安装（正式签名，后续版本可覆盖更新）。
-- 注：debug 包和 release 包签名不同，之前装过 debug 版的需先卸载（本地听书进度会丢，歌单在 B 站账号里不受影响）。
+- 需要 Android 12 及以上。
+- 注：debug 包和 release 包签名不同，之前装过 debug 版的需先卸载（本地听书进度会丢，B 站账号里的收藏不受影响）。
+- 想自己编译、改代码？看 [开发指南](docs/DEVELOPMENT.md)。
 
-## 功能（MVP）
-- 后台常驻播放 + 通知/锁屏/蓝牙/耳机线控 + 来电/拔出暂停
-- 倍速 0.5-3.0 + 自定义秒步进（5-60s）+ 顺序/随机/单曲/列表循环
-- 快捷定时关闭（15/30/60/90 + 自定义）
-- 本地自建歌单（增删改排序、拖拽、去重 bvid+cid）、多P合集一键成辑（BV → List<Track>）、长视频断点续播
-- 播放进度记忆（bvid+cid，节流1s写入 Room history）
-- 字幕逐行滚动高亮（投稿优先 > AI），点击跳转
-- 主题色支持跟随系统动态取色、默认 B 站粉 `#FF6699` 和自定义 HSV 颜色
+## 常见问题
 
-## 导航
-底部 4 Tab `首页(发现) | 歌单 | 历史 | 设置` + **底部居中圆形 mini 播放器**（圆环进度 + 封面旋转），自适应手机 `NavigationBar` / 平板 `NavigationRail` (`NavigationSuiteScaffold`)。主页面使用统一 `TopAppBar`；首页顶部搜索入口进入全屏搜索页，发现流使用自适应网格，搜索结果使用列表；收藏卡片展示集数、总时长、类型和日期。
-
-## 快速开始
-```bash
-# 需 JDK 25（构建；字节码目标保持 Java 17）+ Android SDK cmdline-tools
-# 推荐使用新 CLI（sdkmanager 已废弃）： $ANDROID_HOME/cmdline-tools/latest/bin/android
-# 组件与 CI 保持一致：compileSdk 37 解析到 platforms;android-37.0，AGP 9.4 默认 build-tools 36.0.0
-android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
-./gradlew assembleDebug --no-daemon   # 轻量门禁，全部命中缓存时约 30s
-./gradlew :feature:history:assembleDebug :feature:player:assembleDebug --no-daemon
-# 全量测试较重，建议 CI 跑： ./gradlew testDebugUnitTest --no-daemon
-```
-
-## 多电脑开发
-- 另一台电脑：装 JDK 25 + SDK（`platforms;android-37.0`、`build-tools;36.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.8.0 由 wrapper 自动下载）。
-- debug 签名已统一为仓库内 `app/debug.keystore`，多台电脑编出的测试包签名一致，同一部测试机换电脑装包无需卸载重装。release 签名严禁入库。
-
-国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`），`gradle.properties` 限制 `Xmx2g` + `daemon.idletimeout 30s` + `stop`，避免 IDE 侧 NodeService 阻塞。
-
-## 模块
-```
-app (MainActivity + AdaptiveMainScaffold + AppDataModule)
-core:ui (TingBiliTheme)
-core:data (Room playlists/history + DataStore prefs + Result)
-core:media (ExoPlayer audio-only + MediaSession + PlayerManager + Timer)
-data:bilibili (search/view/playurl/subtitle, Wbi stub, visitor)
-feature:home (Paging3 策展发现 + 自适应网格)
-feature:search (Paging3 搜索 + 结果列表)
-feature:playlist (CRUD + dedup + reorder + playAll)
-feature:history (history flow + resume)
-feature:player (LyricState + SubtitleParser + full-screen)
-feature:mine (我的 + B站收藏/历史/稍后听 + 设置/登录)
-```
-
-## 二期
-登录（扫码）→ 导入收藏夹/稍后再看 → 云同步
+- **需要 B 站账号吗？** 不用也能搜、能听。扫码登录后可以同步你的收藏夹、稍后再看和历史。
+- **要一直亮着屏吗？** 不用。熄屏、切后台、锁屏都能播，通知栏和锁屏可以直接暂停 / 切集。
+- **费流量吗？** 只拉音频流，比看视频省得多；也支持 WiFi 下缓存好再听。
+- **和官方客户端冲突吗？** 不冲突，可以同时装。两边历史互不影响，登录的是同一个 B 站账号而已。
 
 ## 免责声明
-- 本项目仅供学习交流，禁止商用，详见 [LICENSE](./LICENSE)
-- 与哔哩哔哩（bilibili）官方无任何隶属或授权关系，内容版权归原作者及平台所有
-- 使用本软件产生的账号风险由使用者自行承担，使用 B 站接口须遵守 B 站官方规则
+
+- 本软件是第三方**非官方**客户端，与哔哩哔哩官方无任何隶属或授权关系。
+- 内容版权归原作者及 B 站平台所有；仅供学习交流，**禁止商用**；使用 B 站接口须遵守 B 站官方规则，账号风险由使用者自行承担。
+- 完整条款见 [LICENSE](./LICENSE)。
