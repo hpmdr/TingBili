@@ -2,6 +2,7 @@ package cn.debubu.tingbili.navigation
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -121,7 +122,7 @@ class NavigationTest {
     }
 
     @Test
-    fun `mini bar renders progress line`() {
+    fun `mini bar renders progress line and time`() {
         composeTestRule.setContent {
             MiniPlayerBar(
                 track = demoTrack(),
@@ -129,10 +130,12 @@ class NavigationTest {
                 isLoading = false,
                 onToggle = {},
                 onOpen = {},
-                progress = 0.5f
+                positionMs = 30_000L,
+                durationMs = 60_000L
             )
         }
         composeTestRule.onNodeWithTag("miniProgress").assertExists()
+        composeTestRule.onNodeWithTag("miniTime", useUnmergedTree = true).assertTextEquals("0:30 / 1:00")
     }
 
     @Test

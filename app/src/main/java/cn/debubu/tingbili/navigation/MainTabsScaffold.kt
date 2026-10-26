@@ -157,11 +157,6 @@ fun MainTabsScaffold(
                 val trackKey = track?.let { "${it.bvid}:${it.cid}" }
                 var dismissedKey by remember { mutableStateOf<String?>(null) }
                 LaunchedEffect(trackKey) { if (trackKey != dismissedKey) dismissedKey = null }
-                val overlayProgress = if (state.durationMs > 0L) {
-                    (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
                 if (inTabs && track != null && trackKey != null) {
                     ImageFormatScope(viewModel) {
                         MiniPlayerBar(
@@ -174,7 +169,8 @@ fun MainTabsScaffold(
                                 .align(Alignment.BottomEnd)
                                 .padding(16.dp)
                                 .width(320.dp),
-                            progress = overlayProgress,
+                            positionMs = state.positionMs,
+                            durationMs = state.durationMs,
                             visible = dismissedKey != trackKey,
                             onDismiss = { dismissedKey = trackKey },
                         )

@@ -152,11 +152,6 @@ private fun MiniPlayerSlot(
     val trackKey = track?.let { "${it.bvid}:${it.cid}" }
     LaunchedEffect(trackKey) { visibility.onTrackChanged(trackKey) }
     if (track == null || trackKey == null) return
-    val progress = if (state.durationMs > 0L) {
-        (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
     MiniPlayerBar(
         track = track,
         isPlaying = state.isPlaying,
@@ -165,7 +160,8 @@ private fun MiniPlayerSlot(
         onOpen = {
             navController.navigate(PlayerRoute) { launchSingleTop = true }
         },
-        progress = progress,
+        positionMs = state.positionMs,
+        durationMs = state.durationMs,
         visible = visibility.isVisible(trackKey),
         onDismiss = { visibility.dismiss(trackKey) },
     )

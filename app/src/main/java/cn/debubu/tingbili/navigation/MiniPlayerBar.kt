@@ -9,6 +9,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,8 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,15 +41,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.chapterLabel
+import cn.debubu.tingbili.core.ui.formatDurationMs
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -56,7 +61,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
- * 贴底 mini 播放条：全宽矩形、与底栏同色实底（视觉连成一体）+ 顶部 2dp 播放进度线。
+ * 贴底 mini 播放条：全宽矩形、与底栏同色实底（视觉连成一体）+ 底边 3dp 进度线。
+ * 层级只有三层：标题（主）→ 章节 + 等宽时间（次/辅）→ 圆形播放键（唯一强调色）。
  * - [visible] 为 false 时向上收起、不占位（滚动联动隐藏 + 手动关闭都走这里）；
  *   注：曾试过滚动只改位移以省重测，但会留一块底色死区（slot 占位不塌），
  *   实测不如收起干净，已回滚；滚动时的过渡重测仅 250ms，可接受。
@@ -72,7 +78,8 @@ fun MiniPlayerBar(
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
-    progress: Float = 0f,
+    positionMs: Long = 0L,
+    durationMs: Long = 0L,
     visible: Boolean = true,
     onDismiss: () -> Unit = {},
 ) {
@@ -88,7 +95,8 @@ fun MiniPlayerBar(
             trackKey = trackKey,
             isPlaying = isPlaying,
             isLoading = isLoading,
-            progress = progress,
+            positionMs = positionMs,
+            durationMs = durationMs,
             onToggle = onToggle,
             onOpen = onOpen,
             onDismiss = onDismiss,
@@ -103,7 +111,8 @@ private fun DismissableBarContent(
     trackKey: String,
     isPlaying: Boolean,
     isLoading: Boolean,
-    progress: Float,
+    positionMs: Long,
+    durationMs: Long,
     onToggle: () -> Unit,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -118,6 +127,14 @@ private fun DismissableBarContent(
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }
     }
     val subtitle = remember(track) { chapterLabel(track.title, track.pageIndex, track.pageCount) }
+    val progress = if (durationMs > 0L) {
+        (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val timeText = remember(positionMs, durationMs) {
+        if (durationMs > 0L) "${formatDurationMs(positionMs)} / ${formatDurationMs(durationMs)}" else null
+    }
     val offsetY = remember { Animatable(0f) }
     var barHeightPx by remember { mutableFloatStateOf(0f) }
     // 滚动隐藏只改位移：Scaffold 内边距不动，内容不重测
@@ -164,18 +181,11 @@ private fun DismissableBarContent(
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .testTag("miniProgress"),
-            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
-                    .padding(horizontal = 12.dp),
+                    .height(60.dp)
+                    .padding(start = 14.dp, end = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AsyncImage(
@@ -183,45 +193,87 @@ private fun DismissableBarContent(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp)),
                 )
                 Spacer(Modifier.width(12.dp))
+                // 层级：标题（主）> 章节（次）> 时间（辅，等宽数字）
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .testTag("miniLoading"),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    IconButton(
-                        onClick = onToggle,
-                        modifier = Modifier.testTag("miniPlayPause"),
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "暂停" else "播放",
-                            tint = MaterialTheme.colorScheme.primary,
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = subtitle,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        if (timeText != null) {
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = timeText,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                                maxLines = 1,
+                                modifier = Modifier.testTag("miniTime"),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+                // 固定 48dp 槽位：加载/播放切换不改变文字宽度，避免布局跳动
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .testTag("miniLoading"),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        FilledTonalIconButton(
+                            onClick = onToggle,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .testTag("miniPlayPause"),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "暂停" else "播放",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }
+            // 进度线落在底边、与内容左右对齐：读作"时间轴"，而不是条顶的分隔线
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .testTag("miniProgress"),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                strokeCap = StrokeCap.Round,
+                // M3 默认在轨道末端画 4dp stop 圆点，细线上像一颗"脏点"，去掉
+                drawStopIndicator = {},
+            )
+            Spacer(Modifier.height(7.dp))
         }
     }
 }
