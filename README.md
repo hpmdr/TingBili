@@ -1,12 +1,12 @@
-# TingBili — 把某站当听书 App 用
+# 听视频 — 把某站当听书 App 用
 
 [![CI](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml/badge.svg)](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Non--Commercial%20%2B%20Disclaimer-orange)](./LICENSE)
 
-👉 **下载 App：[点此前往 Releases 页下载最新版](https://github.com/hpmdr/TingBili/releases/latest)**（认准 `TingBili_*_android.apk`）
+👉 **下载 App：[点此前往 Releases 页下载最新版 apk](https://github.com/hpmdr/TingBili/releases/latest)**
 
 > 某站上有海量的有声小说、多人有声剧、播客和公开课，可惜官方客户端是为「看视频」做的。
-> TingBili 只做一件事：**让你像用听书 / 播客 App 一样，听某站的声音**——熄屏、后台、断点续播、定时关闭。
+> 听视频只做一件事：**让你像用听书 / 播客 App 一样，听某站的声音**——熄屏、后台、断点续播、定时关闭。
 
 ## 为什么做这个
 
@@ -16,7 +16,7 @@
 - **为看视频设计**：界面、推荐、交互全围绕画面来，熄屏听只是个附带功能。
 - **长音频不好管**：几十上百小时的有声剧，听到哪了、下次接着听，都得自己记。
 
-所以做了 TingBili：**不要视频画面，只要声音、字幕和进度**。同一台手机、同一时刻对比：TingBili 后台播放时 PSS 仅约 140MB，前台使用也在 300MB 上下，不到官方客户端的零头（机型、版本不同会有差异，欢迎自己验证：`adb shell dumpsys meminfo tv.danmaku.bili cn.debubu.tingbili`）。
+所以做了「听视频」：**不要视频画面，只要声音、字幕和进度**。同一台手机、同一时刻对比：听视频后台播放时 PSS 仅约 140MB，前台使用也在 200MB 上下，不到官方客户端的零头（机型、版本不同会有差异，欢迎自己验证：`adb shell dumpsys meminfo tv.danmaku.bili cn.debubu.tingbili`）。
 
 轻，是因为我们压根不解码视频、不渲染弹幕、不预加载一堆和「听」无关的东西。
 
@@ -40,9 +40,8 @@
 
 ## 下载安装
 
-- 去 [Releases 页](https://github.com/hpmdr/TingBili/releases/latest)下载最新版的 `TingBili_*_android.apk`（附 `.sha256` 校验），手机浏览器打开直接安装（正式签名，后续版本可覆盖更新）。
+- 去 [Releases 页](https://github.com/hpmdr/TingBili/releases/latest)下载最新版 apk，手机浏览器打开直接安装（后续版本可覆盖更新）。
 - 需要 Android 12 及以上。
-- 注：debug 包和 release 包签名不同，之前装过 debug 版的需先卸载（本地听书进度会丢，某站账号里的收藏不受影响）。
 - 想自己编译、改代码？看 [开发指南](docs/DEVELOPMENT.md)。
 
 ## 常见问题
