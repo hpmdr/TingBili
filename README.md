@@ -1,7 +1,7 @@
 # 听视频 — 把某站当听书 App 用
 
 [![CI](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml/badge.svg)](https://github.com/hpmdr/TingBili/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Non--Commercial%20%2B%20Disclaimer-orange)](./LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
 
 👉 **下载 App：[点此前往 Releases 页下载最新版 apk](https://github.com/hpmdr/TingBili/releases/latest)**
 
@@ -51,7 +51,5 @@
 
 ## 免责声明
 
-- 本软件仅供学习、测试与技术交流使用，请于下载后 24 小时内删除。
-- 本软件所有资源均来自互联网，与作者本人无关；内容版权归原作者及平台所有。
-- 本软件是第三方**非官方**客户端，与某站官方无任何隶属或授权关系；**禁止商用**，使用所产生的账号风险由使用者自行承担。
-- 完整条款见 [LICENSE](./LICENSE)。
+- 本软件是第三方**非官方**客户端，与某站官方无任何隶属或授权关系；软件内资源均来自互联网，与作者本人无关，内容版权归原作者及平台所有，使用所产生的账号风险由使用者自行承担。
+- 本软件以 **AGPLv3** 开源：你可以自由使用、修改和分发，但衍生作品也必须以 AGPLv3 开源。完整条款见 [LICENSE](./LICENSE)。
