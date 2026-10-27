@@ -109,7 +109,7 @@ jobs:
             echo "## 下载与校验"
             echo ""
             echo "- 手机浏览器直接打开下面的 apk 安装即可（正式签名，可覆盖更新）。"
-            echo "- 校验包完整性：`sha256sum -c <apk 文件名>.sha256`。"
+            echo "- 校验包完整性：在 apk 同目录执行 \`sha256sum -c $(basename "$APK").sha256\`。"
             echo "- debug 包与 release 包签名不同：之前装过 debug 版的需先卸载再装（本地听书进度会丢，B 站歌单不受影响）。"
           } > /tmp/notes.md
           cat /tmp/notes.md
