@@ -46,10 +46,6 @@ object QualityRoute
 @Serializable
 object AudioDecodersRoute
 
-/** 独立全屏页：搜索 */
-@Serializable
-object SearchRoute
-
 /** 二级页：B 站 Web 扫码登录 + Cookie 导入 */
 @Serializable
 object LoginRoute
@@ -72,6 +68,10 @@ object BiliHistoryRoute
 /** 我的页二级页:稍后听 */
 @Serializable
 object BiliToviewRoute
+
+/** UP 主主页，携带 UP 的 mid */
+@Serializable
+data class UpSpaceRoute(val mid: Long)
 
 /** 视频详情页路由，携带 BV 号 */
 @Serializable

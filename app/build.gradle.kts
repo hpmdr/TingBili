@@ -109,7 +109,7 @@ dependencies {
     implementation(project(":feature:player"))
     implementation(project(":feature:mine"))
     implementation(project(":feature:detail"))
-    implementation(project(":feature:search"))
+    implementation(project(":feature:space"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(platform(libs.compose.bom))

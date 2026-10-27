@@ -26,7 +26,7 @@ class HomeKeywordsTest {
         val repo = PreferencesRepository(ds)
         repo.homeKeywords.test {
             assertEquals(
-                listOf("有声小说", "有声书", "悬疑小说", "多人有声"),
+                listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声"),
                 awaitItem()
             )
             // 模拟播放中的高频进度写入

@@ -34,12 +34,12 @@ core:ui (TingBiliTheme)
 core:data (Room playlists/history + DataStore prefs + Result)
 core:media (ExoPlayer audio-only + MediaSession + PlayerManager + Timer)
 data:bilibili (search/view/playurl/subtitle, Wbi stub, visitor)
-feature:home (Paging3 策展发现 + 自适应网格)
-feature:search (Paging3 搜索 + 结果列表)
+feature:home (Paging3 搜索列表 + 自适应网格；推荐 = 默认词自动执行一次搜索)
 feature:playlist (CRUD + dedup + reorder + playAll)
 feature:history (history flow + resume)
 feature:player (LyricState + SubtitleParser + full-screen)
 feature:mine (我的 + B站收藏/历史/稍后听 + 设置/登录)
+feature:space (UP 主主页：头像/粉丝/签名 + 投稿列表，pubdate/click/stow 三种排序)
 ```
 
 ## 约定

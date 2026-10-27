@@ -73,7 +73,7 @@ class HomePagingSource(
 
     companion object {
         /** 默认策展关键词（与 PreferencesRepository.DEFAULT_HOME_KEYWORDS 一致，用于兜底） */
-        val DEFAULT_RECOMMEND_KEYWORDS = listOf("有声小说", "有声书", "悬疑小说", "多人有声")
+        val DEFAULT_RECOMMEND_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
         /** 412 后退避：load 内先睡一下再返回 Error，掐断连击风暴。 */
         const val RATE_LIMIT_BACKOFF_MS = 2000L
     }

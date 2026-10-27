@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.data.bilibili.di
 
 import cn.debubu.tingbili.data.bilibili.BiliApi
+import cn.debubu.tingbili.data.bilibili.SpaceApi
 import cn.debubu.tingbili.data.bilibili.BuvidProvider
 import cn.debubu.tingbili.data.bilibili.CookieHeaderProvider
 import cn.debubu.tingbili.data.bilibili.WbiInterceptor
@@ -67,6 +68,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideBiliApi(retrofit: Retrofit): BiliApi = retrofit.create(BiliApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideSpaceApi(retrofit: Retrofit): SpaceApi = retrofit.create(SpaceApi::class.java)
 
     /** 播放器 HTTP 头：UA/Referer 是 B 站反盗链要求，core 只管用值、不管来源。 */
     @Provides

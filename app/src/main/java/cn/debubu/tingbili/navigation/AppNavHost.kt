@@ -16,10 +16,10 @@ import cn.debubu.tingbili.feature.detail.DetailScreen
 import cn.debubu.tingbili.feature.mine.LoginScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
+import cn.debubu.tingbili.feature.space.SpaceScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistDetailScreen
 import cn.debubu.tingbili.feature.playlist.PlaylistScreen
-import cn.debubu.tingbili.feature.search.SearchScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
 import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
@@ -66,9 +66,9 @@ fun AppRootNavHost(
                 popExitTransition = TabFadeExit,
             ) {
                 ImageFormatScope(mainViewModel) {
+                    // 搜索已内嵌到首页（顶部输入框 → 首页网格出结果），不再跳独立搜索页
                     HomeScreen(
-                        onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                        onSearchClick = { navController.navigate(SearchRoute) }
+                        onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
                     )
                 }
             }
@@ -179,19 +179,20 @@ fun AppRootNavHost(
                 )
             }
         }
-        composable<SearchRoute> {
-            ImageFormatScope(mainViewModel) {
-                SearchScreen(
-                    onBack = { navController.popBackStack() },
-                    onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
-                )
-            }
-        }
         composable<VideoDetailRoute> {
             ImageFormatScope(mainViewModel) {
                 DetailScreen(
                     onBack = { navController.popBackStack() },
                     onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                    onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                    onUpClick = { mid -> navController.navigate(UpSpaceRoute(mid)) }
+                )
+            }
+        }
+        composable<UpSpaceRoute> {
+            ImageFormatScope(mainViewModel) {
+                SpaceScreen(
+                    onBack = { navController.popBackStack() },
                     onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
                 )
             }
@@ -220,6 +221,7 @@ fun AppRootNavHost(
                 onBack = { navController.popBackStack() },
                 onLoginClick = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 onDetailClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
+                onUpClick = { mid -> navController.navigate(UpSpaceRoute(mid)) },
                 onSettingsClick = { navController.navigate(SettingsRoute) },
             )
             }

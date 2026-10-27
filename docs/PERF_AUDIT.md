@@ -552,3 +552,10 @@ if (showSnapshot) snapshotGridState.animateScrollToItem(0) else gridState.animat
 - 核对：18 个引用提交全存在，`testDebugUnitTest` 189/189 全绿，真机 4 轮回归（播放/暂停/字幕/滚动/mini条/队列恢复/黑条）全过，工作区干净。
 - 后续动代码只增文末落地进度，不改正文；新基建（Baseline Profile）另开任务，见新会话。
 
+## 落地进度（2026-10-27，搜索并入首页）
+
+- 独立 `feature:search` 模块整体删除（`SearchScreen`/`SearchViewModel`/`SearchPagingSource` + 模块配置），`SearchRoute` 与 `AppNavHost` 里的入口一并移除。
+- 搜索并入首页：推荐 = 启动时用「上次搜索词 → 首个推荐词 → 兜底词」自动执行一次与手动搜索等价的搜索，全程只有一条 `pagingFlow`、一个列表；清空输入不再切换列表内容。
+- `SearchPagingSource` 迁入 `feature:home`（单关键词分页 + 跨页 bvid 去重 + 首屏快照回调）；快照按关键词校验，词不一致不再冒充首屏。
+- 因此本文第 3 章中指向 `SearchScreen.kt` / `SearchViewModel.kt` 的条目（行号、三份 DataStore 订阅、totalCount 全页重组等）随文件删除自然失效；相关订阅已在 `HomeViewModel` 里合并为一份。
+

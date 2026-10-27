@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -46,13 +47,57 @@ class HomeViewModel @Inject constructor(
     /** 回顶事件（底栏/Rail 双击推荐时 +1，首页收到即滚到顶） */
     val scrollTopTick: StateFlow<Int> = scrollTopBus.tick
 
-    // 数据层常驻：流的生命周期与 ViewModel 对齐（Eagerly 启动，VM 释放才停），
-    // 与有没有收集器无关。进搜索/详情/切 Tab 再回来都是秒回、无网络、无转圈；
-    // 只有关键词变更、下拉刷新、进程重建才会重建推荐流。
-    /** 首页策展关键词（设置页可增减），供搜索框展示 */
+    /**
+     * 当前列表的搜索词：列表内容永远等于“这个词的搜索结果”。
+     * 初始值 = 上次搜索词（没有则首个推荐词）——“推荐”只是自动执行了一次同样的搜索。
+     * 空串 = 冷启动还在读偏好，此时不建 Pager。
+     */
+    private val _keyword = MutableStateFlow("")
+    val keyword: StateFlow<String> = _keyword.asStateFlow()
+
+    /** 当前词的命中总数（接口返回的全量条数），结果计数条用 */
+    private val _total = MutableStateFlow<Int?>(null)
+    val total: StateFlow<Int?> = _total.asStateFlow()
+
+    /** 首页策展关键词（设置页可增减）：搜索建议词 + 没有搜索历史时的兜底词 */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
         viewModelScope, SharingStarted.Eagerly, HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
     )
+
+    /** 搜索历史（本地，最近在前），建议区展示；第一条即上次搜索词 */
+    val searchHistory: StateFlow<List<String>> = prefs.searchHistory.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList()
+    )
+
+    /**
+     * 执行一次搜索：列表直接换成该词的结果，与冷启动的默认搜索完全等价。
+     * 同一个词再搜一次也重建 Pager（当刷新），避免“点了没反应”。
+     * 注意每次只动一个 StateFlow（keyword 或 tick），否则 flatMapLatest 会重建两次。
+     */
+    fun search(raw: String) {
+        val q = raw.trim()
+        if (q.isEmpty()) return
+        if (q == _keyword.value) {
+            _refreshTick.value += 1
+        } else {
+            _keyword.value = q
+            _total.value = null
+        }
+        viewModelScope.launch { prefs.addSearchHistory(q) }
+    }
+
+    /** 下拉刷新：用当前词重新拉第一页 */
+    fun refresh() {
+        _refreshTick.value += 1
+    }
+
+    fun removeSearchHistory(query: String) {
+        viewModelScope.launch { prefs.removeSearchHistory(query) }
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch { prefs.clearSearchHistory() }
+    }
 
     /**
      * SWR 快照：冷启动秒开上次首屏，后台 Paging 刷新成功后覆盖。
@@ -70,63 +115,43 @@ class HomeViewModel @Inject constructor(
         return nowMs - ts > HOME_SNAPSHOT_TTL_MS
     }
 
-    /**
-     * 冷启动不自动刷新：有快照就直接看上次的，用户下拉才走网络；
-     * 无快照（首次安装/被清）才自动起 Paging。省流量，快照稳定可见。
-     */
-    private val _pagingStarted = MutableStateFlow(false)
-    val pagingStarted: StateFlow<Boolean> = _pagingStarted.asStateFlow()
-
     init {
-        // 快照读 + 60 条 JSON 反序列化放 IO：主线程只收结果，冷启动少一顿
+        // 初始词 = 上次搜索 > 首个推荐词 > 兜底；快照只在词一致时才当首屏占位
         viewModelScope.launch(Dispatchers.IO) {
+            val kw = runCatching { prefs.searchHistory.first().firstOrNull() }.getOrNull()
+                ?: homeKeywords.value.firstOrNull()
+                ?: DEFAULT_KEYWORD
             try {
                 val entity = homeSnapshotDao.get()
-                val tracks = if (entity != null) {
-                    try {
+                if (entity != null) {
+                    val snapKeyword = runCatching {
+                        json.decodeFromString<List<String>>(entity.keywordsJson).firstOrNull()
+                    }.getOrNull()
+                    val tracks = runCatching {
                         json.decodeFromString<List<Track>>(entity.tracksJson)
-                    } catch (_: Exception) {
-                        emptyList()
+                    }.getOrDefault(emptyList())
+                    // 旧快照可能是别的词的内容，不能冒充这次的结果
+                    if (snapKeyword == kw && tracks.isNotEmpty()) {
+                        _snapshotTracks.value = tracks.take(MAX_SNAPSHOT_TRACKS)
+                        _snapshotUpdatedAt.value = entity.updatedAt
                     }
-                } else emptyList()
-                if (tracks.isNotEmpty()) {
-                    _snapshotTracks.value = tracks.take(MAX_SNAPSHOT_TRACKS)
-                    _snapshotUpdatedAt.value = entity!!.updatedAt
-                    _pagingStarted.value = false
-                } else {
-                    _pagingStarted.value = true
                 }
             } catch (_: Exception) {
-                // 快照读失败不打断首页，纯当无缓存：自动起 Paging
-                _pagingStarted.value = true
+                // 快照读失败不打断首页
             }
+            _keyword.value = kw
         }
     }
 
-    /** 下拉刷新计数：每次 +1 即随机重排关键词并重建推荐流 */
+    /** 下拉刷新/同词重搜计数：+1 即用当前词重建 Pager */
     private val _refreshTick = MutableStateFlow(0)
-    private var lastKeywordOrder: List<String> = emptyList()
-    private var lastRefreshTickSeen = -1
-    private var lastKeywordSource: List<String>? = null
 
+    // 首页唯一的列表：当前关键词的搜索结果分页（推荐 = 默认词自动搜索，与手动搜索同一条流）
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagingFlow: StateFlow<PagingData<Track>> =
-        combine(prefs.homeKeywords, _refreshTick, _pagingStarted) { kws, tick, started ->
-            // 只在“下拉刷新/关键词变更”时重排；快照点“加载更多”只开闸不换词，
-            // 否则第 1 页关键词变了，翻出来的和快照对不上、还容易撞见重复。
-            if (tick != lastRefreshTickSeen || kws != lastKeywordSource || lastKeywordOrder.isEmpty()) {
-                // 随机重排，多词时尽量与上次不同，避免“刷了个寂寞”
-                var shuffled = kws.shuffled()
-                if (shuffled.size > 1 && shuffled == lastKeywordOrder) shuffled = kws.shuffled()
-                lastKeywordOrder = shuffled
-                lastRefreshTickSeen = tick
-                lastKeywordSource = kws
-            }
-            lastKeywordOrder to started
-        }
-            .flatMapLatest { (ordered, started) ->
-                if (!started) {
-                    // 有快照的冷启动：不建 Pager、不碰网络，只看缓存
+        combine(_keyword, _refreshTick) { kw, tick -> kw to tick }
+            .flatMapLatest { (kw, _) ->
+                if (kw.isBlank()) {
                     flowOf(PagingData.empty())
                 } else {
                     // maxSize 显式有界：默认不清旧页（Track 很小但页多了也是堆），
@@ -142,34 +167,25 @@ class HomeViewModel @Inject constructor(
                             maxSize = 200
                         )
                     ) {
-                        HomePagingSource(repo, ordered) { tracks, orderedKeywords ->
-                            saveSnapshot(tracks, orderedKeywords)
+                        SearchPagingSource(repo, kw) { tracks, total ->
+                            _total.value = total
+                            saveSnapshot(kw, tracks)
                         }
                     }.flow.cachedIn(viewModelScope)
                 }
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, PagingData.empty())
 
-    /** 用户手动刷新（下拉）：开闸放行 Paging，随机重排关键词并重建推荐流（快照不清，失败时还能兜底） */
-    fun shuffleKeywords() {
-        _pagingStarted.value = true
-        _refreshTick.value += 1
-    }
-
-    /** 快照底部“加载更多”：只开闸不换词，切到 Paging 流继续往后翻（与下拉同流，不重排） */
-    fun startPaging() {
-        _pagingStarted.value = true
-    }
-
-    private fun saveSnapshot(tracks: List<Track>, orderedKeywords: List<String>) {
+    private fun saveSnapshot(keyword: String, tracks: List<Track>) {
         if (tracks.isEmpty()) return
-        // 60 条 Track JSON 编码 + Room 写放 IO：回调起于 Paging append，滚动中别占主线程
+        // 60 条 Track JSON 编码 + Room 写放 IO：回调起于 Paging 加载，滚动中别占主线程
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val bounded = tracks.take(MAX_SNAPSHOT_TRACKS)
                 homeSnapshotDao.save(
                     HomeSnapshotEntity(
-                        keywordsJson = json.encodeToString<List<String>>(orderedKeywords),
+                        // 复用字段存词表（单元素）：读取时用它校验快照是不是当前词的内容
+                        keywordsJson = json.encodeToString<List<String>>(listOf(keyword)),
                         tracksJson = json.encodeToString<List<Track>>(bounded),
                         updatedAt = System.currentTimeMillis()
                     )
@@ -316,5 +332,7 @@ class HomeViewModel @Inject constructor(
         const val HOME_SNAPSHOT_TTL_MS = 15 * 60 * 1000L
         /** 快照上限：只存首屏 60 条，有界清理 */
         const val MAX_SNAPSHOT_TRACKS = 60
+        /** 没有搜索历史、也没有推荐词时的兜底搜索词 */
+        const val DEFAULT_KEYWORD = "有声小说"
     }
 }

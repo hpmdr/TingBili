@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.feature.home
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.test.core.app.ApplicationProvider
@@ -31,6 +32,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -246,25 +248,28 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `shuffle emits new paging data`() = runTest(dispatcher) {
+    fun `refresh emits new paging data`() = runTest(dispatcher) {
         val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         vm.pagingFlow.first()
-        vm.shuffleKeywords()
-        // 常驻流：刷新后必有新一份 PagingData（只断言换新，不断言随机顺序本身）
+        vm.refresh()
+        // 常驻流：刷新后必有新一份 PagingData
         assertNotNull(vm.pagingFlow.drop(1).first())
     }
 
     @Test
-    fun `startPaging opens gate on snapshot cold start`() = runTest(dispatcher) {
+    fun `snapshot with matching keyword is used as first screen`() = runTest(dispatcher) {
+        prefs.clearSearchHistory()
+        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
         snapshotDao.entity = HomeSnapshotEntity(
-            tracksJson = "[{\"bvid\":\"BV1\",\"cid\":1,\"title\":\"t\",\"author\":\"a\",\"cover\":\"\",\"durationMs\":1000,\"subtitleUrl\":null}]",
+            keywordsJson = json.encodeToString(listOf("有声小说")),
+            tracksJson = json.encodeToString(tracks),
             updatedAt = System.currentTimeMillis()
         )
         val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
-        runCurrent()
-        assertEquals(false, vm.pagingStarted.value)
-        vm.startPaging()
-        assertEquals(true, vm.pagingStarted.value)
+        assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
+        assertEquals(1, vm.snapshotTracks.value?.size)
+        vm.viewModelScope.cancel()
     }
 
     @Test
@@ -417,28 +422,26 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `no cache auto starts paging`() = runTest(dispatcher) {
+    fun `no cache resolves a keyword and starts paging`() = runTest(dispatcher) {
+        prefs.clearSearchHistory()
         val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
-        advanceUntilIdle()
-        assertEquals(true, vm.pagingStarted.first())
+        assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
+        vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `cached snapshot blocks auto paging until manual refresh`() = runTest(dispatcher) {
-        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+    fun `stale snapshot from another keyword is ignored`() = runTest(dispatcher) {
+        prefs.clearSearchHistory()
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
         snapshotDao.entity = HomeSnapshotEntity(
-            keywordsJson = json.encodeToString(listOf("有声小说")),
-            tracksJson = json.encodeToString(tracks),
+            keywordsJson = json.encodeToString(listOf("别的词")),
+            tracksJson = json.encodeToString(listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))),
             updatedAt = System.currentTimeMillis()
         )
         val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
-        advanceUntilIdle()
-        assertEquals(false, vm.pagingStarted.first())
-        assertEquals(1, vm.snapshotTracks.first()?.size)
-        vm.shuffleKeywords()
-        advanceUntilIdle()
-        assertEquals(true, vm.pagingStarted.first())
+        assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
+        assertEquals(null, vm.snapshotTracks.value)
+        vm.viewModelScope.cancel()
     }
 
     @Test

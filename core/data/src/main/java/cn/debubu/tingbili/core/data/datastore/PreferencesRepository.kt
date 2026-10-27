@@ -302,7 +302,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         const val MAX_SEARCH_HISTORY = 15
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
         const val DEFAULT_CACHE_MAX_MB = 500
-        val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "有声书", "悬疑小说", "多人有声")
+        val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
         const val MIN_CACHE_MAX_MB = 100
         const val MAX_CACHE_MAX_MB = 2048
         /** 图片盘缓存上限封顶（方案一：图片按音频上限 1/4 派生，见 imageCacheMaxMb） */

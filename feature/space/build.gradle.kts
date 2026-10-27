@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "cn.debubu.tingbili.feature.search"
+    namespace = "cn.debubu.tingbili.feature.space"
     compileSdk = 37
 
     defaultConfig {
@@ -28,29 +28,21 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:data"))
     implementation(project(":data:bilibili"))
-    implementation(project(":core:media"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
-    implementation(libs.navigation.compose)
-    implementation(libs.paging.compose)
-    implementation("androidx.paging:paging-runtime:${libs.versions.paging.get()}")
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
-    implementation(libs.material.icons.extended)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:${libs.versions.lifecycle.get()}")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
     implementation(libs.hilt.navigation.compose)
-
-    testImplementation(libs.junit)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
-    testImplementation(libs.androidx.test.core)
-    testImplementation(libs.robolectric)
-    testImplementation(libs.datastore.preferences)
+    implementation(libs.material.icons.extended)
+    implementation(libs.paging.compose)
+    implementation("androidx.paging:paging-runtime:${libs.versions.paging.get()}")
 }
 
 kotlin {

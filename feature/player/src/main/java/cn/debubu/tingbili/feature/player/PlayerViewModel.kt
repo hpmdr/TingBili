@@ -403,6 +403,19 @@ class PlayerViewModel @Inject constructor(
      * 刷新当前 BV：分 P 增减/改名不断播对齐 + 字幕缓存作废重拉。
      * 失败绝不清空旧队列（Toast 报“已保留旧数据”）。
      */
+    /**
+     * 打开当前视频的 UP 主主页：Track 不携带 mid，这里走 view 接口解析（memo 命中时无网络）。
+     */
+    fun openUpSpace(onResolved: (Long) -> Unit) {
+        val cur = player.state.value.currentTrack ?: return
+        viewModelScope.launch {
+            when (val r = repo.getViewDetail(cur.bvid)) {
+                is Result.Success -> r.data.owner?.mid?.takeIf { it > 0 }?.let(onResolved)
+                is Result.Error -> _message.value = r.msg
+            }
+        }
+    }
+
     fun refreshBv() {
         if (_isRefreshing.value) return
         // 同上：读 player.state 而非 uiState，避免无订阅者时的过期初值导致静默 return

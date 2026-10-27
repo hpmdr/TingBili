@@ -49,6 +49,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -112,6 +113,7 @@ fun PlayerScreen(
     onBack: () -> Unit = {},
     onLoginClick: () -> Unit = {},
     onDetailClick: (String) -> Unit = {},
+    onUpClick: (Long) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     vm: PlayerViewModel = hiltViewModel()
 ) {
@@ -197,13 +199,30 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(6.dp))
-            Text(
-                text = trackUi.track?.author?.takeIf { it.isNotBlank() }?.let { "UP主 · $it" }.orEmpty(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // UP 名可点：进 UP 主主页（Track 不带 mid，由 VM 走 view 接口解析）
+            trackUi.track?.author?.takeIf { it.isNotBlank() }?.let { author ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { vm.openUpSpace(onUpClick) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "UP主 · $author",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "进入 UP 主主页",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
 
         trackUi.errorMessage?.let { errorMsg ->

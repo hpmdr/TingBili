@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -81,6 +82,7 @@ fun DetailScreen(
     onBack: () -> Unit = {},
     onPlayNavigate: () -> Unit = {},
     onVideoClick: (String) -> Unit = {},
+    onUpClick: (Long) -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -160,6 +162,7 @@ fun DetailScreen(
                         onEnsureRelated = { viewModel.ensureRelatedLoaded() },
                         listState = listState,
                         onVideoClick = onVideoClick,
+                        onUpClick = onUpClick,
                         onRetryRelated = { viewModel.loadRelated() },
                         onPlayAll = {
                             selectedTab = 0
@@ -196,6 +199,7 @@ private fun DetailContent(
     onToggleFavorite: () -> Unit,
     onPlayPage: (Int) -> Unit,
     onVideoClick: (String) -> Unit,
+    onUpClick: (Long) -> Unit,
     onRetryRelated: () -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
@@ -257,7 +261,14 @@ private fun DetailContent(
         }
         item {
             Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            val upMid = video.owner?.mid ?: 0L
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = upMid > 0) { onUpClick(upMid) }
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+            ) {
                 AsyncImage(
                     model = video.owner?.face
                         ?.takeIf { it.isNotBlank() }
@@ -268,13 +279,23 @@ private fun DetailContent(
                 )
                 Spacer(Modifier.width(10.dp))
                 Column {
-                    Text(
-                        text = "UP: ${video.owner?.name.orEmpty()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "UP: ${video.owner?.name.orEmpty()}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (upMid > 0) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "进入 UP 主主页",
+                                modifier = Modifier.size(18.dp),
+                                tint = Color.Gray
+                            )
+                        }
+                    }
                     Text(
                         text = subLine,
                         style = MaterialTheme.typography.bodySmall,

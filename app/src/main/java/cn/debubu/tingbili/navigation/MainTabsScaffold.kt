@@ -17,10 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -100,12 +100,12 @@ fun MainTabsScaffold(
                     onClick = homeTabClick,
                     icon = {
                         Icon(
-                            imageVector = if (isHomeSelected) Icons.Filled.Explore else Icons.Outlined.Explore,
+                            imageVector = if (isHomeSelected) Icons.Filled.ManageSearch else Icons.Outlined.ManageSearch,
                             contentDescription = null
                         )
                     },
                     colors = itemColors,
-                    label = { Text("推荐") }
+                    label = { Text("搜索") }
                 )
                 item(
                     selected = isPlaylistSelected,
