@@ -58,10 +58,12 @@ class HistoryTrackerTest {
     class FakeListener(var track: Track? = null, var statePos: Long = 0L) : HistoryTracker.Listener {
         var lastTickPos: Long? = null
         val persisted = mutableListOf<Long>()
+        val stalls = mutableListOf<Pair<Long, Long>>()
         override fun currentTrack(): Track? = track
         override fun statePositionMs(): Long = statePos
         override fun onTick(positionMs: Long, bufferedMs: Long) { lastTickPos = positionMs }
         override suspend fun onPersistPosition(pos: Long) { persisted += pos }
+        override fun onPlaybackStalled(gapMs: Long, positionMs: Long) { stalls += gapMs to positionMs }
     }
 
     private fun track() = Track("BV1", 1, "t", "a", "", 10000, null)
@@ -87,6 +89,49 @@ class HistoryTrackerTest {
         assertTrue(dao.saved.isNotEmpty())
         assertEquals(12345L, dao.saved.first().positionMs)
         assertEquals(listOf(12345L), listener.persisted)
+        tracker.release()
+    }
+
+    @Test
+    fun `stall fires when wall clock runs but position lags`() = runTest {
+        // 模拟进程被冻结：先正常跑两个 tick，再让墙钟跳过 60s、位置原地不动，
+        // 只补一个 tick（真实冻结期间循环是停的，不会补跑中间 tick）。
+        val transport = FakeTransport().also { it.pos = 5_000L }
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        val tracker = HistoryTracker(transport, FakeHistory())
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        now += 60_000L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertTrue(listener.stalls.isNotEmpty())
+        assertEquals(5_000L, listener.stalls.first().second)
+        tracker.release()
+    }
+
+    @Test
+    fun `no stall when position advances with wall clock`() = runTest {
+        // 同一时间内播放位置正常前进（位置源已对齐），不应触发重同步
+        val transport = FakeTransport().also { it.pos = 5_000L }
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        val tracker = HistoryTracker(transport, FakeHistory())
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        now += 60_000L
+        transport.pos += 60_000L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertTrue(listener.stalls.isEmpty())
         tracker.release()
     }
 
@@ -150,6 +195,74 @@ class HistoryTrackerTest {
         runCurrent()
         assertTrue(dao.saved.isNotEmpty())
         assertEquals(0L, dao.saved.first().listenDurationMs)
+        tracker.release()
+    }
+
+    @Test
+    fun `underrun hint lowers stall threshold`() = runTest {
+        // 进程只是被限流：墙钟间隔 4s 达不到默认 10s，但 offload 缓冲被抽空记了一次 underrun，
+        // 有这条硬证据就放宽阈值，位置确实落后时仍要重同步。
+        val transport = FakeTransport().also { it.pos = 5_000L }
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        var underruns = 0L
+        val tracker = HistoryTracker(transport, FakeHistory(), underrunCount = { underruns })
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        now += 4_000L
+        transport.pos += 2_000L
+        underruns = 1L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertTrue(listener.stalls.isNotEmpty())
+        tracker.release()
+    }
+
+    @Test
+    fun `no stall below default threshold without underrun`() = runTest {
+        // 同样的 4s/2s 间隔，但没有 underrun 佐证时保持默认阈值（10s/3s），不误伤
+        val transport = FakeTransport().also { it.pos = 5_000L }
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        val tracker = HistoryTracker(transport, FakeHistory())
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        now += 4_000L
+        transport.pos += 2_000L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertTrue(listener.stalls.isEmpty())
+        tracker.release()
+    }
+
+    @Test
+    fun `underrun alone does not realign when position keeps up`() = runTest {
+        // underrun 可能只是缓冲正常见底：位置跟着墙钟走就说明没脱节，不该 seek
+        val transport = FakeTransport().also { it.pos = 5_000L }
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        var underruns = 0L
+        val tracker = HistoryTracker(transport, FakeHistory(), underrunCount = { underruns })
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        now += 4_000L
+        transport.pos += 4_000L
+        underruns = 1L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertTrue(listener.stalls.isEmpty())
         tracker.release()
     }
 }

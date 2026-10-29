@@ -56,6 +56,7 @@ class TingBiliPlaybackService : MediaSessionService() {
 
                 override fun onOffloadedPlayback(offloadedPlayback: Boolean) {
                     Log.i("TingBiliAudio", "offloadedPlayback=$offloadedPlayback")
+                    AudioPipelineMonitor.onOffloadedPlaybackChanged(offloadedPlayback)
                 }
             })
             (player as ExoPlayer).addAnalyticsListener(object : AnalyticsListener {
@@ -76,6 +77,20 @@ class TingBiliPlaybackService : MediaSessionService() {
                 ) {
                     AudioPipelineMonitor.onAudioFormatChanged(format)
                 }
+
+                override fun onAudioUnderrun(
+                    eventTime: AnalyticsListener.EventTime,
+                    bufferSize: Int,
+                    bufferSizeMs: Long,
+                    elapsedSinceLastFeedMs: Long,
+                ) {
+                    // offload 断流的硬证据：进程被冻结/限流时 HAL 那边缓冲被抽空才会记
+                    Log.i(
+                        "TingBiliAudio",
+                        "audioUnderrun buffer=${bufferSize}B ${bufferSizeMs}ms sinceLastFeed=${elapsedSinceLastFeedMs}ms"
+                    )
+                    AudioPipelineMonitor.onAudioUnderrun()
+                }
             })
         }
         mediaSession = MediaSession.Builder(this, player).build()
@@ -90,6 +105,7 @@ class TingBiliPlaybackService : MediaSessionService() {
             prefs.audioOffload.collect { on ->
                 val exo = player as? ExoPlayer ?: return@collect
                 val offload = if (on) {
+                    // 同 ServicePlayerModule：无缝要求开，变速不要求
                     TrackSelectionParameters.AudioOffloadPreferences.Builder()
                         .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
                         .setIsGaplessSupportRequired(true)

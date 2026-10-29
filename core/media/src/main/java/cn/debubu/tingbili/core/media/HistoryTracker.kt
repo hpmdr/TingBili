@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 class HistoryTracker(
     private val transport: PlayerHandle,
     private val historyDao: HistoryDao,
+    /** underrun 累计值（offload 断流证据）；默认恒 0，单测不传即只走墙钟判定 */
+    private val underrunCount: () -> Long = { 0L },
 ) {
     interface Listener {
         fun currentTrack(): Track?
@@ -28,6 +30,12 @@ class HistoryTracker(
         /** 内存态更新：position/buffered/isPlaying，不碰磁盘。 */
         fun onTick(positionMs: Long, bufferedMs: Long)
         suspend fun onPersistPosition(pos: Long)
+
+        /**
+         * 检测到「墙钟流逝 ≫ 播放位置前进」：进程被系统冻结/深度睡眠期间
+         * DSP 仍独立推进，恢复后位置源可能已和实际出声脱节，调用方决定是否重同步。
+         */
+        fun onPlaybackStalled(gapMs: Long, positionMs: Long) {}
     }
 
     internal companion object {
@@ -35,6 +43,13 @@ class HistoryTracker(
         const val HISTORY_SAVE_INTERVAL_MS = 10_000L
         /** 进度轮询：纯内存态更新 UI，不碰磁盘 */
         const val POSITION_POLL_INTERVAL_MS = 500L
+        /** 两次 tick 的墙钟间隔超过它，才怀疑进程被冻结（Doze 下延迟通常只有几秒） */
+        const val STALL_GAP_THRESHOLD_MS = 10_000L
+        /** 播放位置前进比墙钟落后超过它，判定位置源与 DSP 脱节 */
+        const val STALL_LAG_THRESHOLD_MS = 3_000L
+        /** 有 underrun 佐证时放宽：进程可能只是被限流，墙钟间隔远不到 10s */
+        const val STALL_GAP_THRESHOLD_UNDERRUN_MS = 3_000L
+        const val STALL_LAG_THRESHOLD_UNDERRUN_MS = 1_500L
     }
 
     // 本地累计收听时长统计：当前条目累计值 + 上次 tick 位置（排除 seek 跳变）
@@ -43,6 +58,11 @@ class HistoryTracker(
     /** 历史按 BV 归属：同一 BV 换分 P 不算换条目，累计收听接着算 */
     private var lastListenBvid: String? = null
     private var lastSaveAtMs = 0L
+    // 冻结检测：上一次 tick 的墙钟与播放位置（与「累计收听」的 lastTickPos 分开，避免互相污染）
+    private var lastTickWallMs = 0L
+    private var lastPosForStall = -1L
+    /** 上次 tick 看到的 underrun 累计值，用于识别「本 tick 有新 underrun」 */
+    private var lastSeenUnderruns = 0L
 
     private var scope: CoroutineScope? = null
     private var listener: Listener? = null
@@ -59,12 +79,38 @@ class HistoryTracker(
     fun start(nowMs: Long) {
         job?.cancel()
         lastSaveAtMs = nowMs
+        lastTickWallMs = nowMs
+        lastPosForStall = -1L
+        // 开播瞬间同步基线：之前累积的 underrun 不算本轮证据
+        lastSeenUnderruns = underrunCount()
         job = scope?.launch {
             while (true) {
                 delay(POSITION_POLL_INTERVAL_MS)
                 val l = listener ?: break
-                if (!transport.isPlaying) continue
+                val now = clockMs()
+                val gap = if (lastTickWallMs > 0L) now - lastTickWallMs else 0L
+                lastTickWallMs = now
+                if (!transport.isPlaying) {
+                    lastPosForStall = -1L
+                    continue
+                }
                 val pos = transport.currentPosition
+                // 第二路信号：offload 缓冲被 HAL 抽空会记 underrun，说明确实断过。
+                // 有它佐证时放宽阈值——可能只是被限流，墙钟间隔远不到 10s。
+                val underruns = underrunCount()
+                val underrunHint = underruns > lastSeenUnderruns
+                lastSeenUnderruns = underruns
+                val gapThreshold =
+                    if (underrunHint) STALL_GAP_THRESHOLD_UNDERRUN_MS else STALL_GAP_THRESHOLD_MS
+                val lagThreshold =
+                    if (underrunHint) STALL_LAG_THRESHOLD_UNDERRUN_MS else STALL_LAG_THRESHOLD_MS
+                // 墙钟走了很久、位置却几乎没动：进程被冻结期间 DSP 自己在放，位置源已脱节
+                if (gap >= gapThreshold && lastPosForStall >= 0L &&
+                    gap - (pos - lastPosForStall) >= lagThreshold
+                ) {
+                    l.onPlaybackStalled(gap, pos)
+                }
+                lastPosForStall = pos
                 l.onTick(pos, transport.bufferedPosition)
                 noteProgress(l, pos, force = false)
                 // 暂停期间 continue 不推进 lastSaveAt：恢复后若已过期立刻补一次落盘

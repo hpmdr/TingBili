@@ -66,6 +66,7 @@ object ServicePlayerModule {
     Log.i("TingBiliAudio", "audioOffload pref=$offloadOn")
     val offload = if (offloadOn) {
         // ENABLED 尽力而为：无缝要求开（章节衔接不断），变速不支持（变速时自动回落不断播）。
+        // 注：不在支持列表里的机型/编码（如多数联发科机型的 AAC offload）会自然回落，属预期。
         TrackSelectionParameters.AudioOffloadPreferences.Builder()
             .setAudioOffloadMode(TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
             .setIsGaplessSupportRequired(true)

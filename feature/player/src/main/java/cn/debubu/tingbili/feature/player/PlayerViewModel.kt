@@ -286,11 +286,16 @@ class PlayerViewModel @Inject constructor(
     val pipelineInfo: StateFlow<cn.debubu.tingbili.core.media.PipelineInfo> = combine(
         player.state,
         cn.debubu.tingbili.core.media.AudioPipelineMonitor.decoderName,
-        cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadSleeping,
+        combine(
+            cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadSleeping,
+            cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadEverActive,
+        ) { sleeping, active -> sleeping to active },
         cn.debubu.tingbili.core.media.AudioPipelineMonitor.audioFormat,
         prefs.audioOffload,
-    ) { s, decoder, sleeping, format, offloadOn ->
-        cn.debubu.tingbili.core.media.PipelineInfo.of(decoder, sleeping, offloadOn, format, s.speed)
+    ) { s, decoder, offload, format, offloadOn ->
+        cn.debubu.tingbili.core.media.PipelineInfo.of(
+            decoder, offload.first, offload.second, offloadOn, format, s.speed
+        )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cn.debubu.tingbili.core.media.PipelineInfo())
 

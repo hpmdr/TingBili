@@ -11,8 +11,12 @@ import androidx.media3.common.Format
 data class PipelineInfo(
     val decoderName: String? = null,
     val decoderKind: String = "未知",
+    /** 用户开关（意愿） */
     val offloadEnabled: Boolean = false,
+    /** DSP 当前处于休眠（章节间隙/缓冲耗尽，短暂出现） */
     val offloadSleeping: Boolean = false,
+    /** 本次播放实际由 DSP 接管（判断「是否生效」看这个，不是 sleeping） */
+    val offloadActive: Boolean = false,
     val mimeType: String? = null,
     val codecs: String? = null,
     val bitrateKbps: Int? = null,
@@ -30,6 +34,7 @@ data class PipelineInfo(
         fun of(
             decoderName: String?,
             offloadSleeping: Boolean,
+            offloadActive: Boolean,
             offloadEnabled: Boolean,
             format: Format?,
             speed: Float,
@@ -38,6 +43,7 @@ data class PipelineInfo(
             decoderKind = kindOfDecoder(decoderName),
             offloadEnabled = offloadEnabled,
             offloadSleeping = offloadSleeping,
+            offloadActive = offloadActive,
             mimeType = format?.sampleMimeType,
             codecs = format?.codecs,
             bitrateKbps = format?.bitrate

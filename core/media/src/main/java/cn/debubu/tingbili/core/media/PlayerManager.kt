@@ -2,6 +2,7 @@ package cn.debubu.tingbili.core.media
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -87,11 +88,39 @@ class PlayerManager @Inject constructor(
 
     // ── 历史/进度：单 tick（位置轮询 + 历史节流合并），逻辑在 HistoryTracker ──
     private val historyTracker: HistoryTracker =
-        HistoryTracker(transport, historyDao).also { it.clockMs = { clock() } }
+        HistoryTracker(
+            transport,
+            historyDao,
+            underrunCount = { AudioPipelineMonitor.audioUnderruns.value },
+        ).also { it.clockMs = { clock() } }
+
+    private var lastRealignAtMs = 0L
 
     private val historyListener = object : HistoryTracker.Listener {
         override fun currentTrack(): Track? = _state.value.currentTrack
         override fun statePositionMs(): Long = _state.value.positionMs
+
+        /**
+         * 进程被系统冻结期间 DSP 仍在出声，解冻后位置源可能落后于实际播放。
+         * 同位置 seek 触发 AudioSink flush + AudioTrack 重建，让播放头重新向 HAL 取值，
+         * 字幕/进度随后按正确位置重算。普通模式冻结会直接停音，不需要这一步。
+         */
+        override fun onPlaybackStalled(gapMs: Long, positionMs: Long) {
+            // 只有 DSP offload 接管时，进程冻结才会出现「声音继续、位置没动」。
+            // 用粘性标记：部分机型只回调 sleeping 不回调 offloaded，且 sleeping 只是瞬时值。
+            val offloadInUse = AudioPipelineMonitor.offloadEverActive.value
+            if (!offloadInUse) return
+            val now = System.currentTimeMillis()
+            if (now - lastRealignAtMs < REALIGN_COOLDOWN_MS) return
+            lastRealignAtMs = now
+            val pos = transport.currentPosition
+            Log.i(
+                "TingBiliAudio",
+                "realign after stall: gap=${gapMs}ms pos=$pos underruns=${AudioPipelineMonitor.audioUnderruns.value}"
+            )
+            transport.seekTo(pos)
+            _state.update { it.copy(positionMs = pos) }
+        }
         override fun onTick(positionMs: Long, bufferedMs: Long) {
             // 纯内存态更新：持久化并入节流落盘，这里不再碰 DataStore
             _state.update {
@@ -658,6 +687,8 @@ class PlayerManager @Inject constructor(
     private var urlRefreshJob: Job? = null
     private companion object {
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
+        /** 冻结后重同步的冷却：seek 会重建 AudioTrack，别让它连续触发 */
+        const val REALIGN_COOLDOWN_MS = 60_000L
     }
 
     private fun scheduleProactiveRefresh() {

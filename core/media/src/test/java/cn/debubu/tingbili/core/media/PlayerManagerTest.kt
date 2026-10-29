@@ -414,6 +414,66 @@ class PlayerManagerTest {
     }
 
     @Test
+    fun `sleeping callback alone marks offload active`() {
+        // 不少机型只回调 sleepingForOffload、不回调 onOffloadedPlayback；
+        // 且 sleeping 是瞬时的（缓冲满才为真），判定必须是粘性的，否则会误报"已回落 CPU"
+        AudioPipelineMonitor.resetTrackState()
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
+        assertTrue(AudioPipelineMonitor.offloadEverActive.value)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        assertTrue(AudioPipelineMonitor.offloadEverActive.value)
+        // 出现 CPU 解码器才撤销
+        AudioPipelineMonitor.onDecoderInitialized("c2.android.aac.decoder")
+        assertEquals(false, AudioPipelineMonitor.offloadEverActive.value)
+        AudioPipelineMonitor.resetTrackState()
+    }
+
+    @Test
+    fun `stall realigns when offload is in use`() = runTest {
+        playerManager.testScope = this
+        var now = 0L
+        playerManager.clock = { now }
+        AudioPipelineMonitor.onOffloadedPlaybackChanged(true)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        fakePlayer.play()
+        // play() 内部 setMediaItems 会把位置重置为起点，这里再摆到 5s 作为基线
+        fakePlayer.setCurrentPosition(5_000L)
+        // 先跑一个 tick 建立位置基线
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        fakePlayer.seekToPos = null
+        // 冻结：墙钟跳 60s，位置原地不动（tick 只跑一次，模拟冻结期间循环停摆）
+        now += 60_000L
+        advanceTimeBy(500L)
+        runCurrent()
+        assertEquals(5_000L, fakePlayer.seekToPos)
+        playerManager.release()
+        AudioPipelineMonitor.resetTrackState()
+    }
+
+    @Test
+    fun `stall does not realign without offload`() = runTest {
+        playerManager.testScope = this
+        var now = 0L
+        playerManager.clock = { now }
+        AudioPipelineMonitor.resetTrackState()
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        fakePlayer.play()
+        fakePlayer.setCurrentPosition(5_000L)
+        now = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        fakePlayer.seekToPos = null
+        now += 60_000L
+        advanceTimeBy(500L)
+        runCurrent()
+        // 普通模式下冻结会直接停音，不需要 seek（否则每次卡顿都白跳）
+        assertEquals(null, fakePlayer.seekToPos)
+        playerManager.release()
+    }
+
+    @Test
     fun `setSpeed updates player and prefs`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
@@ -437,6 +497,7 @@ class PlayerManagerTest {
         assertEquals(1f, prefs.speed.first(), 0.001f)
         assertEquals(null, playerManager.state.value.errorMessage)
         AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        AudioPipelineMonitor.resetTrackState()
         playerManager.release()
     }
 

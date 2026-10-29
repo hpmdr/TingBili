@@ -656,7 +656,7 @@ private fun PlaybackInfoSheet(
             } else {
             // 播放中：管线参数尚未就绪时显示"读取中…"（如切集/缓冲瞬间），不写"未知"吓人。
             MoreGroupTitle("音频")
-            val initializing = info.decoderName == null && !info.offloadSleeping
+            val initializing = info.decoderName == null && !info.offloadActive && !info.offloadSleeping
             PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
@@ -665,14 +665,22 @@ private fun PlaybackInfoSheet(
             PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "读取中…")
             PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "读取中…")
             MoreGroupTitle("播放")
-            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadSleeping) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
-            PlaybackInfoRow("解码方式", if (info.offloadSleeping) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
-            PlaybackInfoRow("DSP 卸载", if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）" else if (info.offloadSleeping) "生效中：低功耗芯片正在解码，主芯片可休眠" else "已开启，当前不支持，已自动回落")
+            PlaybackInfoRow("解码器", info.decoderName ?: if (info.offloadActive) "DSP 芯片直接解码（不经过 CPU）" else "读取中…")
+            PlaybackInfoRow("解码方式", if (info.offloadActive) "DSP 硬件直解（功耗最低）" else if (initializing) "读取中…" else info.decoderKind)
+            PlaybackInfoRow(
+                "DSP 卸载",
+                when {
+                    !info.offloadEnabled -> "已关闭（可在设置里打开，灭屏听歌更省电）"
+                    info.offloadActive && info.offloadSleeping -> "生效中：低功耗芯片解码，主芯片已休眠"
+                    info.offloadActive -> "生效中：低功耗芯片解码，主芯片可休眠"
+                    else -> "已开启，当前音频不支持，已自动回落"
+                }
+            )
             PlaybackInfoRow("倍速", "${info.speed}x")
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
                 Text(text = "小知识：DSP 卸载就是把解码交给低功耗芯片、主芯片休眠来省电；条件不满足时自动回落，不断播。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                if (info.offloadSleeping) {
+                if (info.offloadActive) {
                     Text(text = "DSP 省电生效中不支持倍速，已保持 1.0x；退出接管后可变速。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 } else {
                     Text(text = "当前已自动回落到 CPU 解码，倍速可用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
