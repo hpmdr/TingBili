@@ -40,6 +40,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
@@ -49,6 +51,7 @@ import cn.debubu.tingbili.navigation.MainBottomNav
 import cn.debubu.tingbili.navigation.MiniPlayerOverlay
 import cn.debubu.tingbili.navigation.MainTabsRoute
 import cn.debubu.tingbili.navigation.MainViewModel
+import cn.debubu.tingbili.navigation.LoginRoute
 import cn.debubu.tingbili.navigation.PlayerRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -139,6 +142,10 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     // null = 首 Tab 还没定：什么都不画，系统启动屏继续盖着
     val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value ?: return
     val navController = rememberNavController()
+    // 4 Tab 的横向分页：与底栏共享同一个 state，点击/左右滑都落到这里
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = cn.debubu.tingbili.navigation.mainTabPageOf(startTab)
+    ) { 4 }
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
@@ -150,6 +157,11 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
     val inMainTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
+    // 全局 mini：除全屏播放页/登录页外，二级页（详情、UP、设置…）也常驻，
+    // 不随页面切换重建，转场时保持连续
+    val showMiniPlayer = destination?.hierarchy?.any {
+        it.hasRoute<PlayerRoute>() || it.hasRoute<LoginRoute>()
+    } != true
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
@@ -163,7 +175,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                 .nestedScroll(miniPlayerVisibility.connection),
             bottomBar = {
                 if (inMainTabs) {
-                    MainBottomNav(navController)
+                    MainBottomNav(pagerState)
                 }
             }
         ) { innerPadding ->
@@ -180,13 +192,13 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             ) {
                 AppRootNavHost(
                     navController = navController,
-                    startTab = startTab,
+                    pagerState = pagerState,
                     mainViewModel = mainViewModel,
                     modifier = Modifier.fillMaxSize(),
                 )
                 // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过；
                 // 显隐只做位移+淡出，内边距全程不动，滑到底不弹
-                if (inMainTabs) {
+                if (showMiniPlayer) {
                     MiniPlayerOverlay(
                         navController = navController,
                         visibility = miniPlayerVisibility,
@@ -200,7 +212,10 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     } else {
         // 平板：壳常驻（Rail/悬浮 mini 只在主页 Tab 显示，壳内部按目的地切换），
         // NavHost 调用点唯一，进出二级页不重建，转场才跑得起来
-        cn.debubu.tingbili.navigation.MainTabsScaffold(navController = navController, startTab = startTab)
+        cn.debubu.tingbili.navigation.MainTabsScaffold(
+            navController = navController,
+            pagerState = pagerState,
+        )
     }
 }
 

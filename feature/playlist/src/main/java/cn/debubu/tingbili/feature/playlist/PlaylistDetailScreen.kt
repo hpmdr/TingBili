@@ -166,7 +166,10 @@ fun PlaylistDetailScreen(
             LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            // 底部叠加悬浮 mini 的高度，最后一集不会被盖住
+            contentPadding = PaddingValues(
+                bottom = 24.dp + cn.debubu.tingbili.core.ui.MiniPlayerClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             // 封面横幅：借鉴网易云/小宇宙 — 模糊背景 + 居中大封面 + 标题居中

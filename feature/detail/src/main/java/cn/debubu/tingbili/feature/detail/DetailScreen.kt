@@ -239,7 +239,12 @@ private fun DetailContent(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)
+        // 底部留出悬浮 mini 的高度，最后一项不会被盖住
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance
+        )
     ) {
         item {
             AsyncImage(

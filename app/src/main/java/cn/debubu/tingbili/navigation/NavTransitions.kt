@@ -100,15 +100,8 @@ internal val PredictiveSharedAxisXPopExit:
         }
     }
 
-// —— Tab 切换：fade-through，无位移 ——
-
-internal val TabFadeEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
-    fadeIn(animationSpec = m3Tween())
-}
-
-internal val TabFadeExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
-    fadeOut(animationSpec = m3Tween())
-}
+// Tab 切换不再走淡入转场：4 个 Tab 由 HorizontalPager 承载，切换即横向位移，
+// 点击底栏瞬时切页（M3 同层级视图不做转场动画），故 TabFade* 已删除。
 
 // —— 播放器：纵向 ——
 // 从播放器继续前进（点相关视频/设置）时底下淡出；手势返回时若停留在播放器

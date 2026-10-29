@@ -26,8 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -43,8 +46,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 @Composable
 fun MainTabsScaffold(
     navController: NavHostController,
+    pagerState: PagerState,
     viewModel: MainViewModel = hiltViewModel(),
-    startTab: Any = HomeRoute
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
@@ -56,31 +59,37 @@ fun MainTabsScaffold(
     }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
-    val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
-    val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
-    val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
-    val isMeSelected = destination?.hierarchy?.any { it.hasRoute<MeRoute>() } == true
+    val scope = rememberCoroutineScope()
+    val currentPage = pagerState.currentPage
+    val isHomeSelected = currentPage == 0
+    val isPlaylistSelected = currentPage == 1
+    val isHistorySelected = currentPage == 2
+    val isMeSelected = currentPage == 3
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationSuiteDefaults.itemColors()
     // 推荐 tab 双击回顶（item{} 是 DSL 非组合作用域，helper 必须在外层调）
-    val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
+    val homeTabClick = rememberHomeTabClick(pagerState, viewModel)
 
     val miniPlayerVisibility = rememberMiniPlayerVisibility()
     // 壳常驻、NavHost 调用点唯一：在 tab 与独立页之间导航时不重建，转场动画才跑得起来
     val inTabs = isMainTabDestination(destination)
+    // 与手机壳一致：除全屏播放页/登录页外，二级页也常驻 mini
+    val showMiniPlayer = destination?.hierarchy?.any {
+        it.hasRoute<PlayerRoute>() || it.hasRoute<LoginRoute>()
+    } != true
     if (layoutType == NavigationSuiteType.NavigationBar) {
         Scaffold(
             modifier = Modifier.nestedScroll(miniPlayerVisibility.connection),
             bottomBar = {
                 if (inTabs) {
-                    MainBottomNav(navController)
+                    MainBottomNav(pagerState)
                 }
             }
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
                 // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过
-                if (inTabs) {
+                if (showMiniPlayer) {
                     MiniPlayerOverlay(
                         navController = navController,
                         visibility = miniPlayerVisibility,
@@ -109,12 +118,7 @@ fun MainTabsScaffold(
                 )
                 item(
                     selected = isPlaylistSelected,
-                    onClick = {
-                        navController.navigate(PlaylistRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
+                    onClick = { scope.launch { pagerState.scrollToPage(1) } },
                     icon = {
                         Icon(
                             imageVector = if (isPlaylistSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
@@ -126,12 +130,7 @@ fun MainTabsScaffold(
                 )
                 item(
                     selected = isHistorySelected,
-                    onClick = {
-                        navController.navigate(HistoryRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
+                    onClick = { scope.launch { pagerState.scrollToPage(2) } },
                     icon = {
                         Icon(
                             imageVector = if (isHistorySelected) Icons.Filled.History else Icons.Outlined.History,
@@ -143,12 +142,7 @@ fun MainTabsScaffold(
                 )
                 item(
                     selected = isMeSelected,
-                    onClick = {
-                        navController.navigate(MeRoute) {
-                            launchSingleTop = true; restoreState = true
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        }
-                    },
+                    onClick = { scope.launch { pagerState.scrollToPage(3) } },
                     icon = {
                         Icon(
                             imageVector = if (isMeSelected) Icons.Filled.Person else Icons.Outlined.Person,
@@ -163,7 +157,7 @@ fun MainTabsScaffold(
             layoutType = if (inTabs) layoutType else NavigationSuiteType.None
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AppRootNavHost(navController = navController, startTab = startTab, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
                 val playerManager = viewModel.playerManager
                 val state by playerManager.state.collectAsStateWithLifecycle()
                 val track = state.currentTrack

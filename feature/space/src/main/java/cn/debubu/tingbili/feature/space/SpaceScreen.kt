@@ -122,7 +122,11 @@ fun SpaceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+            // 底部叠加悬浮 mini 的高度，最后一项不会被盖住
+            contentPadding = PaddingValues(
+                top = 8.dp,
+                bottom = 24.dp + cn.debubu.tingbili.core.ui.MiniPlayerClearance
+            )
         ) {
             item {
                 SpaceHeader(

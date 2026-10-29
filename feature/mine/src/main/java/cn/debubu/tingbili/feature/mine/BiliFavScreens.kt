@@ -137,7 +137,13 @@ fun BiliFavFoldersScreen(
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
+                    // 底部留出悬浮 mini 的高度，最后一项不会被盖住
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        top = 12.dp,
+                        end = 12.dp,
+                        bottom = 12.dp + cn.debubu.tingbili.core.ui.MiniPlayerClearance
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(folders, key = { it.id }) { folder ->

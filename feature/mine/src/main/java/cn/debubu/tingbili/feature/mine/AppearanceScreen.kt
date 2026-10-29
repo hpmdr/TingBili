@@ -82,6 +82,8 @@ fun AppearanceScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
+                // 底部留出悬浮 mini 的高度
+                .padding(bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

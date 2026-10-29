@@ -1,12 +1,14 @@
 package cn.debubu.tingbili.navigation
 
 import android.os.SystemClock
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 /** 推荐 tab 双击窗口：已在首页时 400ms 内连点第二下即回顶（否则走原导航） */
 internal const val HOME_TAB_DOUBLE_TAP_WINDOW_MS = 400L
@@ -17,21 +19,19 @@ internal const val HOME_TAB_DOUBLE_TAP_WINDOW_MS = 400L
  */
 @Composable
 internal fun rememberHomeTabClick(
-    navController: NavController,
-    isHomeSelected: Boolean,
+    pagerState: PagerState,
     mainViewModel: MainViewModel,
 ): () -> Unit {
+    val scope = rememberCoroutineScope()
     var lastTapMs by remember { mutableLongStateOf(0L) }
     return {
         val now = SystemClock.uptimeMillis()
-        if (isHomeSelected && now - lastTapMs < HOME_TAB_DOUBLE_TAP_WINDOW_MS) {
+        val onHome = pagerState.currentPage == 0
+        if (onHome && now - lastTapMs < HOME_TAB_DOUBLE_TAP_WINDOW_MS) {
             mainViewModel.requestHomeScrollTop()
-        } else {
-            navController.navigate(HomeRoute) {
-                launchSingleTop = true
-                restoreState = true
-                popUpTo(navController.graph.startDestinationId) { saveState = true }
-            }
+        } else if (!onHome) {
+            // 从别的 Tab 点搜索：瞬时切页（M3 同层级视图不做转场动画）
+            scope.launch { pagerState.scrollToPage(0) }
         }
         lastTapMs = now
     }

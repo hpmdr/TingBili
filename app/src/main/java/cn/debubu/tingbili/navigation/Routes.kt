@@ -81,6 +81,22 @@ data class VideoDetailRoute(val bvid: String)
 @Serializable
 data class PlaylistDetailRoute(val playlistId: Long)
 
+/** 底部 4 个 Tab 在 HorizontalPager 里的页序号（顺序即底栏从左到右） */
+fun mainTabPageOf(route: Any?): Int = when (route) {
+    is PlaylistRoute -> 1
+    is HistoryRoute -> 2
+    is MeRoute -> 3
+    else -> 0
+}
+
+/** 页序号 → Tab 路由（底栏选中态仍以路由表达，避免两套常量漂移） */
+fun mainTabRouteOf(page: Int): Any = when (page) {
+    1 -> PlaylistRoute
+    2 -> HistoryRoute
+    3 -> MeRoute
+    else -> HomeRoute
+}
+
 /** 主页 4 Tab 的集合，用于判断是否显示底栏 */
 fun isMainTabRoute(route: Any?): Boolean = when (route) {
     is HomeRoute, is PlaylistRoute, is HistoryRoute, is MeRoute, is MainTabsRoute -> true

@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.navigation
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -35,9 +36,9 @@ import cn.debubu.tingbili.feature.mine.SettingsScreen
 @Composable
 fun AppRootNavHost(
     navController: NavHostController,
+    /** 4 Tab 的分页状态：与底栏共享，冷启动首 Tab 由调用方的 initialPage 决定 */
+    pagerState: PagerState,
     modifier: Modifier = Modifier,
-    /** 冷启动首 Tab：MainActivity 按本地收藏有无决定，默认推荐（预览/旧入口兼容） */
-    startTab: Any = HomeRoute,
     mainViewModel: MainViewModel = hiltViewModel(),
 ) {
     NavHost(
@@ -52,63 +53,13 @@ fun AppRootNavHost(
         predictivePopExitTransition = PredictiveSharedAxisXPopExit,
     ) {
         // 主页 Tab 容器（带底栏，见 MainTabsScaffold）
-        navigation<MainTabsRoute>(
-            startDestination = startTab,
-            enterTransition = SharedAxisXEnter,
-            exitTransition = SharedAxisXExit,
-            popEnterTransition = SharedAxisXPopEnter,
-            popExitTransition = SharedAxisXPopExit,
-        ) {
-            composable<HomeRoute>(
-                enterTransition = TabFadeEnter,
-                exitTransition = TabFadeExit,
-                popEnterTransition = TabFadeEnter,
-                popExitTransition = TabFadeExit,
-            ) {
-                ImageFormatScope(mainViewModel) {
-                    // 搜索已内嵌到首页（顶部输入框 → 首页网格出结果），不再跳独立搜索页
-                    HomeScreen(
-                        onTrackToDetail = { bvid -> navController.navigate(VideoDetailRoute(bvid)) }
-                    )
-                }
-            }
-            composable<PlaylistRoute>(
-                enterTransition = TabFadeEnter,
-                exitTransition = TabFadeExit,
-                popEnterTransition = TabFadeEnter,
-                popExitTransition = TabFadeExit,
-            ) {
-                ImageFormatScope(mainViewModel) {
-                    PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
-                }
-            }
-            composable<HistoryRoute>(
-                enterTransition = TabFadeEnter,
-                exitTransition = TabFadeExit,
-                popEnterTransition = TabFadeEnter,
-                popExitTransition = TabFadeExit,
-            ) {
-                ImageFormatScope(mainViewModel) { HistoryScreen() }
-            }
-            composable<MeRoute>(
-                enterTransition = TabFadeEnter,
-                exitTransition = TabFadeExit,
-                popEnterTransition = TabFadeEnter,
-                popExitTransition = TabFadeExit,
-            ) {
-                ImageFormatScope(mainViewModel) {
-                    MeScreen(
-                        onOpenAppearance = { navController.navigate(AppearanceRoute) },
-                        onOpenSettings = { navController.navigate(SettingsRoute) },
-                        onOpenStorage = { navController.navigate(StorageRoute) },
-                        onOpenGeneral = { navController.navigate(GeneralRoute) },
-                        onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
-                        onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
-                        onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
-                        onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
-                    )
-                }
-            }
+        // 主页 4 Tab：单个 destination + 横向分页（底栏点击与左右滑都在 pager 内）
+        composable<MainTabsRoute> {
+            MainTabsPager(
+                navController = navController,
+                mainViewModel = mainViewModel,
+                pagerState = pagerState,
+            )
         }
         // 独立全屏页：无底栏（登录）
         composable<LoginRoute> {
@@ -229,13 +180,4 @@ fun AppRootNavHost(
     }
 }
 
-// 兼容旧入口：仅用于 Tab 内部预览，正式入口为 AppRootNavHost
-@Composable
-@Deprecated("改用 AppRootNavHost + MainTabsScaffold")
-fun AppNavHost(
-    navController: NavHostController,
-    innerPadding: PaddingValues,
-    modifier: Modifier = Modifier
-) {
-    AppRootNavHost(navController = navController, modifier = modifier.padding(innerPadding))
-}
+// 旧入口 AppNavHost 已删除：4 Tab 改为 HorizontalPager 后，唯一入口是 AppRootNavHost

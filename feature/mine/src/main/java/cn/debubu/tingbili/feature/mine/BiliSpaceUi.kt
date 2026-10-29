@@ -146,7 +146,13 @@ fun BiliVideoList(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+        // 底部留出悬浮 mini 的高度，最后一项不会被盖住
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = 12.dp,
+            top = 12.dp,
+            end = 12.dp,
+            bottom = 12.dp + cn.debubu.tingbili.core.ui.MiniPlayerClearance
+        ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(list, key = { (it.bvid.ifBlank { it.title }) + it.cover }) { item ->

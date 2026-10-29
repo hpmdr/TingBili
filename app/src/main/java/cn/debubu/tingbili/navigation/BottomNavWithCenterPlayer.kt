@@ -14,37 +14,36 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.compose.currentBackStackEntryAsState
 import cn.debubu.tingbili.core.media.PlayerManager
+import kotlinx.coroutines.launch
 
 
 
 /** 主页底栏：只剩 4 个 Tab。mini 条已改为悬浮覆盖层（见 [MiniPlayerOverlay]），不再占布局。 */
 @Composable
 fun MainBottomNav(
-    navController: NavController,
+    pagerState: PagerState,
     viewModel: MainViewModel = hiltViewModel(),
 ) {
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val destination = navBackStackEntry?.destination
-
-    val isHomeSelected = destination?.hierarchy?.any { it.hasRoute<HomeRoute>() } == true
-    val isPlaylistSelected = destination?.hierarchy?.any { it.hasRoute<PlaylistRoute>() } == true
-    val isHistorySelected = destination?.hierarchy?.any { it.hasRoute<HistoryRoute>() } == true
-    val isMeSelected = destination?.hierarchy?.any { it.hasRoute<MeRoute>() } == true
+    val scope = rememberCoroutineScope()
+    val currentPage = pagerState.currentPage
+    val isHomeSelected = currentPage == 0
+    val isPlaylistSelected = currentPage == 1
+    val isHistorySelected = currentPage == 2
+    val isMeSelected = currentPage == 3
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
     val itemColors = NavigationBarItemDefaults.colors()
-    // 推荐 tab 双击回顶（onClick lambda 非组合作用域，helper 必须在外层调）
-    val homeTabClick = rememberHomeTabClick(navController, isHomeSelected, viewModel)
+    // 搜索 tab 双击回顶（onClick lambda 非组合作用域，helper 必须在外层调）
+    val homeTabClick = rememberHomeTabClick(pagerState, viewModel)
 
     NavigationBar {
         NavigationBarItem(
@@ -61,15 +60,7 @@ fun MainBottomNav(
         )
         NavigationBarItem(
             selected = isPlaylistSelected,
-            onClick = {
-                navController.navigate(PlaylistRoute) {
-                    launchSingleTop = true
-                    restoreState = true
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }
-                }
-            },
+            onClick = { scope.launch { pagerState.scrollToPage(1) } },
             icon = {
                 Icon(
                     imageVector = if (isPlaylistSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
@@ -81,15 +72,7 @@ fun MainBottomNav(
         )
         NavigationBarItem(
             selected = isHistorySelected,
-            onClick = {
-                navController.navigate(HistoryRoute) {
-                    launchSingleTop = true
-                    restoreState = true
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }
-                }
-            },
+            onClick = { scope.launch { pagerState.scrollToPage(2) } },
             icon = {
                 Icon(
                     imageVector = if (isHistorySelected) Icons.Filled.History else Icons.Outlined.History,
@@ -101,15 +84,7 @@ fun MainBottomNav(
         )
         NavigationBarItem(
             selected = isMeSelected,
-            onClick = {
-                navController.navigate(MeRoute) {
-                    launchSingleTop = true
-                    restoreState = true
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }
-                }
-            },
+            onClick = { scope.launch { pagerState.scrollToPage(3) } },
             icon = {
                 Icon(
                     imageVector = if (isMeSelected) Icons.Filled.Person else Icons.Outlined.Person,
