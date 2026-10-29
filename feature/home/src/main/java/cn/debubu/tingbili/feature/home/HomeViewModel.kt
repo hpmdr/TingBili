@@ -59,6 +59,7 @@ class HomeViewModel @Inject constructor(
     private val _total = MutableStateFlow<Int?>(null)
     val total: StateFlow<Int?> = _total.asStateFlow()
 
+
     /** 首页策展关键词（设置页可增减）：搜索建议词 + 没有搜索历史时的兜底词 */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
         viewModelScope, SharingStarted.Eagerly, HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS

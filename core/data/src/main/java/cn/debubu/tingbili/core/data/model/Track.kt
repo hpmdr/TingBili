@@ -19,5 +19,7 @@ data class Track(
      */
     val videoTitle: String? = null,
     /** 第几个分 P（从 1 开始，接口的 page 字段）；单 P 或未知时为 null */
-    val pageIndex: Int? = null
+    val pageIndex: Int? = null,
+    /** UP 主 mid（点作者进主页用）；接口未返回或旧数据为 null */
+    val upMid: Long? = null
 )

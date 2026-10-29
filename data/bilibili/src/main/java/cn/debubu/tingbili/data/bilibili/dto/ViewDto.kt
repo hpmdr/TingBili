@@ -95,7 +95,8 @@ fun ViewData.toTracks(): List<Track> {
                 subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
                 pageCount = 1,
                 videoTitle = title,
-                pageIndex = 1
+                pageIndex = 1,
+                upMid = owner?.mid?.takeIf { it > 0 }
             )
         )
     }
@@ -115,7 +116,8 @@ fun ViewData.toTracks(): List<Track> {
             subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
             pageCount = pages.size,
             videoTitle = mainTitle,
-            pageIndex = page.page.takeIf { it > 0 }
+            pageIndex = page.page.takeIf { it > 0 },
+            upMid = owner?.mid?.takeIf { it > 0 }
         )
     }
 }

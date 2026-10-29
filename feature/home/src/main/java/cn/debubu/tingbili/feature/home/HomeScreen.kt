@@ -94,6 +94,7 @@ import coil3.compose.AsyncImage
 @Composable
 fun HomeScreen(
     onTrackToDetail: (String) -> Unit = {},
+    onUpClick: (Long) -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
     val paging = vm.pagingFlow.collectAsLazyPagingItems()
@@ -248,12 +249,14 @@ fun HomeScreen(
                         tracks = snapshot!!,
                         gridState = snapshotGridState,
                         onTrackClick = { track -> onTrackToDetail(track.bvid) },
+                        onUpClick = onUpClick,
                     )
                 } else {
                     TrackPagingGrid(
                         paging = paging,
                         gridState = gridState,
                         onTrackClick = { track -> onTrackToDetail(track.bvid) },
+                        onUpClick = onUpClick,
                         emptyText = "没有找到相关视频，换个关键词试试"
                     )
                 }
@@ -309,6 +312,7 @@ private fun SnapshotGrid(
     tracks: List<Track>,
     gridState: LazyGridState,
     onTrackClick: (Track) -> Unit,
+    onUpClick: (Long) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 156.dp),
@@ -325,7 +329,8 @@ private fun SnapshotGrid(
         ) { _, track ->
             TrackGridCard(
                 track = track,
-                onClick = { onTrackClick(track) }
+                onClick = { onTrackClick(track) },
+                onUpClick = onUpClick,
             )
         }
     }
@@ -537,6 +542,7 @@ private fun TrackPagingGrid(
     paging: LazyPagingItems<Track>,
     gridState: LazyGridState,
     onTrackClick: (Track) -> Unit,
+    onUpClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
     emptyText: String = "暂无内容"
 ) {
@@ -560,7 +566,8 @@ private fun TrackPagingGrid(
             if (track != null) {
                 TrackGridCard(
                     track = track,
-                    onClick = { onTrackClick(track) }
+                    onClick = { onTrackClick(track) },
+                    onUpClick = onUpClick,
                 )
             }
         }
@@ -667,7 +674,8 @@ private fun friendlyHomeError(raw: String?): String {
 @Composable
 private fun TrackGridCard(
     track: Track,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onUpClick: (Long) -> Unit = {}
 ) {
     val imageFormat = LocalImageFormat.current
     // 网格列宽 156dp 按 3x 取 ListThumb 刚好；URL/时长/副标题缓存，不随父重组重复拼串
@@ -677,15 +685,9 @@ private fun TrackGridCard(
     val durationText = remember(track.durationMs) {
         if (track.durationMs > 0L) formatDuration(track.durationMs) else null
     }
-    val subtitleText = remember(track.author, track.pageCount) {
-        buildString {
-            if (track.author.isNotBlank()) append("UP: ${track.author}")
-            if (track.pageCount > 1) {
-                if (isNotEmpty()) append(" · ")
-                append("${track.pageCount}P")
-            }
-        }
-    }
+    // 分P数只在详情/快照数据里有；搜索接口不返回，不值得每张卡片再查一次，故卡片不展示
+    // UP 名单独成一行且可点击进主页；mid 缺失（旧快照/接口没返回）时退化为普通文本
+    val upMid = track.upMid?.takeIf { it > 0 }
 
     Column(
         modifier = Modifier
@@ -720,17 +722,35 @@ private fun TrackGridCard(
             text = track.title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+            // 固定两行高度：标题一行/两行时下面的 UP 行都在同一水平线，网格才不会一行高一行的低
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = subtitleText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (track.author.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "UP: ${track.author}",
+                style = MaterialTheme.typography.bodySmall,
+                // 能进主页时用主题色，明确"这行可点"
+                color = if (upMid != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (upMid != null) {
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        // 子元素自己消费点击，不会冒泡到卡片（不会误进视频详情）
+                        .clickable { onUpClick(upMid) }
+                        .padding(vertical = 2.dp, horizontal = 2.dp)
+                } else {
+                    Modifier
+                }
+            )
+        }
     }
 }
 

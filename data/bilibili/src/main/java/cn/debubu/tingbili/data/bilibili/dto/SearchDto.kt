@@ -27,8 +27,10 @@ data class SearchItem(
     val pic: String = "",
     val duration: String = "0:00",
     @SerialName("type") val type: String = "video",
-    // 分 P 数量（B 站搜索接口返回，多 P 视频 > 1）
-    val videos: Int = 1,
+    // 实测搜索接口不返回该字段（null）；保留映射以便将来 B 站补上时直接生效
+    val videos: Int? = null,
+    // UP 主 mid，点作者进主页用
+    val mid: Long = 0,
     // some fields from Bili may be present, ignore unknown
     val aid: Long = 0
 )
@@ -44,7 +46,8 @@ fun SearchDto.toTracks(): List<Track> {
             cover = item.pic.normalizeBiliImageUrl(),
             durationMs = item.duration.parseDurationToMs(),
             subtitleUrl = null,
-            pageCount = item.videos.coerceAtLeast(1)
+            pageCount = (item.videos ?: 0).coerceAtLeast(1),
+            upMid = item.mid.takeIf { it > 0 }
         )
     }
 }
