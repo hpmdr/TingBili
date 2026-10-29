@@ -44,6 +44,19 @@ android {
     }
 
     buildTypes {
+        /**
+         * 真机自测包：debug 签名 + 关闭 debuggable。
+         * debug 包卡顿的根因是 debuggable=true 让 ART 不做 AOT 优化（大量代码解释执行），
+         * 关掉后运行表现接近 release；签名仍是 debug，覆盖安装不丢数据。
+         * 用法：./gradlew :app:assemblePerfDebug
+         */
+        create("perfDebug") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("debug")
+        }
+
         getByName("release") {
             // 生产包：R8 全量混淆 + 资源收缩（61M→6M，2026-10-20 实测；真机冷启动/播放/字幕回归通过）。
             // 规则只有保底三条（proguard-rules.pro），各库自带 consumer rules 已 cover。
