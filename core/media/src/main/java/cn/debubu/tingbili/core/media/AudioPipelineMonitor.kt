@@ -61,8 +61,10 @@ object AudioPipelineMonitor {
 
     fun onAudioFormatChanged(format: Format) {
         audioFormatState.value = format
-        // 换轨/换集：上一轨的解码器名与 offload 判定都作废，等新回调重新落定
-        resetTrackState()
+        // 注意：这里不能清 decoderName / offload 标记。
+        // 解码器通常复用，切集时只会回调 formatChanged、不会重新回调 onAudioDecoderInitialized，
+        // 一清就永远补不回来（表现为播放信息页一直「读取中」）。
+        // offload 状态由 onOffloadSleepingChanged / onOffloadedPlayback / onAudioDecoderInitialized 自行维护。
     }
 
     /** 清空"本轨"相关的判定（切轨、停止播放、单测复位） */
