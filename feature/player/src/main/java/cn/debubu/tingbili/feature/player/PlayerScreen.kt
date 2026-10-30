@@ -28,11 +28,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,6 +42,8 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ListItem
@@ -96,6 +97,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -116,6 +119,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalTime
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
@@ -1546,7 +1550,7 @@ private fun UndoJumpHint(
 /** 全屏字幕：松手后静置这么久无操作，才自动回到高亮行 */
 private const val FOLLOW_RESUME_DELAY_MS = 4000L
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SleepTimerSheet(
     remainSec: Int?,
@@ -1563,9 +1567,11 @@ private fun SleepTimerSheet(
     val running = remainSec != null || endOfChapter
     // 自定义初值：运行中沿用本次设定，否则上次所选、无记忆则 60；钳制到 30~600，不再贴 30 分钟格（45 也能原样回来）
     // 带 key：冷启动时 flow 初值尚未落盘重组后要用最新值重算（无 key 会钉死初值 60/false）
-    var customText by remember(totalMin, lastMin) {
-        mutableStateOf(((totalMin ?: lastMin).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN)).toString())
-    }
+    val initialMin = (totalMin ?: lastMin).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN)
+    var customText by remember(totalMin, lastMin) { mutableStateOf(initialMin.toString()) }
+    var customOpen by remember(totalMin, lastMin) { mutableStateOf(initialMin !in SLEEP_PRESETS) }
+    val focusRequester = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
     var finish by remember(remainSec != null, endOfChapter, finishDefault) {
         mutableStateOf(if (remainSec != null) finishChapter else finishDefault)
     }
@@ -1607,62 +1613,114 @@ private fun SleepTimerSheet(
                 }
             }
             if (!endOfChapter) {
-                // 常用预设：单选 Chip，点中即回填到输入框
-                Text(
-                    text = "常用",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowRow(
+                // Hero：巨大分钟数 + 预计停止时刻（排版锚点，不再用 常用/自定义 小标题表单）
+                val endClock = validMin?.let { sleepEndClockLabel(it) }
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    SLEEP_PRESETS.forEach { preset ->
-                        FilterChip(
-                            selected = validMin == preset,
-                            onClick = { customText = preset.toString() },
-                            label = { Text("${preset} 分钟") },
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = validMin?.toString() ?: "—",
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 76.sp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "分钟",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 12.dp),
                         )
                     }
-                }
-                // 自定义：任意整数 30~600，-10/+10 步进微调
-                Text(
-                    text = "自定义",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    OutlinedTextField(
-                        value = customText,
-                        onValueChange = { customText = it.filter(Char::isDigit).take(4) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        isError = customError != null,
-                        supportingText = {
-                            Text(customError ?: "${SLEEP_MIN_MIN}~${SLEEP_MAX_MIN} 分钟，支持任意整数（如 45）")
-                        },
-                        suffix = { Text("分钟") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done,
-                        ),
-                        keyboardActions = KeyboardActions(onDone = {
-                            validMin?.let { onSelectMinutes(it, finish); onDismiss() }
-                        }),
+                    Text(
+                        text = endClock?.let { "约 $it 后自动停止" } ?: (customError ?: ""),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (customError != null && validMin == null) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = {
-                        val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
-                        customText = (base - 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
-                    }) { Text("-10") }
-                    TextButton(onClick = {
-                        val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
-                        customText = (base + 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
-                    }) { Text("+10") }
+                }
+                // 预设 3x2：5 档 + 自定义（240 不再孤儿一行）
+                val customActive = validMin !in SLEEP_PRESETS
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(listOf(30, 60, 90), listOf(120, 240, null)).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { preset ->
+                                if (preset == null) {
+                                    FilterChip(
+                                        selected = customActive,
+                                        onClick = {
+                                            customOpen = true
+                                            scope.launch { focusRequester.requestFocus() }
+                                        },
+                                        label = {
+                                            Text(
+                                                "自定义",
+                                                modifier = Modifier.fillMaxWidth(),
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                } else {
+                                    FilterChip(
+                                        selected = validMin == preset,
+                                        onClick = {
+                                            customText = preset.toString()
+                                            customOpen = false
+                                        },
+                                        label = {
+                                            Text(
+                                                "$preset 分钟",
+                                                modifier = Modifier.fillMaxWidth(),
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                // 自定义行：仅自定义模式展开；圆形图标步进替代原来的 -10/+10 文字按钮
+                if (customOpen) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = customText,
+                            onValueChange = { customText = it.filter(Char::isDigit).take(4) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
+                            singleLine = true,
+                            isError = customError != null,
+                            supportingText = {
+                                Text(customError ?: "30~600 的任意整数")
+                            },
+                            suffix = { Text("分钟") },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Done,
+                            ),
+                            keyboardActions = KeyboardActions(onDone = {
+                                validMin?.let { onSelectMinutes(it, finish); onDismiss() }
+                            }),
+                        )
+                        FilledTonalIconButton(onClick = {
+                            val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
+                            customText = (base - 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
+                        }) { Icon(Icons.Filled.Remove, contentDescription = "减 10 分钟") }
+                        FilledTonalIconButton(onClick = {
+                            val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
+                            customText = (base + 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
+                        }) { Icon(Icons.Filled.Add, contentDescription = "加 10 分钟") }
+                    }
                 }
                 // 到点后播完本章再停：倒计时结束转入播完即停，不立即暂停
                 Row(
@@ -1712,6 +1770,12 @@ internal fun sleepCustomError(text: String): String? {
     val v = text.toIntOrNull() ?: return "请输入数字"
     if (v !in SLEEP_MIN_MIN..SLEEP_MAX_MIN) return "请输入 ${SLEEP_MIN_MIN}~${SLEEP_MAX_MIN} 分钟"
     return null
+}
+
+/** 预计停止时刻 HH:mm（Hero 副标题用，now 可注入便于单测） */
+internal fun sleepEndClockLabel(min: Int, now: LocalTime = LocalTime.now()): String {
+    val t = now.plusMinutes(min.toLong())
+    return "%02d:%02d".format(t.hour, t.minute)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

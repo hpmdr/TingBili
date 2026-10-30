@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.player
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.LocalTime
 
 class SleepTimerInputTest {
 
@@ -35,5 +36,14 @@ class SleepTimerInputTest {
         assertNull(sleepCustomError("30"))
         assertNull(sleepCustomError("45"))
         assertNull(sleepCustomError("600"))
+    }
+    @Test
+    fun `end clock adds minutes to now`() {
+        assertEquals("23:35", sleepEndClockLabel(60, LocalTime.of(22, 35)))
+    }
+
+    @Test
+    fun `end clock wraps past midnight`() {
+        assertEquals("00:20", sleepEndClockLabel(30, LocalTime.of(23, 50)))
     }
 }
