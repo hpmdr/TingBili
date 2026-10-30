@@ -28,6 +28,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
@@ -112,7 +120,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.chapterLabel
-import cn.debubu.tingbili.core.ui.component.WheelPicker
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -1539,7 +1546,7 @@ private fun UndoJumpHint(
 /** 全屏字幕：松手后静置这么久无操作，才自动回到高亮行 */
 private const val FOLLOW_RESUME_DELAY_MS = 4000L
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SleepTimerSheet(
     remainSec: Int?,
@@ -1554,15 +1561,16 @@ private fun SleepTimerSheet(
     onDismiss: () -> Unit,
 ) {
     val running = remainSec != null || endOfChapter
-    // 滚轮初值：运行中沿用本次设定，否则上次所选、无记忆则 60（60 居中露出 30/90，暗示可滑）
-    // （不在预设里也没关系，滚轮全覆盖，都贴到 30 分钟格）
+    // 自定义初值：运行中沿用本次设定，否则上次所选、无记忆则 60；钳制到 30~600，不再贴 30 分钟格（45 也能原样回来）
     // 带 key：冷启动时 flow 初值尚未落盘重组后要用最新值重算（无 key 会钉死初值 60/false）
-    var wheelMin by remember(totalMin, lastMin) {
-        mutableIntStateOf(snapSleepMin(totalMin ?: lastMin))
+    var customText by remember(totalMin, lastMin) {
+        mutableStateOf(((totalMin ?: lastMin).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN)).toString())
     }
     var finish by remember(remainSec != null, endOfChapter, finishDefault) {
         mutableStateOf(if (remainSec != null) finishChapter else finishDefault)
     }
+    val customError = sleepCustomError(customText)
+    val validMin = customText.toIntOrNull()?.takeIf { customError == null }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -1599,13 +1607,63 @@ private fun SleepTimerSheet(
                 }
             }
             if (!endOfChapter) {
-                // 分钟滚轮：30 分钟一格，上限 600
-                WheelPicker(
-                    items = (1..SLEEP_GRID_COUNT).map { "${it * SLEEP_STEP_MIN}" },
-                    selectedIndex = (wheelMin / SLEEP_STEP_MIN - 1).coerceIn(0, SLEEP_GRID_COUNT - 1),
-                    onSettled = { wheelMin = (it + 1) * SLEEP_STEP_MIN },
-                    unit = "分钟",
+                // 常用预设：单选 Chip，点中即回填到输入框
+                Text(
+                    text = "常用",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SLEEP_PRESETS.forEach { preset ->
+                        FilterChip(
+                            selected = validMin == preset,
+                            onClick = { customText = preset.toString() },
+                            label = { Text("${preset} 分钟") },
+                        )
+                    }
+                }
+                // 自定义：任意整数 30~600，-10/+10 步进微调
+                Text(
+                    text = "自定义",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    OutlinedTextField(
+                        value = customText,
+                        onValueChange = { customText = it.filter(Char::isDigit).take(4) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        isError = customError != null,
+                        supportingText = {
+                            Text(customError ?: "${SLEEP_MIN_MIN}~${SLEEP_MAX_MIN} 分钟，支持任意整数（如 45）")
+                        },
+                        suffix = { Text("分钟") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = {
+                            validMin?.let { onSelectMinutes(it, finish); onDismiss() }
+                        }),
+                    )
+                    TextButton(onClick = {
+                        val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
+                        customText = (base - 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
+                    }) { Text("-10") }
+                    TextButton(onClick = {
+                        val base = customText.toIntOrNull() ?: SLEEP_MIN_MIN
+                        customText = (base + 10).coerceIn(SLEEP_MIN_MIN, SLEEP_MAX_MIN).toString()
+                    }) { Text("+10") }
+                }
                 // 到点后播完本章再停：倒计时结束转入播完即停，不立即暂停
                 Row(
                     modifier = Modifier
@@ -1632,25 +1690,29 @@ private fun SleepTimerSheet(
                     })
                 }
                 Button(
-                    onClick = { onSelectMinutes(wheelMin, finish); onDismiss() },
+                    onClick = { validMin?.let { onSelectMinutes(it, finish); onDismiss() } },
+                    enabled = validMin != null,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (running) "更新定时（$wheelMin 分钟）" else "开始定时（$wheelMin 分钟）")
+                    Text(if (running) "更新定时（${validMin ?: "—"} 分钟）" else "开始定时（${validMin ?: "—"} 分钟）")
                 }
             }
         }
     }
 }
 
-/** 上限 600、30 分钟一格：30/60/…/600 共 20 格 */
-private const val SLEEP_MAX_MIN = 600
-private const val SLEEP_STEP_MIN = 30
-private const val SLEEP_GRID_COUNT = SLEEP_MAX_MIN / SLEEP_STEP_MIN
+/** 睡眠定时：30~600 分钟，预设 30/60/90/120/240 + 自定义任意整数 */
+internal const val SLEEP_MIN_MIN = 30
+internal const val SLEEP_MAX_MIN = 600
+internal val SLEEP_PRESETS = listOf(30, 60, 90, 120, 240)
 
-/** 就近贴到 30 分钟格 */
-private fun snapSleepMin(min: Int): Int =
-    ((min.coerceIn(1, SLEEP_MAX_MIN) + SLEEP_STEP_MIN / 2) / SLEEP_STEP_MIN)
-        .coerceIn(1, SLEEP_GRID_COUNT) * SLEEP_STEP_MIN
+/** 自定义输入校验：null=合法，否则为错误文案（超限时禁用确认，不做静默钳制） */
+internal fun sleepCustomError(text: String): String? {
+    if (text.isBlank()) return "请输入分钟数"
+    val v = text.toIntOrNull() ?: return "请输入数字"
+    if (v !in SLEEP_MIN_MIN..SLEEP_MAX_MIN) return "请输入 ${SLEEP_MIN_MIN}~${SLEEP_MAX_MIN} 分钟"
+    return null
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
