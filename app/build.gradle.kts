@@ -45,14 +45,21 @@ android {
 
     buildTypes {
         /**
-         * 真机自测包：debug 签名 + 关闭 debuggable。
+         * 真机自测包：debug 签名 + 关闭 debuggable + R8 瘦身。
          * debug 包卡顿的根因是 debuggable=true 让 ART 不做 AOT 优化（大量代码解释执行），
          * 关掉后运行表现接近 release；签名仍是 debug，覆盖安装不丢数据。
+         * 体积与 release 同策略（R8 全量混淆 + 资源收缩），规则共用 proguard-rules.pro。
          * 用法：./gradlew :app:assemblePerfDebug
          */
         create("perfDebug") {
             initWith(getByName("debug"))
             isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("debug")
         }
