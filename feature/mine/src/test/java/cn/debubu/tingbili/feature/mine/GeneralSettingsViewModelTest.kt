@@ -75,4 +75,17 @@ class GeneralSettingsViewModelTest {
         advanceUntilIdle()
         assertTrue(prefs.homeKeywords.first().isNotEmpty())
     }
+    @Test fun `bulk keywords are trimmed and deduplicated`() = runTest(dispatcher) {
+        val vm = GeneralSettingsViewModel(prefs)
+        vm.setHomeKeywords(listOf("  悬疑  ", "", "悬疑", "有声书"))
+        advanceUntilIdle()
+        assertEquals(listOf("悬疑", "有声书"), prefs.homeKeywords.first())
+    }
+
+    @Test fun `bulk keywords keep one when all blank`() = runTest(dispatcher) {
+        val vm = GeneralSettingsViewModel(prefs)
+        vm.setHomeKeywords(listOf(" ", ""))
+        advanceUntilIdle()
+        assertEquals(1, prefs.homeKeywords.first().size)
+    }
 }

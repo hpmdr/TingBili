@@ -10,19 +10,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,30 +33,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingDivider
-import cn.debubu.tingbili.core.ui.component.SettingRadioRow
 import cn.debubu.tingbili.core.ui.component.SettingRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingSwitchRow
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
+import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
+import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
+import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
-import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 
-/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码开关 / 默认音质入口）。主题在「外观」，存储在「存储与缓存」，图片与推荐词在「通用设置」。 */
+/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码开关 / 默认音质入口）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAudioDecoders: () -> Unit,
     onOpenQuality: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel()
+    vm: SettingsViewModel = hiltViewModel(),
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
@@ -65,8 +66,7 @@ fun SettingsScreen(
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
     val sleepFinishChapter by vm.sleepFinishChapter.collectAsStateWithLifecycle()
     var showStepSheet by remember { mutableStateOf(false) }
-    var showSubtitleDialog by remember { mutableStateOf(false) }
-    val darkTheme = LocalDarkTheme.current
+    var showSubtitleSheet by remember { mutableStateOf(false) }
 
     TingBiliScaffold(
         topBar = {
@@ -76,41 +76,38 @@ fun SettingsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                }
+                },
             )
-        }
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                // 底部留出悬浮 mini 的高度
                 .padding(bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column {
                 SettingSectionLabel("播放")
                 SettingsGroup {
                     SettingRow(
                         icon = Icons.Filled.Timer,
-                        iconTint = Color(0xFF10B981),
-                        iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
+                        accent = SettingAccent.GREEN,
                         title = "前进 / 后退步长",
-                        subtitle = "点选进入调整",
+                        subtitle = "播放页快进或快退一次跳过的秒数",
                         value = "${step}s",
-                        onClick = { showStepSheet = true }
+                        onClick = { showStepSheet = true },
                     )
                     SettingDivider()
                     SettingRow(
                         icon = Icons.Filled.ClosedCaption,
-                        iconTint = Color(0xFF8B5CF6),
-                        iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
+                        accent = SettingAccent.PURPLE,
                         title = "字幕字号",
                         subtitle = "全屏与迷你字幕同步缩放",
                         value = subtitleScaleLabel(subtitleScale),
-                        onClick = { showSubtitleDialog = true }
+                        onClick = { showSubtitleSheet = true },
                     )
                 }
             }
@@ -120,12 +117,11 @@ fun SettingsScreen(
                 SettingsGroup {
                     SettingSwitchRow(
                         icon = Icons.Filled.Bedtime,
-                        iconTint = Color(0xFF6366F1),
-                        iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
+                        accent = SettingAccent.INDIGO,
                         title = "到点后播完本章再停",
                         subtitle = "下次睡眠定时的默认选项，进行中的定时不受影响",
                         checked = sleepFinishChapter,
-                        onCheckedChange = { vm.setSleepFinishChapter(it) }
+                        onCheckedChange = { vm.setSleepFinishChapter(it) },
                     )
                 }
             }
@@ -135,31 +131,28 @@ fun SettingsScreen(
                 SettingsGroup {
                     SettingSwitchRow(
                         icon = Icons.Filled.Bolt,
-                        iconTint = Color(0xFFF59E0B),
-                        iconBg = if (darkTheme) Color(0xFF2E2306) else Color(0xFFFFF7E6),
+                        accent = SettingAccent.AMBER,
                         title = "优先硬件解码",
                         subtitle = "硬解更省电，失败自动回落软解",
                         checked = audioHwDecode,
-                        onCheckedChange = { vm.setAudioHwDecode(it) }
+                        onCheckedChange = { vm.setAudioHwDecode(it) },
                     )
                     SettingDivider()
                     SettingSwitchRow(
                         icon = Icons.Filled.Memory,
-                        iconTint = Color(0xFF06B6D4),
-                        iconBg = if (darkTheme) Color(0xFF083344) else Color(0xFFECFEFF),
+                        accent = SettingAccent.CYAN,
                         title = "省电播放（DSP 卸载）",
                         subtitle = "DSP 芯片直接解码，比硬解更省电；开启后倍速不可调，保持 1.0x",
                         checked = audioOffload,
-                        onCheckedChange = { vm.setAudioOffload(it) }
+                        onCheckedChange = { vm.setAudioOffload(it) },
                     )
                     SettingDivider()
                     SettingRow(
                         icon = Icons.AutoMirrored.Filled.List,
-                        iconTint = Color(0xFF6366F1),
-                        iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
+                        accent = SettingAccent.INDIGO,
                         title = "本机音频解码器",
                         subtitle = "MediaCodec 实测列表，仅问题定位用",
-                        onClick = onOpenAudioDecoders
+                        onClick = onOpenAudioDecoders,
                     )
                 }
             }
@@ -169,12 +162,11 @@ fun SettingsScreen(
                 SettingsGroup {
                     SettingRow(
                         icon = Icons.Filled.HighQuality,
-                        iconTint = Color(0xFFFB7299),
-                        iconBg = if (darkTheme) Color(0xFF3B1220) else Color(0xFFFFF0F5),
+                        accent = SettingAccent.PINK,
                         title = "默认音质",
                         subtitle = "高档需登录/会员，拿不到自动回落",
                         value = AudioQuality.fromCode(audioQuality).shortDesc,
-                        onClick = onOpenQuality
+                        onClick = onOpenQuality,
                     )
                 }
             }
@@ -184,92 +176,90 @@ fun SettingsScreen(
     if (showStepSheet) {
         StepSheet(
             step = step,
-            onSelect = { vm.setStep(it) },
-            onDismiss = { showStepSheet = false }
+            onApply = {
+                vm.setStep(it)
+                showStepSheet = false
+            },
+            onDismiss = { showStepSheet = false },
         )
     }
-    if (showSubtitleDialog) {
-        SubtitleScaleDialog(
+    if (showSubtitleSheet) {
+        SubtitleScaleSheet(
             current = subtitleScale,
-            onSelect = { vm.setSubtitleScale(it); showSubtitleDialog = false },
-            onDismiss = { showSubtitleDialog = false }
+            onApply = {
+                vm.setSubtitleScale(it)
+                showSubtitleSheet = false
+            },
+            onDismiss = { showSubtitleSheet = false },
         )
     }
 }
 
-/** 步长 BottomSheet：拖动只改本地预览，松手落盘；快捷 chips 直接落盘。 */
-@OptIn(ExperimentalMaterial3Api::class)
+/** 步长 BottomSheet：滑杆与快捷值只改本地草稿，应用后才落盘。 */
 @Composable
 private fun StepSheet(
     step: Int,
-    onSelect: (Int) -> Unit,
+    onApply: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // 拖动只改本地预览，松手再落盘：否则每帧一次 DataStore 全量重写
-            var sliderValue by remember(step) { mutableFloatStateOf(step.toFloat()) }
-            Text(
-                "前进 / 后退步长：${sliderValue.toInt()} 秒",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it },
-                onValueChangeFinished = { onSelect(sliderValue.toInt()) },
-                valueRange = 5f..60f,
-                steps = 10,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(5, 15, 30, 60).forEach { v ->
-                    androidx.compose.material3.FilterChip(
-                        selected = sliderValue.toInt() == v,
-                        onClick = { onSelect(v) },
-                        label = { Text("${v}s") }
-                    )
-                }
+    var draft by remember(step) { mutableFloatStateOf(step.toFloat()) }
+    TingBiliBottomSheet(
+        title = "前进 / 后退步长",
+        subtitle = "拖动滑杆或选择快捷值，点击应用后生效。",
+        onDismissRequest = onDismiss,
+        actions = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+            Button(onClick = { onApply(draft.toInt()) }) { Text("应用") }
+        },
+    ) {
+        Text(
+            "当前：${draft.toInt()} 秒",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        Slider(
+            value = draft,
+            onValueChange = { draft = it },
+            valueRange = 5f..60f,
+            steps = 10,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(5, 15, 30, 60).forEach { value ->
+                FilterChip(
+                    selected = draft.toInt() == value,
+                    onClick = { draft = value.toFloat() },
+                    label = { Text("${value}s") },
+                )
             }
-            Text(
-                "播放页快进/快退一次跳过的秒数。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
+        Text(
+            "播放页快进/快退一次跳过的秒数；滑动关闭视为取消。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 
-/** 字幕字号 Dialog：四档互斥，点选即生效关闭。 */
+/** 字幕字号：选择类弹层，点选预览，应用后生效。 */
 @Composable
-private fun SubtitleScaleDialog(
+private fun SubtitleScaleSheet(
     current: Float,
-    onSelect: (Float) -> Unit,
+    onApply: (Float) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("字幕字号") },
-        text = {
-            Column {
-                listOf(0.85f to "小", 1f to "标准", 1.15f to "大", 1.3f to "特大").forEach { (scale, label) ->
-                    SettingRadioRow(
-                        title = label,
-                        subtitle = "相对系数 ${scale}，叠加系统字体大小",
-                        selected = kotlin.math.abs(current - scale) < 0.001f,
-                        onClick = { onSelect(scale) }
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
-        }
+    TingBiliChoiceSheet(
+        title = "字幕字号",
+        subtitle = "选择预览，应用后全屏与迷你字幕同步缩放。",
+        options = listOf(
+            TingBiliChoiceOption(0.85f, "小", "相对系数 0.85，叠加系统字体大小"),
+            TingBiliChoiceOption(1f, "标准", "相对系数 1.0，叠加系统字体大小"),
+            TingBiliChoiceOption(1.15f, "大", "相对系数 1.15，叠加系统字体大小"),
+            TingBiliChoiceOption(1.3f, "特大", "相对系数 1.3，叠加系统字体大小"),
+        ),
+        selected = current,
+        onApply = onApply,
+        onDismiss = onDismiss,
     )
 }

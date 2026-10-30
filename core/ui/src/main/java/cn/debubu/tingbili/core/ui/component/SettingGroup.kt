@@ -1,7 +1,6 @@
 package cn.debubu.tingbili.core.ui.component
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +8,13 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Card
@@ -21,27 +22,23 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
-import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
 /**
- * 设置页通用分组组件（从「我的」页提炼，全设置页统一用这一套）。
- * 分层：[SettingSectionLabel]（12sp 灰标题）+ [SettingsGroup]（20dp 圆角卡）+ 行。
- * 行内绝不直接放 Slider / 单选组：选值进弹窗，开关才留行内。
+ * 设置页通用分组组件：品牌化卡片 + Material 3 行语义。
+ * 单选项必须放进 selectableGroup，开关行只保留一个可切换焦点。
  */
 
-/** 分组标题：小灰字，组与组之间靠它 + 16dp 间距分界。 */
 @Composable
 fun SettingSectionLabel(
     text: String,
@@ -49,49 +46,39 @@ fun SettingSectionLabel(
 ) {
     Text(
         text = text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.Gray,
-        modifier = modifier.padding(start = 8.dp, bottom = 6.dp)
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = 8.dp, bottom = 6.dp),
     )
 }
 
-/** 分组卡片：暗色自适应（纯黑 / 深灰 / 浅色 surface）。 */
 @Composable
 fun SettingsGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val darkTheme = LocalDarkTheme.current
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (darkTheme) {
-                if (LocalDarkAmoled.current) Color(0xFF121212) else Color(0xFF1E1E1E)
-            } else MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column { content() }
     }
 }
 
-/** 组内分割线：细 + 浅，和卡片同语言。 */
 @Composable
 fun SettingDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
 }
 
-/**
- * 标准导航行：图标 + 标题/副标题 + 右侧值 + 箭头。
- * 整行可点；需要自定义尾部（如徽标）用 [trailing]，画在值之后、箭头之前。
- */
 @Composable
 fun SettingRow(
     icon: ImageVector,
-    iconTint: Color,
-    iconBg: Color,
+    accent: SettingAccent,
     title: String,
     subtitle: String? = null,
     value: String? = null,
@@ -99,31 +86,41 @@ fun SettingRow(
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    val accentColors = accent.colors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
+                .background(accentColors.background),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(17.dp))
+            Icon(icon, contentDescription = null, tint = accentColors.tint, modifier = Modifier.size(17.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             if (!subtitle.isNullOrEmpty()) {
-                Text(subtitle, fontSize = 11.sp, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         if (!value.isNullOrEmpty()) {
-            Text(value, fontSize = 12.sp, color = Color.Gray)
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.width(4.dp))
         }
         trailing?.invoke()
@@ -131,53 +128,60 @@ fun SettingRow(
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Color.Gray,
-                modifier = Modifier.size(18.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
 }
 
-/** 开关行：整行可点拨 Switch，不要只让用户去点那个小开关。 */
 @Composable
 fun SettingSwitchRow(
     icon: ImageVector,
-    iconTint: Color,
-    iconBg: Color,
+    accent: SettingAccent,
     title: String,
     subtitle: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val accentColors = accent.colors()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
+                .background(accentColors.background),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(17.dp))
+            Icon(icon, contentDescription = null, tint = accentColors.tint, modifier = Modifier.size(17.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             if (!subtitle.isNullOrEmpty()) {
-                Text(subtitle, fontSize = 11.sp, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         Spacer(Modifier.width(8.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
-/** 单选行：圆点 + 标题/副标题，用于弹窗 / 次级页里的互斥选项。 */
 @Composable
 fun SettingRadioRow(
     title: String,
@@ -189,34 +193,25 @@ fun SettingRadioRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .border(
-                    2.dp,
-                    if (selected) MaterialTheme.colorScheme.primary else Color.Gray,
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-            }
-        }
+        RadioButton(selected = selected, onClick = null)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             if (!subtitle.isNullOrEmpty()) {
-                Text(subtitle, fontSize = 11.sp, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         trailing?.invoke()

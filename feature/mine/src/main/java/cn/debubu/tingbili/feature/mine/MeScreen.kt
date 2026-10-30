@@ -1,6 +1,5 @@
 package cn.debubu.tingbili.feature.mine
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,11 +36,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,21 +50,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.SettingAccent
+import cn.debubu.tingbili.core.ui.component.SettingDivider
 import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
 import cn.debubu.tingbili.core.ui.component.SettingRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
+import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
+import kotlinx.coroutines.launch
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
 private val BiliPink = Color(0xFFFB7299)
@@ -86,7 +91,8 @@ fun MeScreen(
     onOpenLogin: () -> Unit = {},
     vm: MeViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val darkTheme = LocalDarkTheme.current
     val playlistCount by vm.playlistCount.collectAsStateWithLifecycle()
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
@@ -103,16 +109,15 @@ fun MeScreen(
     val session by vm.session.collectAsStateWithLifecycle()
     var showLogoutConfirm by remember { mutableStateOf(false) }
 
-    val placeholder: (String) -> Unit = { msg ->
-        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-    }
+    val placeholder: (String) -> Unit = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .background(MaterialTheme.colorScheme.background)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .background(MaterialTheme.colorScheme.background)
+        ) {
         // ── 1. 沉浸式渐变头部 ─────────────────────────────
         MeHeader(
             darkTheme = darkTheme,
@@ -142,17 +147,16 @@ fun MeScreen(
             SettingsGroup {
                 SettingRow(
                     icon = Icons.Filled.Palette,
-                    iconTint = Color(0xFF6366F1),
-                    iconBg = if (darkTheme) Color(0xFF1E1B4B) else Color(0xFFEEF2FF),
+                    accent = SettingAccent.INDIGO,
+
                     title = "外观设置",
                     subtitle = "${darkModeLabel(darkMode)} · ${themeModeLabel(themeMode)}",
                     onClick = onOpenAppearance
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                SettingDivider()
                 SettingRow(
                     icon = Icons.Filled.Settings,
-                    iconTint = Color(0xFF10B981),
-                    iconBg = if (darkTheme) Color(0xFF062B22) else Color(0xFFECFDF5),
+                    accent = SettingAccent.GREEN,
                     title = "播放设置",
                     subtitle = "步长 ${stepSec}s · 字幕${subtitleScaleLabel(subtitleScale)} · ${AudioQuality.fromCode(audioQuality).shortDesc}",
                     onClick = onOpenSettings
@@ -164,17 +168,16 @@ fun MeScreen(
             SettingsGroup {
                 SettingRow(
                     icon = Icons.Filled.Download,
-                    iconTint = Color(0xFFF59E0B),
-                    iconBg = if (darkTheme) Color(0xFF2E2306) else Color(0xFFFFF7E6),
+                    accent = SettingAccent.AMBER,
+
                     title = "存储与缓存",
                     subtitle = "已用 ${formatCacheGb(cacheBytes)} · 上限 ${if (cacheMaxMb >= 1024) "${cacheMaxMb / 1024}GB" else "${cacheMaxMb}MB"}",
                     onClick = onOpenStorage
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                SettingDivider()
                 SettingRow(
                     icon = Icons.Filled.Tune,
-                    iconTint = Color(0xFF8B5CF6),
-                    iconBg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
+                    accent = SettingAccent.PURPLE,
                     title = "通用设置",
                     subtitle = "${imageFormat.name} · ${homeKeywords.size}个推荐词",
                     onClick = onOpenGeneral
@@ -196,7 +199,7 @@ fun MeScreen(
             ) {
                 Text(
                     text = if (session != null) "退出登录（${session?.userName?.ifBlank { "UID " + session?.uid }})" else "登录哔哩哔哩账号",
-                    color = BiliPink,
+                    color = if (session != null) MaterialTheme.colorScheme.error else BiliPink,
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -205,24 +208,26 @@ fun MeScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+        }
+        TingBiliSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
+        )
     }
 
     if (showLogoutConfirm) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
-            title = { Text("退出登录") },
-            text = { Text("将清除本机保存的登录凭证，需要重新登录。") },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        showLogoutConfirm = false
-                        vm.logout()
-                    }
-                ) { Text("退出") }
+        TingBiliConfirmDialog(
+            title = "退出登录",
+            text = "将清除本机保存的登录凭证，需要重新登录。",
+            confirmLabel = "退出",
+            destructive = true,
+            onConfirm = {
+                showLogoutConfirm = false
+                vm.logout()
             },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showLogoutConfirm = false }) { Text("取消") }
-            },
+            onDismiss = { showLogoutConfirm = false },
         )
     }
 }
@@ -470,7 +475,7 @@ private fun androidx.compose.foundation.layout.RowScope.GridItem(
         Spacer(Modifier.height(6.dp))
         Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(1.dp))
-        Text(value, fontSize = 10.sp, color = Color.Gray)
+        Text(value, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

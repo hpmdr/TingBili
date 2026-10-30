@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
@@ -65,7 +67,7 @@ fun QualityScreen(
         ) {
             Column {
                 SettingSectionLabel("新播放默认使用这档")
-                SettingsGroup {
+                SettingsGroup(modifier = Modifier.selectableGroup()) {
                     AudioQuality.values.forEachIndexed { index, q ->
                         if (index > 0) {
                             cn.debubu.tingbili.core.ui.component.SettingDivider()
@@ -99,17 +101,17 @@ fun QualityScreen(
 
 @Composable
 private fun QualityBadge(text: String, vip: Boolean, login: Boolean) {
-    val (fg, bg) = when {
-        vip -> Color(0xFFD97706) to Color(0xFFFFFBEB)
-        login -> Color(0xFF06B6D4) to Color(0xFFECFEFF)
-        else -> Color(0xFF10B981) to Color(0xFFECFDF5)
-    }
+    val accent = when {
+        vip -> SettingAccent.AMBER
+        login -> SettingAccent.CYAN
+        else -> SettingAccent.GREEN
+    }.colors()
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(bg)
+            .background(accent.background)
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = fg)
+        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = accent.tint)
     }
 }

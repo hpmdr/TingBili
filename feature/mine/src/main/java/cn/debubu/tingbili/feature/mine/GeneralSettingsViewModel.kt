@@ -46,4 +46,14 @@ class GeneralSettingsViewModel @Inject constructor(
             prefs.setHomeKeywords(cur - keyword)
         }
     }
+
+    /** 推荐词弹层使用草稿编辑，完成时一次性提交。 */
+    fun setHomeKeywords(keywords: List<String>) {
+        val cleaned = keywords
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .ifEmpty { listOf(PreferencesRepository.DEFAULT_HOME_KEYWORDS.first()) }
+        viewModelScope.launch { prefs.setHomeKeywords(cleaned) }
+    }
 }

@@ -18,49 +18,44 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingDivider
 import cn.debubu.tingbili.core.ui.component.SettingRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
+import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
+import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
+import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
-import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 
 /** 二级页：存储与缓存（用量总览 / 分别清理 / 音频上限 / 全部清空，单页）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StorageSettingsScreen(
     onBack: () -> Unit,
-    vm: StorageSettingsViewModel = hiltViewModel()
+    vm: StorageSettingsViewModel = hiltViewModel(),
 ) {
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
@@ -68,13 +63,12 @@ fun StorageSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearAll by remember { mutableStateOf(false) }
     var showLimitSheet by remember { mutableStateOf(false) }
-    val darkTheme = LocalDarkTheme.current
 
     LaunchedEffect(Unit) { vm.refreshCacheStats() }
     LaunchedEffect(notice) {
-        if (notice != null) {
-            snackbarHostState.showSnackbar(notice!!)
+        notice?.let {
             vm.consumeNotice()
+            snackbarHostState.showSnackbar(it)
         }
     }
 
@@ -86,20 +80,19 @@ fun StorageSettingsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
-                }
+                },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                // 底部留出悬浮 mini 的高度
                 .padding(bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column {
                 SettingSectionLabel("用量")
@@ -108,7 +101,7 @@ fun StorageSettingsScreen(
                         audioBytes = stats.audioBytes,
                         imageBytes = stats.imageBytes,
                         subtitleBytes = stats.subtitleBytes,
-                        cacheMaxMb = cacheMaxMb
+                        cacheMaxMb = cacheMaxMb,
                     )
                 }
             }
@@ -120,21 +113,21 @@ fun StorageSettingsScreen(
                         title = "音频缓存",
                         desc = "上次播放的音频本地缓存，二次播放秒开且省流量",
                         value = "${formatCacheSize(stats.audioBytes)} / ${cacheMaxMb}MB",
-                        onClear = { vm.clearAudioCache() }
+                        onClear = { vm.clearAudioCache() },
                     )
                     SettingDivider()
                     CacheClearRow(
                         title = "图片缓存",
                         desc = "看过的内容封面都在本地，离线秒显且省流量",
                         value = formatCacheSize(stats.imageBytes),
-                        onClear = { vm.clearImageCache() }
+                        onClear = { vm.clearImageCache() },
                     )
                     SettingDivider()
                     CacheClearRow(
                         title = "字幕缓存",
                         desc = "只留最近 50 集，看过的字幕秒显",
                         value = "${formatCacheSize(stats.subtitleBytes)}（约 ${stats.subtitleCount} 集）",
-                        onClear = { vm.clearSubtitleCache() }
+                        onClear = { vm.clearSubtitleCache() },
                     )
                 }
             }
@@ -144,12 +137,11 @@ fun StorageSettingsScreen(
                 SettingsGroup {
                     SettingRow(
                         icon = Icons.Filled.Storage,
-                        iconTint = Color(0xFF0EA5E9),
-                        iconBg = if (darkTheme) Color(0xFF0C2A3A) else Color(0xFFE8F6FD),
+                        accent = SettingAccent.BLUE,
                         title = "共用上限",
-                        subtitle = "点选进入调整",
+                        subtitle = "图片按上限四分之一自动配给",
                         value = StorageSettingsViewModel.limitLabel(cacheMaxMb),
-                        onClick = { showLimitSheet = true }
+                        onClick = { showLimitSheet = true },
                     )
                 }
             }
@@ -161,19 +153,20 @@ fun StorageSettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { showClearAll = true }
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 "全部清空",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFDC2626)
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.error,
                             )
                             Text(
                                 "清除音频 + 图片 + 字幕全部缓存，该操作不可撤销",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -182,7 +175,7 @@ fun StorageSettingsScreen(
 
             TextButton(
                 onClick = { vm.refreshCacheStats() },
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             ) { Text("刷新统计") }
         }
     }
@@ -190,88 +183,52 @@ fun StorageSettingsScreen(
     if (showLimitSheet) {
         CacheLimitSheet(
             currentMb = cacheMaxMb,
-            onSelect = { vm.setCacheMaxMb(it) },
-            onDismiss = { showLimitSheet = false }
+            onApply = {
+                vm.setCacheMaxMb(it)
+                showLimitSheet = false
+            },
+            onDismiss = { showLimitSheet = false },
         )
     }
 
     if (showClearAll) {
-        AlertDialog(
-            onDismissRequest = { showClearAll = false },
-            title = { Text("全部清空？") },
-            text = { Text("将清除音频 + 图片 + 字幕全部缓存，该操作不可撤销。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClearAll = false
-                    vm.clearAllCaches()
-                }) { Text("确认清空") }
+        TingBiliConfirmDialog(
+            title = "全部清空？",
+            text = "将清除音频 + 图片 + 字幕全部缓存，该操作不可撤销。",
+            confirmLabel = "确认清空",
+            destructive = true,
+            onConfirm = {
+                showClearAll = false
+                vm.clearAllCaches()
             },
-            dismissButton = {
-                TextButton(onClick = { showClearAll = false }) { Text("取消") }
-            }
+            onDismiss = { showClearAll = false },
         )
     }
 }
 
-/** 缓存上限单选弹窗：Radio 预览 + 确定落盘（4 档固定，官方组件）。 */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CacheLimitSheet(
     currentMb: Int,
-    onSelect: (Int) -> Unit,
+    onApply: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val options = StorageSettingsViewModel.LIMIT_OPTIONS_MB
-    var previewIdx by remember(currentMb) { mutableIntStateOf(StorageSettingsViewModel.nearestLimitIdx(currentMb)) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-) {
-            Text(text = "缓存上限", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            options.forEachIndexed { idx, opt ->
-                val selected = idx == previewIdx
-                val imageMb = PreferencesRepository.imageCacheMaxMb(opt)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { previewIdx = idx }
-                        .padding(horizontal = 4.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = selected, onClick = { previewIdx = idx })
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = StorageSettingsViewModel.limitLabel(opt),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                        Text(
-                            text = "音频 ${StorageSettingsViewModel.limitLabel(opt)} · 图片 ${StorageSettingsViewModel.limitLabel(imageMb)}" +
-                                if (imageMb >= PreferencesRepository.IMAGE_CACHE_MAX_MB) "（封顶）" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            Text(
-                "音频缓存上限；图片按上限 1/4 自动配给（封顶 256MB）；字幕只留最近 50 集；上限在启动时读取，调整后重启生效。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-)
-            Button(
-                onClick = { onSelect(options[previewIdx]); onDismiss() },
-                modifier = Modifier.fillMaxWidth(),
-) { Text("确定（${StorageSettingsViewModel.limitLabel(options[previewIdx])}）") }
-        }
+    val options = StorageSettingsViewModel.LIMIT_OPTIONS_MB.map { mb ->
+        val imageMb = PreferencesRepository.imageCacheMaxMb(mb)
+        TingBiliChoiceOption(
+            value = mb,
+            title = StorageSettingsViewModel.limitLabel(mb),
+            supportingText = "音频 ${StorageSettingsViewModel.limitLabel(mb)} · 图片 ${StorageSettingsViewModel.limitLabel(imageMb)}" +
+                if (imageMb >= PreferencesRepository.IMAGE_CACHE_MAX_MB) "（封顶）" else "",
+        )
     }
+    TingBiliChoiceSheet(
+        title = "缓存上限",
+        subtitle = "音频缓存上限；图片按上限四分之一自动配给，上限在启动时读取。",
+        options = options,
+        selected = currentMb,
+        onApply = onApply,
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable
@@ -279,20 +236,27 @@ private fun CacheUsageCard(
     audioBytes: Long,
     imageBytes: Long,
     subtitleBytes: Long,
-    cacheMaxMb: Int
+    cacheMaxMb: Int,
 ) {
     val total = audioBytes + imageBytes + subtitleBytes
-    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+    val audioColor = SettingAccent.PINK.colors().tint
+    val imageColor = SettingAccent.CYAN.colors().tint
+    val subtitleColor = SettingAccent.AMBER.colors().tint
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("共占用约 ${formatCacheSize(total)}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "共占用约 ${formatCacheSize(total)}",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            )
             Text(
                 "音频 ${StorageSettingsViewModel.limitLabel(cacheMaxMb)} · 图片 ${StorageSettingsViewModel.limitLabel(PreferencesRepository.imageCacheMaxMb(cacheMaxMb))}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -301,38 +265,23 @@ private fun CacheUsageCard(
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(99.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         ) {
             if (audioBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(audioBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFFFB7299))
-                )
+                Box(Modifier.weight(audioBytes.toFloat()).height(8.dp).background(audioColor))
             }
             if (imageBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(imageBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFF06B6D4))
-                )
+                Box(Modifier.weight(imageBytes.toFloat()).height(8.dp).background(imageColor))
             }
             if (subtitleBytes > 0L) {
-                Box(
-                    modifier = Modifier
-                        .weight(subtitleBytes.toFloat())
-                        .height(8.dp)
-                        .background(Color(0xFFD97706))
-                )
+                Box(Modifier.weight(subtitleBytes.toFloat()).height(8.dp).background(subtitleColor))
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             "音频 ${formatCacheSize(audioBytes)} · 图片 ${formatCacheSize(imageBytes)} · 字幕 ${formatCacheSize(subtitleBytes)}",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -342,24 +291,27 @@ private fun CacheClearRow(
     title: String,
     desc: String,
     value: String,
-    onClear: () -> Unit
+    onClear: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClear)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                desc,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.width(8.dp))
         Text(
             value,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(8.dp))
         TextButton(onClick = onClear) { Text("清理") }
