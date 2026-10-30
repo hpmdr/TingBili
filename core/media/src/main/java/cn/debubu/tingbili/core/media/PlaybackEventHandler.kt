@@ -33,6 +33,8 @@ class PlaybackEventHandler(
         fun onTransition(index: Int)
         fun onPlayingChanged(isPlaying: Boolean)
         fun onPlayerStateChanged(buffering: Boolean)
+        /** 播放器位置不连续（seek/切章/自动跳变）：调用方按播放器位置立即对表。 */
+        fun onPositionDiscontinuity() {}
         fun onFatalError(message: String?)
         fun onRetryStarted()
         /** 执行一次刷新恢复（解析→替换→prepare→seek→play），调用方返回结果。 */
@@ -81,6 +83,14 @@ class PlaybackEventHandler(
                 val buffering = state == Player.STATE_BUFFERING
                 listener.onPlayerStateChanged(buffering)
                 if (state == Player.STATE_READY) resetRetry()
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                listener.onPositionDiscontinuity()
             }
 
             override fun onPlayerError(error: PlaybackException) {

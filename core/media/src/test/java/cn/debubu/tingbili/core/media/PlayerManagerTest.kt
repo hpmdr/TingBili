@@ -474,6 +474,85 @@ class PlayerManagerTest {
     }
 
     @Test
+    fun `pause re-anchors position when player reports not playing`() = runTest {
+        // 缓冲/offload 出声时 isPlaying 可能为假，但暂停落点必须按播放器位置落盘/显字
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        fakePlayer.setCurrentPosition(30_000L)
+        fakePlayer.pause()
+        playerManager.pause()
+        assertEquals(30_000L, playerManager.state.value.positionMs)
+        playerManager.release()
+    }
+
+    @Test
+    fun `ui visible re-anchors paused position without seeking`() = runTest {
+        playerManager.testScope = this
+        var now = 0L
+        playerManager.clock = { now }
+        var deep = 0L
+        playerManager.deepSleepClock = { deep }
+        AudioPipelineMonitor.resetTrackState()
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        fakePlayer.pause()
+        now = 2_000L
+        playerManager.onUiVisible() // 首次只建深睡基线
+        // 睡了一晚，期间停在 42s；解锁后 UI 必须按播放器位置显字
+        deep += 4 * 60 * 60 * 1000L
+        fakePlayer.setCurrentPosition(42_000L)
+        playerManager.onUiVisible()
+        assertEquals(42_000L, playerManager.state.value.positionMs)
+        // 暂停态不 seek：起播本来就从播放器位置续，seek 只会制造倒带
+        assertEquals(null, fakePlayer.seekToPos)
+        playerManager.release()
+    }
+
+    @Test
+    fun `ui visible realigns after long deep sleep while playing`() = runTest {
+        playerManager.testScope = this
+        var now = 0L
+        playerManager.clock = { now }
+        var deep = 0L
+        playerManager.deepSleepClock = { deep }
+        AudioPipelineMonitor.onOffloadedPlaybackChanged(true)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        fakePlayer.play()
+        fakePlayer.setCurrentPosition(5_000L)
+        now = 2_000L
+        playerManager.onUiVisible() // 基线
+        deep += 3 * 60 * 60 * 1000L
+        AudioPipelineMonitor.onAudioUnderrun() // 断流证据：位置源可能落后于实际出声
+        fakePlayer.seekToPos = null
+        playerManager.onUiVisible()
+        assertEquals(5_000L, fakePlayer.seekToPos)
+        playerManager.release()
+        AudioPipelineMonitor.resetTrackState()
+    }
+
+    @Test
+    fun `ui visible reconciles chapter index changed while frozen`() = runTest {
+        playerManager.testScope = this
+        var now = 0L
+        playerManager.clock = { now }
+        playerManager.deepSleepClock = { 0L }
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 600_000, null),
+            Track("BV1", 2, "t2", "a", "", 600_000, null),
+        )
+        playerManager.play(tracks, 0)
+        // 夜间自动切到第 2 集，UI 的 transition 事件被冻结漏掉
+        fakePlayer.moveTo(1)
+        fakePlayer.setCurrentPosition(3_000L)
+        now = 2_000L
+        playerManager.onUiVisible()
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(3_000L, playerManager.state.value.positionMs)
+        playerManager.release()
+    }
+
+    @Test
     fun `setSpeed updates player and prefs`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }

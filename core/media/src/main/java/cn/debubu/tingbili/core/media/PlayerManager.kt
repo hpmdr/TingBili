@@ -2,6 +2,7 @@ package cn.debubu.tingbili.core.media
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.abs
 
 /**
  * Queue owner + playback controller. Single source of truth for UI.
@@ -96,6 +98,24 @@ class PlayerManager @Inject constructor(
 
     private var lastRealignAtMs = 0L
 
+    /**
+     * 位置对表抑制窗口：刚 seek/play 后 MediaController 缓存仍可能是旧值，
+     * 这段时间内不接受轮询采样，避免把字幕闪回旧位置。
+     */
+    private var positionSyncGraceUntilMs = 0L
+
+    /**
+     * 深度睡眠时钟：elapsedRealtime（含深度睡眠）- uptimeMillis（不含），
+     * 两次采样的差值就是"设备真睡了多久"，不受改时钟影响。单测可注入。
+     */
+    internal var deepSleepClock: () -> Long = { SystemClock.elapsedRealtime() - SystemClock.uptimeMillis() }
+
+    /** 上次采样时的深度睡眠累计值；-1 = 尚未建立基线（首次调用不判定）。 */
+    private var lastDeepSleepMs = -1L
+
+    /** 上次可见时的 underrun 累计值；用它算增量，避免一次旧 underrun 长期给 realign 放行。 */
+    private var lastVisibleUnderruns = -1L
+
     private val historyListener = object : HistoryTracker.Listener {
         override fun currentTrack(): Track? = _state.value.currentTrack
         override fun statePositionMs(): Long = _state.value.positionMs
@@ -110,16 +130,16 @@ class PlayerManager @Inject constructor(
             // 用粘性标记：部分机型只回调 sleeping 不回调 offloaded，且 sleeping 只是瞬时值。
             val offloadInUse = AudioPipelineMonitor.offloadEverActive.value
             if (!offloadInUse) return
-            val now = System.currentTimeMillis()
-            if (now - lastRealignAtMs < REALIGN_COOLDOWN_MS) return
-            lastRealignAtMs = now
-            val pos = transport.currentPosition
-            Log.i(
-                "TingBiliAudio",
-                "realign after stall: gap=${gapMs}ms pos=$pos underruns=${AudioPipelineMonitor.audioUnderruns.value}"
-            )
-            transport.seekTo(pos)
-            _state.update { it.copy(positionMs = pos) }
+            if (realignCoolingDown()) return
+            realignTo(transport.currentPosition, "after stall gap=${gapMs}ms")
+        }
+
+        /**
+         * 暂停/缓冲态的兜底采样：只对表，不碰 isPlaying、不落盘、不计收听时长。
+         * isPlaying 在缓冲/offload 出声时可能为假，位置却仍在推进。
+         */
+        override fun onPositionSampled(positionMs: Long) {
+            applyPositionFromPlayer(positionMs)
         }
         override fun onTick(positionMs: Long, bufferedMs: Long) {
             // 纯内存态更新：持久化并入节流落盘，这里不再碰 DataStore
@@ -241,6 +261,106 @@ class PlayerManager @Inject constructor(
     private fun persistPosition(pos: Long) {
         if (queue.isEmpty()) return
         effectiveScope().launch { prefs.setLastPosition(pos.coerceAtLeast(0L)) }
+    }
+
+    // ── 位置对表：字幕/进度只认播放器，不认可能被冻结过的缓存 ──
+
+    /**
+     * 把 UI 位置对表到播放器当前值。暂停/缓冲/播放都适用：
+     * [PlayerHandle.isPlaying] 在缓冲、offload 出声、焦点抑制时不可靠，不能拿它当门槛。
+     *
+     * 未 prepare（冷启动仅恢复队列）、加载中、刚 seek/play 的抑制窗口内不采样，
+     * 避免把 0 或旧值写回 UI。
+     */
+    internal fun syncPositionFromPlayer(force: Boolean = false): Long {
+        if (transport.mediaItemCount == 0) return _state.value.positionMs
+        return applyPositionFromPlayer(transport.currentPosition, force)
+    }
+
+    private fun applyPositionFromPlayer(p: Long, force: Boolean = false): Long {
+        val s = _state.value
+        if (s.currentTrack == null || s.isLoading) return s.positionMs
+        if (transport.mediaItemCount == 0) return s.positionMs
+        if (!force && clock() < positionSyncGraceUntilMs) return s.positionMs
+        if (p < 0L || abs(p - s.positionMs) < POSITION_SYNC_EPS_MS) return s.positionMs
+        _state.update { it.copy(positionMs = p) }
+        return p
+    }
+
+    /** 冷却判定：0 表示本次进程还没 realign 过，不算冷却中。 */
+    private fun realignCoolingDown(): Boolean =
+        lastRealignAtMs != 0L && clock() - lastRealignAtMs < REALIGN_COOLDOWN_MS
+
+    /**
+     * UI 回到可见（解锁/回前台）：深度睡眠后唯一可靠的恢复点。
+     *
+     * 1. 先校正章节索引——夜间自动切章时进程可能被冻，transition 事件会晚到甚至丢；
+     * 2. 再以播放器为准对表位置（字幕行号完全由它决定）；
+     * 3. 仅当「确实深度睡过 + 正在播 + DSP 接管 + 有断流/失步证据」时同位置 seek，
+     *    让 AudioTrack 重建、播放头重新向 HAL 取值。暂停态绝不 seek（起播本来就从播放器位置续）。
+     */
+    fun onUiVisible() {
+        reconcileMediaItem()
+        val beforeSync = _state.value.positionMs
+        val sleptMs = consumeDeepSleepDelta()
+        val underrunDelta = consumeUnderrunDelta()
+        syncPositionFromPlayer()
+        if (sleptMs < REALIGN_DEEP_SLEEP_MS) return
+        if (!transport.isPlaying) return
+        if (!AudioPipelineMonitor.offloadEverActive.value) return
+        if (realignCoolingDown()) return
+        val pos = _state.value.positionMs
+        val mismatch = abs(pos - beforeSync)
+        // 证据不足（这次睡眠期间没断流、状态与播放器也没差）就别制造断音
+        if (mismatch < REALIGN_MISMATCH_MS && underrunDelta == 0L) return
+        realignTo(pos, "on visible slept=${sleptMs}ms mismatch=${mismatch}ms underruns=$underrunDelta")
+    }
+
+    /** 本次可见与上次可见之间新增的 underrun 次数（断流硬证据）。 */
+    private fun consumeUnderrunDelta(): Long {
+        val now = AudioPipelineMonitor.audioUnderruns.value
+        val prev = lastVisibleUnderruns
+        lastVisibleUnderruns = now
+        return if (prev < 0L) 0L else (now - prev).coerceAtLeast(0L)
+    }
+
+    /** 深度睡眠增量（本次调用与上次之间的真实睡眠时长），首次调用只建基线。 */
+    private fun consumeDeepSleepDelta(): Long {
+        val now = deepSleepClock()
+        val prev = lastDeepSleepMs
+        lastDeepSleepMs = now
+        return if (prev < 0L) 0L else (now - prev).coerceAtLeast(0L)
+    }
+
+    /**
+     * 以 transport 的当前项为准校正 UI 队列下标。
+     * 夜间自动切章 + 进程冻结时，UI 可能还停在上一条，字幕随后会错章。
+     */
+    private fun reconcileMediaItem() {
+        val q = queue
+        // 起播准备中 state 是乐观值，transport 还没跟上，别反向覆盖
+        if (q.isEmpty() || _state.value.isLoading || transport.mediaItemCount == 0) return
+        val idx = transport.currentMediaItemIndex
+        if (idx !in q.indices) return
+        val s = _state.value
+        if (idx != s.currentIndex) {
+            queueManager.moveCurrentTo(idx)
+        }
+        if (idx != _state.value.currentIndex || _state.value.currentTrack?.queueKey() != q[idx].queueKey()) {
+            _state.update { it.copy(currentIndex = idx, currentTrack = q[idx], durationMs = q[idx].durationMs) }
+        }
+    }
+
+    /** 同位置 seek：AudioSink flush + AudioTrack 重建，让播放头重新向 HAL 取值。 */
+    private fun realignTo(pos: Long, reason: String) {
+        lastRealignAtMs = clock()
+        Log.i(
+            "TingBiliAudio",
+            "realign($reason): pos=$pos underruns=${AudioPipelineMonitor.audioUnderruns.value}"
+        )
+        transport.seekTo(pos)
+        positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
+        _state.update { it.copy(positionMs = pos) }
     }
 
 
@@ -469,6 +589,8 @@ class PlayerManager @Inject constructor(
             attachPlayerListener()
             eventHandler.resetRetry()
             scheduleProactiveRefresh()
+            // 刚起播：位置以 startPosition/历史落点为准，抑制采样直到播放器跟上
+            positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
         } catch (e: Exception) {
             _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "播放失败") }
         } finally {
@@ -482,10 +604,10 @@ class PlayerManager @Inject constructor(
 
 
     fun pause() {
-        // 先对表再停：内存 position 最多滞后一个 poll 周期，直接落盘会丢半秒
-        if (transport.isPlaying) {
-            _state.update { it.copy(positionMs = transport.currentPosition) }
-        }
+        // 先对表再停：暂停落点必须以播放器为准。不能只看 isPlaying——
+        // 缓冲/offload 出声时它为假，位置却已经走远，直接 stop 会把旧位置写进字幕与历史。
+        // force：暂停是显式落点，必须接受播放器读数（抑制窗口只针对轮询采样）。
+        syncPositionFromPlayer(force = true)
         transport.pause()
         _state.update { it.copy(isPlaying = false) }
         persistPosition(_state.value.positionMs)
@@ -510,6 +632,8 @@ class PlayerManager @Inject constructor(
     // currentKey 已收进 SleepTimer.Listener.chapter() 快照，此处不再需要
 
     fun resume() {
+        // 起播前先对表：冷恢复分支拿的就是这个位置，宁可信播放器也不信被冻结过的缓存
+        syncPositionFromPlayer()
         // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
         if (queue.isNotEmpty() && (transport.mediaItemCount == 0 || transport.currentMediaItemIndex !in queue.indices)) {
             val idx = currentIndex.coerceIn(0, queue.lastIndex)
@@ -522,6 +646,7 @@ class PlayerManager @Inject constructor(
         }
         transport.play()
         _state.update { it.copy(isPlaying = true) }
+        positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
     }
 
     fun toggle() {
@@ -534,6 +659,7 @@ class PlayerManager @Inject constructor(
         val clamped = target.coerceAtLeast(0L)
         transport.seekTo(clamped)
         _state.update { it.copy(positionMs = clamped) }
+        positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
         persistPosition(clamped)
         // seek 落点即时刷一次历史，进度页“上次听到”立刻对齐
         effectiveScope().launch { historyTracker.flush() }
@@ -555,6 +681,7 @@ class PlayerManager @Inject constructor(
         val target = (cur + dir * stepSec * 1000L).coerceIn(0L, max)
         transport.seekTo(target)
         _state.update { it.copy(positionMs = target) }
+        positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
         persistPosition(target)
     }
 
@@ -627,6 +754,11 @@ class PlayerManager @Inject constructor(
         }
         override fun onPlayingChanged(isPlaying: Boolean) {
             _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
+            // 停下的落点以播放器为准（缓冲/offload 时 isPlaying 会假，位置才是真相）
+            if (!isPlaying) {
+                positionSyncGraceUntilMs = 0L
+                syncPositionFromPlayer()
+            }
         }
         override fun onPlayerStateChanged(buffering: Boolean) {
             _state.update {
@@ -636,6 +768,13 @@ class PlayerManager @Inject constructor(
                     bufferedPositionMs = transport.bufferedPosition,
                 )
             }
+            // READY 后位置可信；BUFFERING 期间位置可能还在推进，交给轮询低频采样
+            if (!buffering) syncPositionFromPlayer()
+        }
+        override fun onPositionDiscontinuity() {
+            // 播放器权威事件（seek/切章/自动跳变）到达：解除抑制并按它对齐
+            positionSyncGraceUntilMs = 0L
+            syncPositionFromPlayer()
         }
         override fun onFatalError(message: String?) {
             _state.update { it.copy(isLoading = false, errorMessage = message ?: "播放出错") }
@@ -689,6 +828,14 @@ class PlayerManager @Inject constructor(
         const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
         /** 冻结后重同步的冷却：seek 会重建 AudioTrack，别让它连续触发 */
         const val REALIGN_COOLDOWN_MS = 60_000L
+        /** 位置对表死区：小于它不写回，避免 tick 抖动带来无意义重组 */
+        const val POSITION_SYNC_EPS_MS = 200L
+        /** seek/play 后暂停采样的抑制窗口：控制器缓存可能还没跟上 */
+        const val POSITION_SYNC_GRACE_MS = 1_000L
+        /** 深度睡眠超过它才考虑重建音频路径（暂停一晚不算：不 seek） */
+        const val REALIGN_DEEP_SLEEP_MS = 60_000L
+        /** 状态位置与播放器位置差超过它才算真失步 */
+        const val REALIGN_MISMATCH_MS = 1_000L
     }
 
     private fun scheduleProactiveRefresh() {

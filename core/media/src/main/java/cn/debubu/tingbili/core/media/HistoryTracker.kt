@@ -29,6 +29,11 @@ class HistoryTracker(
         fun statePositionMs(): Long
         /** 内存态更新：position/buffered/isPlaying，不碰磁盘。 */
         fun onTick(positionMs: Long, bufferedMs: Long)
+        /**
+         * 非播放态（暂停/缓冲）低频采样：只用于位置对表。
+         * 不改 isPlaying、不落盘、不计收听时长——调用方自行判断是否采纳。
+         */
+        fun onPositionSampled(positionMs: Long) {}
         suspend fun onPersistPosition(pos: Long)
 
         /**
@@ -50,6 +55,8 @@ class HistoryTracker(
         /** 有 underrun 佐证时放宽：进程可能只是被限流，墙钟间隔远不到 10s */
         const val STALL_GAP_THRESHOLD_UNDERRUN_MS = 3_000L
         const val STALL_LAG_THRESHOLD_UNDERRUN_MS = 1_500L
+        /** 暂停/缓冲态位置采样间隔（tick 数）：一次读取，无落盘无重组，成本可忽略 */
+        const val PAUSED_SAMPLE_EVERY_TICKS = 4
     }
 
     // 本地累计收听时长统计：当前条目累计值 + 上次 tick 位置（排除 seek 跳变）
@@ -63,6 +70,8 @@ class HistoryTracker(
     private var lastPosForStall = -1L
     /** 上次 tick 看到的 underrun 累计值，用于识别「本 tick 有新 underrun」 */
     private var lastSeenUnderruns = 0L
+    /** 暂停/缓冲态采样节流计数 */
+    private var pausedSampleTicks = 0
 
     private var scope: CoroutineScope? = null
     private var listener: Listener? = null
@@ -91,9 +100,16 @@ class HistoryTracker(
                 val gap = if (lastTickWallMs > 0L) now - lastTickWallMs else 0L
                 lastTickWallMs = now
                 if (!transport.isPlaying) {
+                    // 暂停/缓冲：isPlaying 在缓冲、offload 出声时可能为假，位置却仍在推进。
+                    // 低频采样只做位置对表（不落盘、不计收听、不改 isPlaying），让 UI 位置
+                    // 在暂停/缓冲期间也能自愈，而不是一直停在冻结前的旧值。
+                    if (pausedSampleTicks++ % PAUSED_SAMPLE_EVERY_TICKS == 0) {
+                        l.onPositionSampled(transport.currentPosition)
+                    }
                     lastPosForStall = -1L
                     continue
                 }
+                pausedSampleTicks = 0
                 val pos = transport.currentPosition
                 // 第二路信号：offload 缓冲被 HAL 抽空会记 underrun，说明确实断过。
                 // 有它佐证时放宽阈值——可能只是被限流，墙钟间隔远不到 10s。

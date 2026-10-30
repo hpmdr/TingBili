@@ -45,6 +45,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.debubu.tingbili.core.media.PlaybackConnection
+import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.theme.TingBiliTheme
 import cn.debubu.tingbili.navigation.AppRootNavHost
 import cn.debubu.tingbili.navigation.MainBottomNav
@@ -72,12 +73,22 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var playbackConnection: PlaybackConnection
+    @Inject lateinit var playerManager: PlayerManager
 
     // Activity 作用域：setContent 里的 hiltViewModel() 拿到的是同一个实例
     private val mainViewModel: MainViewModel by viewModels()
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /**
+     * 锁屏/深度睡眠回来后唯一的可靠恢复点：先按播放器位置对表，再决定是否重建音频路径。
+     * 必须在 UI 开始收数据之前做，否则第一帧会用冻结前的旧位置渲染字幕。
+     */
+    override fun onStart() {
+        super.onStart()
+        playerManager.onUiVisible()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // 先装启动屏（super 之前），决策完成前不撤：第一帧直接落在正确 Tab，无跳变、无白屏

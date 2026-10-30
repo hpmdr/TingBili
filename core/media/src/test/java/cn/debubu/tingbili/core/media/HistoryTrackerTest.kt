@@ -59,9 +59,11 @@ class HistoryTrackerTest {
         var lastTickPos: Long? = null
         val persisted = mutableListOf<Long>()
         val stalls = mutableListOf<Pair<Long, Long>>()
+        val samples = mutableListOf<Long>()
         override fun currentTrack(): Track? = track
         override fun statePositionMs(): Long = statePos
         override fun onTick(positionMs: Long, bufferedMs: Long) { lastTickPos = positionMs }
+        override fun onPositionSampled(positionMs: Long) { samples += positionMs }
         override suspend fun onPersistPosition(pos: Long) { persisted += pos }
         override fun onPlaybackStalled(gapMs: Long, positionMs: Long) { stalls += gapMs to positionMs }
     }
@@ -240,6 +242,28 @@ class HistoryTrackerTest {
         advanceTimeBy(500L)
         runCurrent()
         assertTrue(listener.stalls.isEmpty())
+        tracker.release()
+    }
+
+    @Test
+    fun `paused ticks sample position without ticking or saving`() = runTest {
+        // 暂停/缓冲态 isPlaying 为假，但位置可能仍在推进（offload 出声/缓冲）：
+        // 低频采样只回调 onPositionSampled 做对表，不走 onTick、不落盘。
+        val transport = FakeTransport().also { it.playing = false; it.pos = 7_000L }
+        val dao = FakeHistory()
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        val tracker = HistoryTracker(transport, dao)
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 4_000L
+        advanceTimeBy(4_000L)
+        runCurrent()
+        assertTrue(listener.samples.isNotEmpty())
+        assertEquals(7_000L, listener.samples.last())
+        assertEquals(null, listener.lastTickPos) // 不走 onTick（不会把 isPlaying 翻成 true）
+        assertTrue(dao.saved.isEmpty())
         tracker.release()
     }
 
