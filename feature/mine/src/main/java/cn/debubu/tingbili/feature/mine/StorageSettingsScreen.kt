@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -44,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
-import cn.debubu.tingbili.core.ui.component.WheelPicker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.component.SettingDivider
@@ -213,7 +213,7 @@ fun StorageSettingsScreen(
     }
 }
 
-/** 缓存上限滚轮弹窗：滚轮预览 + 确定落盘（与睡眠定时同语言）。 */
+/** 缓存上限单选弹窗：Radio 预览 + 确定落盘（4 档固定，官方组件）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CacheLimitSheet(
@@ -233,11 +233,34 @@ private fun CacheLimitSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
 ) {
             Text(text = "缓存上限", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            WheelPicker(
-                items = options.map { StorageSettingsViewModel.limitLabel(it) },
-                selectedIndex = previewIdx,
-                onSettled = { previewIdx = it },
-)
+            options.forEachIndexed { idx, opt ->
+                val selected = idx == previewIdx
+                val imageMb = PreferencesRepository.imageCacheMaxMb(opt)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { previewIdx = idx }
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = selected, onClick = { previewIdx = idx })
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = StorageSettingsViewModel.limitLabel(opt),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                        Text(
+                            text = "音频 ${StorageSettingsViewModel.limitLabel(opt)} · 图片 ${StorageSettingsViewModel.limitLabel(imageMb)}" +
+                                if (imageMb >= PreferencesRepository.IMAGE_CACHE_MAX_MB) "（封顶）" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             Text(
                 "音频缓存上限；图片按上限 1/4 自动配给（封顶 256MB）；字幕只留最近 50 集；上限在启动时读取，调整后重启生效。",
                 style = MaterialTheme.typography.bodySmall,
