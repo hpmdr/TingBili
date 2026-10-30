@@ -1,6 +1,5 @@
 package cn.debubu.tingbili.feature.home
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -27,7 +26,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
@@ -59,6 +57,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -82,6 +81,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.data.model.Track
@@ -122,7 +122,7 @@ fun HomeScreen(
     }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     fun doSearch(raw: String) {
         // 空输入沿用当前词，与搜索框里的提示一致
@@ -161,11 +161,12 @@ fun HomeScreen(
         if (refreshState !is LoadState.Loading) isRefreshing = false
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
         HomeSearchEntry(
             input = input,
             onInputChange = { input = it },
@@ -194,7 +195,7 @@ fun HomeScreen(
                 onHistoryRemove = vm::removeSearchHistory,
                 onClearHistory = {
                     vm.clearSearchHistory()
-                    Toast.makeText(context, "已清空搜索历史", Toast.LENGTH_SHORT).show()
+                    scope.launch { snackbarHostState.showSnackbar("已清空搜索历史") }
                 },
                 onSuggestClick = { doSearch(it) },
                 modifier = Modifier.weight(1f)
@@ -262,6 +263,13 @@ fun HomeScreen(
                 }
             }
         }
+        }
+        TingBiliSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
+        )
     }
 }
 

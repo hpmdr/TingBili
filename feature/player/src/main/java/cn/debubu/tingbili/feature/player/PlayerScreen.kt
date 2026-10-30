@@ -58,6 +58,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -75,6 +76,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -108,7 +110,6 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -123,6 +124,9 @@ import java.time.LocalTime
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.SettingRadioRow
+import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.chapterLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -138,7 +142,8 @@ fun PlayerScreen(
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     val progUi by vm.progressUi.collectAsStateWithLifecycle()
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
@@ -150,8 +155,8 @@ fun PlayerScreen(
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
-            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
             vm.consumeMessage()
+            snackbarHostState.showSnackbar(it)
         }
     }
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
@@ -283,9 +288,9 @@ fun PlayerScreen(
                     onCardClick = {
                         when (lyrUi.subtitleLoadState) {
                             SubtitleLoadState.Ready -> lyricFullscreen = true
-                            SubtitleLoadState.Empty -> android.widget.Toast.makeText(
-                                context, "暂无字幕", android.widget.Toast.LENGTH_SHORT
-                            ).show()
+                            SubtitleLoadState.Empty -> snackbarScope.launch {
+                                snackbarHostState.showSnackbar("暂无字幕")
+                            }
                             SubtitleLoadState.NoAuth -> onLoginClick()
                             SubtitleLoadState.Error -> vm.retrySubtitles()
                             SubtitleLoadState.Loading -> Unit
@@ -431,6 +436,12 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(8.dp))
     }
+        TingBiliSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
+        )
     }
 
     if (showTimerSheet) {
@@ -507,10 +518,8 @@ fun PlayerScreen(
             options = audioOptions,
             onRetry = { vm.loadAudioOptions() },
             onSelect = { code ->
-                if (!vm.selectAudioQuality(code)) {
-                    showQualitySheet = false
-                    onLoginClick()
-                }
+                showQualitySheet = false
+                if (!vm.selectAudioQuality(code)) onLoginClick()
             },
             onDismiss = { showQualitySheet = false },
             showLoginHint = !loggedIn,
@@ -731,7 +740,6 @@ private fun PlaybackInfoRow(label: String, value: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AudioQualitySheet(
     options: PlayerViewModel.AudioOptionsUi,
@@ -741,73 +749,48 @@ private fun AudioQualitySheet(
     showLoginHint: Boolean,
     onLoginClick: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(text = "切换音质", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = "只列出本视频实际提供的档位（从高到低）；换档不断播",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            when (options) {
-                is PlayerViewModel.AudioOptionsUi.Hidden,
-                is PlayerViewModel.AudioOptionsUi.Loading -> {
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
+    TingBiliBottomSheet(
+        title = "切换音质",
+        subtitle = "只列出本视频实际提供的档位（从高到低）；换档不断播。",
+        onDismissRequest = onDismiss,
+    ) {
+        when (options) {
+            is PlayerViewModel.AudioOptionsUi.Hidden,
+            is PlayerViewModel.AudioOptionsUi.Loading -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
                 }
-                is PlayerViewModel.AudioOptionsUi.Error -> {
-                    Text(text = options.msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    Button(onClick = onRetry) { Text("重试") }
-                }
-                is PlayerViewModel.AudioOptionsUi.Ready -> {
+            }
+            is PlayerViewModel.AudioOptionsUi.Error -> {
+                Text(
+                    text = options.msg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Button(onClick = onRetry) { Text("重试") }
+            }
+            is PlayerViewModel.AudioOptionsUi.Ready -> {
+                Column(
+                    modifier = Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     options.options.forEach { item ->
-                        Surface(
+                        SettingRadioRow(
+                            title = item.title,
+                            subtitle = item.subTitle.takeIf { it.isNotBlank() },
+                            selected = item.selected,
                             onClick = { onSelect(item.code) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (item.selected) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = if (item.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
-                                    )
-                                    if (item.subTitle.isNotBlank()) {
-                                        Text(
-                                            text = item.subTitle,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                                if (item.selected) {
-                                    Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+                        )
                     }
                     if (showLoginHint) {
                         Surface(
                             onClick = onLoginClick,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -815,18 +798,14 @@ private fun AudioQualitySheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    Text("登录解锁更高音质", style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        text = "登录解锁更高音质",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = "192K / 杜比 / Hi-Res 需登录（部分需大会员）",
+                                        "192K / 杜比 / Hi-Res 需登录（部分需大会员）",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Text(text = "去登录 ›", color = MaterialTheme.colorScheme.primary)
+                                Text("去登录 ›", color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -835,7 +814,6 @@ private fun AudioQualitySheet(
         }
     }
 }
-
 @Composable
 private fun SkipIcon(
     seconds: Int,
@@ -1835,7 +1813,6 @@ private fun ChapterSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubtitleSheet(
     tracks: List<cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack>,
@@ -1843,46 +1820,22 @@ private fun SubtitleSheet(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(text = "切换字幕", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            tracks.forEachIndexed { idx, track ->
-                val selected = idx == selectedIndex
-                Surface(
-                    onClick = { onSelect(idx) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = track.displayLabel,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                        if (selected) {
-                            Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+    TingBiliBottomSheet(
+        title = "切换字幕",
+        subtitle = "点击字幕轨后立即切换。",
+        onDismissRequest = onDismiss,
+    ) {
+        Column(modifier = Modifier.selectableGroup()) {
+            tracks.forEachIndexed { index, track ->
+                SettingRadioRow(
+                    title = track.displayLabel,
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                )
             }
         }
     }
 }
-
 private fun formatChapterDuration(durationMs: Long): String {
     if (durationMs <= 0L) return "--:--"
     val totalSec = durationMs / 1000

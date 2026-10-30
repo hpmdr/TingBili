@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,7 +55,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +67,8 @@ import cn.debubu.tingbili.core.ui.playedProgressLabel
 import cn.debubu.tingbili.core.ui.scrollToItemCentered
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
@@ -92,15 +94,16 @@ fun PlaylistDetailScreen(
     val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
     val focus by viewModel.focus.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showRename by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showDeletePlaylistConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(message) {
         message?.let {
-            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
             viewModel.consumeMessage()
+            snackbarHostState.showSnackbar(it)
         }
     }
 
@@ -130,7 +133,7 @@ fun PlaylistDetailScreen(
                             }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(text = { Text("重命名") }, onClick = { showMenu = false; showRename = true })
-                                DropdownMenuItem(text = { Text("删除收藏") }, onClick = { showMenu = false; viewModel.deletePlaylist(onBack) })
+                                DropdownMenuItem(text = { Text("删除收藏", color = MaterialTheme.colorScheme.error) }, onClick = { showMenu = false; showDeletePlaylistConfirm = true })
                             }
                         }
                     }
@@ -154,6 +157,19 @@ fun PlaylistDetailScreen(
                 currentName = pl.name,
                 onConfirm = { viewModel.rename(it); showRename = false },
                 onDismiss = { showRename = false }
+            )
+        }
+        if (showDeletePlaylistConfirm) {
+            TingBiliConfirmDialog(
+                title = "删除收藏？",
+                text = "将删除「${pl.name}」及其播放列表，此操作不可撤销。",
+                confirmLabel = "删除",
+                destructive = true,
+                onConfirm = {
+                    showDeletePlaylistConfirm = false
+                    viewModel.deletePlaylist(onBack)
+                },
+                onDismiss = { showDeletePlaylistConfirm = false },
             )
         }
 
@@ -372,12 +388,16 @@ private fun DetailTrackRow(
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("移除这一集？") },
-            text = { Text(entity.title.ifBlank { entity.bvid }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("移除") } },
-            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") } }
+        TingBiliConfirmDialog(
+            title = "移除这一集？",
+            text = entity.title.ifBlank { entity.bvid },
+            confirmLabel = "移除",
+            destructive = true,
+            onConfirm = {
+                showDeleteConfirm = false
+                onDelete()
+            },
+            onDismiss = { showDeleteConfirm = false },
         )
     }
 
