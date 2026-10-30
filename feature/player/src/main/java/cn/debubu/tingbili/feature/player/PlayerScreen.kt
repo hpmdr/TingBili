@@ -46,6 +46,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -64,9 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -75,9 +75,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,9 +93,16 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -124,7 +133,6 @@ fun PlayerScreen(
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
     val pipelineInfo by vm.pipelineInfo.collectAsStateWithLifecycle()
     val qualityLabel by vm.audioQualityLabel.collectAsStateWithLifecycle()
-    val qualityLine by vm.qualityLine.collectAsStateWithLifecycle()
     val audioOptions by vm.audioOptions.collectAsStateWithLifecycle()
     val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
@@ -148,6 +156,13 @@ fun PlayerScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var infoReturnToMore by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
+
+    // 歌词行跳转的撤销提示：误触跳走时 2.5s 内可一键回到原位置
+    var undoJump by remember { mutableStateOf<JumpUndo?>(null) }
+    val undoScope = rememberCoroutineScope()
+    LaunchedEffect(lyricFullscreen) {
+        if (!lyricFullscreen) undoJump = null
+    }
 
     val coverModel = trackUi.track?.cover
         ?.takeIf { it.isNotBlank() }
@@ -235,19 +250,6 @@ fun PlayerScreen(
             )
         }
 
-        if (trackUi.isLoading) {
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    text = "正在加载...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
         Spacer(Modifier.height(12.dp))
 
         if (!lyricFullscreen) {
@@ -286,11 +288,35 @@ fun PlayerScreen(
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
-                FullscreenLyricsList(
-                    state = lyrUi,
-                    onSeekLyric = vm::seekToLyric,
-                    isLoading = trackUi.isLoading,
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    FullscreenLyricsList(
+                        state = lyrUi,
+                        onSeekLyric = { line ->
+                            val from = progUi.positionMs
+                            vm.seekToLyric(line)
+                            val token = (undoJump?.token ?: 0L) + 1L
+                            undoJump = JumpUndo(from, formatMs(line.timeMs), token)
+                            undoScope.launch {
+                                delay(UNDO_HINT_MS)
+                                if (undoJump?.token == token) undoJump = null
+                            }
+                        },
+                        onExit = { lyricFullscreen = false },
+                        isLoading = trackUi.isLoading,
+                    )
+                    undoJump?.let { undo ->
+                        UndoJumpHint(
+                            label = undo.toLabel,
+                            onUndo = {
+                                vm.seekTo(undo.fromMs)
+                                undoJump = null
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 12.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -455,7 +481,6 @@ fun PlayerScreen(
     if (showInfoSheet) {
         PlaybackInfoSheet(
             info = pipelineInfo,
-            qualityLine = qualityLine,
             hasTrack = trackUi.track != null,
             isActive = trackUi.isPlaying || trackUi.isLoading,
             showBack = infoReturnToMore,
@@ -593,14 +618,13 @@ private fun MoreBareRow(
     }
 }
 /**
- * 播放信息二级页（A4 极简，随更多菜单同语言）：‹ 返回上一级，音频 / 播放分组 K-V + 小知识。
+ * 播放信息二级页（A4 极简，随更多菜单同语言）：‹ 返回上一级，音频 / 播放分组 K-V + DSP 状态提示。
  * 只读；未在播（无节目/暂停态未起播）时技术行整组隐藏，只留开关与偏好行 + 一句引导。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaybackInfoSheet(
     info: cn.debubu.tingbili.core.media.PipelineInfo,
-    qualityLine: String,
     hasTrack: Boolean,
     isActive: Boolean,
     showBack: Boolean = true,
@@ -651,7 +675,6 @@ private fun PlaybackInfoSheet(
                     if (!info.offloadEnabled) "已关闭（可在设置里打开，灭屏听歌更省电）"
                     else "已开启，播放时条件满足会自动接管"
                 )
-                PlaybackInfoRow("音质", qualityLine)
                 PlaybackInfoRow("倍速", "${info.speed}x")
             } else {
             // 播放中：管线参数尚未就绪时显示"读取中…"（如切集/缓冲瞬间），不写"未知"吓人。
@@ -661,7 +684,6 @@ private fun PlaybackInfoSheet(
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
             PlaybackInfoRow("码率", if (info.bitrateKbps != null) "${info.bitrateKbps} kbps" else "读取中…")
-            PlaybackInfoRow("音质", qualityLine)
             PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "读取中…")
             PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "读取中…")
             MoreGroupTitle("播放")
@@ -679,7 +701,6 @@ private fun PlaybackInfoSheet(
             PlaybackInfoRow("倍速", "${info.speed}x")
             if (info.offloadEnabled) {
                 Spacer(Modifier.height(4.dp))
-                Text(text = "小知识：DSP 卸载就是把解码交给低功耗芯片、主芯片休眠来省电；条件不满足时自动回落，不断播。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 if (info.offloadActive) {
                     Text(text = "DSP 省电生效中不支持倍速，已保持 1.0x；退出接管后可变速。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                 } else {
@@ -756,11 +777,13 @@ private fun AudioQualitySheet(
                                         color = if (item.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                         fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
                                     )
-                                    Text(
-                                        text = item.subTitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    if (item.subTitle.isNotBlank()) {
+                                        Text(
+                                            text = item.subTitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                                 if (item.selected) {
                                     Text(text = "✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
@@ -898,13 +921,6 @@ private fun PlaybackProgressBar(
     val activeColor = MaterialTheme.colorScheme.primary
     val bufferedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
     val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)
-    val sliderColors = SliderDefaults.colors(
-        thumbColor = activeColor,
-        activeTrackColor = Color.Transparent,
-        inactiveTrackColor = Color.Transparent,
-        activeTickColor = Color.Transparent,
-        inactiveTickColor = Color.Transparent,
-    )
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -924,66 +940,79 @@ private fun PlaybackProgressBar(
             )
         }
 
-        Slider(
-            modifier = Modifier.offset(y = (-6).dp),
-            value = shownRatio,
-            onValueChange = { if (enabled) dragRatio = it },
-            onValueChangeFinished = {
-                dragRatio?.let { onSeek((it * safeDuration).toLong()) }
-                dragRatio = null
-            },
-            enabled = enabled && safeDuration > 0L,
-            colors = sliderColors,
-            track = { state ->
-                val progress = state.value.coerceIn(0f, 1f)
-                val buffered = bufferedRatio.coerceAtLeast(progress).coerceIn(0f, 1f)
-
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp),
-                ) {
-                    // 细线风：与 mini 播放器顶部的 2.dp 进度线统一，无常驻圆点
-                    val centerY = size.height / 2f
-                    val baseHeight = 3.dp.toPx()
-                    val activeHeight = 3.dp.toPx()
-
-                    drawRoundRect(
-                        color = trackColor,
-                        topLeft = Offset(0f, centerY - baseHeight / 2f),
-                        size = Size(size.width, baseHeight),
-                        cornerRadius = CornerRadius(baseHeight / 2f),
-                    )
-                    drawRoundRect(
-                        color = bufferedColor,
-                        topLeft = Offset(0f, centerY - baseHeight / 2f),
-                        size = Size(size.width * buffered, baseHeight),
-                        cornerRadius = CornerRadius(baseHeight / 2f),
-                    )
-                    drawRoundRect(
-                        color = activeColor,
-                        topLeft = Offset(0f, centerY - activeHeight / 2f),
-                        size = Size(size.width * progress, activeHeight),
-                        cornerRadius = CornerRadius(activeHeight / 2f),
-                    )
-                }
-            },
-            thumb = {
-                // 无常驻圆点：固定占位防轨道跳动，手指拖动时才画小圆点当手柄
-                Box(
-                    modifier = Modifier.size(10.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (dragRatio != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .background(activeColor, CircleShape),
-                        )
+        // 自绘进度线：M3 Slider 自带 44dp 触控高度，线始终离上方文字一大截。
+        // 这里用 22dp 触控区、线画在顶部 5dp，让时间数字紧贴进度线。
+        val canSeek = enabled && safeDuration > 0L
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(22.dp)
+                .semantics {
+                    if (canSeek) {
+                        progressBarRangeInfo = ProgressBarRangeInfo(shownRatio, 0f..1f)
+                        setProgress { target ->
+                            onSeek((target.coerceIn(0f, 1f) * safeDuration).toLong())
+                            true
+                        }
                     }
                 }
-            },
-        )
+                .pointerInput(canSeek, safeDuration) {
+                    if (!canSeek) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        dragRatio = (down.position.x / size.width).coerceIn(0f, 1f)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.changedToUpIgnoreConsumed()) {
+                                change.consume()
+                                dragRatio?.let { onSeek((it * safeDuration).toLong()) }
+                                dragRatio = null
+                                break
+                            }
+                            if (change.positionChanged()) {
+                                dragRatio = (change.position.x / size.width).coerceIn(0f, 1f)
+                                change.consume()
+                            }
+                        }
+                    }
+                },
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                // 细线风：与 mini 播放器顶部的 2.dp 进度线统一，无常驻圆点
+                val centerY = 5.dp.toPx()
+                val baseHeight = 3.dp.toPx()
+                val buffered = bufferedRatio.coerceAtLeast(shownRatio).coerceIn(0f, 1f)
+
+                drawRoundRect(
+                    color = trackColor,
+                    topLeft = Offset(0f, centerY - baseHeight / 2f),
+                    size = Size(size.width, baseHeight),
+                    cornerRadius = CornerRadius(baseHeight / 2f),
+                )
+                drawRoundRect(
+                    color = bufferedColor,
+                    topLeft = Offset(0f, centerY - baseHeight / 2f),
+                    size = Size(size.width * buffered, baseHeight),
+                    cornerRadius = CornerRadius(baseHeight / 2f),
+                )
+                drawRoundRect(
+                    color = activeColor,
+                    topLeft = Offset(0f, centerY - baseHeight / 2f),
+                    size = Size(size.width * shownRatio, baseHeight),
+                    cornerRadius = CornerRadius(baseHeight / 2f),
+                )
+                // 只在手指拖动时画手柄点，静止时不占位、不晃
+                if (dragRatio != null) {
+                    drawCircle(
+                        color = activeColor,
+                        radius = 5.dp.toPx(),
+                        center = Offset(size.width * shownRatio, centerY),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1317,11 +1346,17 @@ private fun MiniLyricCard(
     }
 }
 
-/** 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随 + 点行跳转，末尾带 AI 标注 */
+/**
+ * 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随，末尾带 AI 标注。
+ *
+ * 交互：点文字 = 跳到该行；点行以外的空白（上下半屏留白、行间隙）= 收起全屏。
+ * 点击区域只到文字边界，行两侧空白不再算“点中”，从根上减少误触跳转。
+ */
 @Composable
 private fun FullscreenLyricsList(
     state: PlayerViewModel.LyricUiState,
     onSeekLyric: (cn.debubu.tingbili.data.bilibili.model.LyricLine) -> Unit,
+    onExit: () -> Unit,
     isLoading: Boolean,
 ) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1354,7 +1389,15 @@ private fun FullscreenLyricsList(
         }
     }
     BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            // 空白处单击收起全屏：用 clickable 而不是 detectTapGestures——
+            // 后者会在父层提前消费 down，抢掉子项（歌词行）的点击。
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = "收起全屏字幕",
+            ) { onExit() },
     ) {
         // 上下各留半屏内边距，首尾行也能居中
         val centerPadding = maxHeight / 2
@@ -1412,10 +1455,11 @@ private fun FullscreenLyricsList(
                     color = if (isCurrent) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
+                    // 不铺满整行：只有文字（含少量内边距）可点，行两侧空白留给“点空白退出”
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
                         .clickable(enabled = !isLoading) { onSeekLyric(line) }
-                        .padding(horizontal = 16.dp, vertical = if (isCurrent) 6.dp else 2.dp),
+                        .padding(horizontal = 12.dp, vertical = if (isCurrent) 6.dp else 2.dp),
                 )
         }
         if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
@@ -1435,6 +1479,59 @@ private fun FullscreenLyricsList(
                 }
             }
         }
+        }
+        // 显式退出入口：不依赖“点空白”的可发现性，读屏也能聚焦
+        Surface(
+            onClick = onExit,
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 6.dp),
+        ) {
+            Text(
+                text = "收起全屏字幕 ⌄",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** 歌词行跳转的撤销快照：fromMs=跳转前位置，token 用于丢弃过期的自动消失 */
+private data class JumpUndo(val fromMs: Long, val toLabel: String, val token: Long)
+
+/** 撤销提示停留时长：够用户反应过来点“撤销”，又不至于长期遮挡 */
+private const val UNDO_HINT_MS = 4_000L
+
+/** 跳转提示：给误触一个“撤销”出口，超时自动消失 */
+@Composable
+private fun UndoJumpHint(
+    label: String,
+    onUndo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onUndo,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shadowElevation = 6.dp,
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            Text(text = "已跳到 $label", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "撤销",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.inversePrimary,
+            )
         }
     }
 }
@@ -1564,6 +1661,13 @@ private fun ChapterSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = rememberLazyListState()
+    // 打开即定位到在播章节（上方留两条上下文）：长队列（几十上百集）否则要手动滑很久
+    LaunchedEffect(Unit) {
+        if (currentIndex in queue.indices) {
+            listState.scrollToItem((currentIndex - 2).coerceAtLeast(0))
+        }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Text(
             text = "章节目录（${queue.size}）",
@@ -1572,6 +1676,7 @@ private fun ChapterSheet(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
         androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 420.dp)

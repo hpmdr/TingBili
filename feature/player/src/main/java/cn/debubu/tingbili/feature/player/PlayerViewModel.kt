@@ -464,10 +464,6 @@ class PlayerViewModel @Inject constructor(
     }
     // ---------- 音质（播放页底部第四入口；档位定义见 data:bilibili AudioQuality，对标 PiliPlus） ----------
 
-    /** 用户音质偏好 id（默认 132K；落盘，解析器/面板/信息页同源）。 */
-    val audioQuality: StateFlow<Int> = prefs.audioQuality
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.DEFAULT_CODE)
-
     /** 底部音质入口短标签（64K/132K/192K/杜比/Hi-Res）。 */
     val audioQualityLabel: StateFlow<String> = prefs.audioQuality
         .map { AudioQuality.fromCode(it).shortDesc }
@@ -545,7 +541,10 @@ class PlayerViewModel @Inject constructor(
                 AudioOptionUi(
                     code = a.id,
                     title = q.desc,
-                    subTitle = if (a.bandwidth > 0) "B站实测约 ${a.bandwidth / 1000} kbps" else "本视频提供",
+                    // 档位名（192K/杜比/Hi-Res）是 B 站原始音轨档位，bandwidth 是该档实际转码码率，
+                    // 两者经常差很多（如 192K 档实际 ~85kbps）。并排展示会被误读成"标称 192 实测 85"，
+                    // 故不再展示带宽；真实解码码率以播放信息页的"码率"为准。
+                    subTitle = "",
                     locked = false,
                     selected = a.id == (effective ?: prefer),
                 )
@@ -575,14 +574,4 @@ class PlayerViewModel @Inject constructor(
         return true
     }
 
-    /**
-     * 播放信息页“音质”行：偏好档 + 本次实际有效档（面板拉过才知，否则只展示偏好）。
-     * 实际码率仍以管线 format.bitrate 为准（见 pipelineInfo.bitrateKbps），此处只表明确档归属。
-     */
-    val qualityLine: StateFlow<String> = combine(audioQuality, _audioOptions) { prefer, opts ->
-        val preferDesc = AudioQuality.fromCode(prefer).desc
-        val eff = (opts as? AudioOptionsUi.Ready)?.effectiveCode
-        if (eff == null || eff == prefer) preferDesc
-        else "${preferDesc}（当前实际：${AudioQuality.fromCode(eff).desc}）"
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.fromCode(AudioQuality.DEFAULT_CODE).desc)
 }
