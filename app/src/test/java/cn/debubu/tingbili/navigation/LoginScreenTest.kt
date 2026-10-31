@@ -68,6 +68,10 @@ class LoginScreenTest {
         }
         composeTestRule.onNodeWithText("Cookie").performClick()
         composeTestRule.onNodeWithText("Cookie 导入").performScrollTo().assertIsDisplayed()
+        // 一次性整段复制：Network 面板右键 Cookie → Copy value
+        composeTestRule.onNodeWithText("Copy value", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
         // SESSDATA 是 HttpOnly，document.cookie 拿不到，指引必须指向 Application 面板
         composeTestRule.onNodeWithText("Application", substring = true)
             .performScrollTo()

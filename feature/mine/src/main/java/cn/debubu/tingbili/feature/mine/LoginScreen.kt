@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -685,12 +686,18 @@ private fun CookieContent(vm: LoginViewModel) {
     val cookie by vm.cookie.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+    val clipboard = remember(context) {
+        context.getSystemService(android.content.ClipboardManager::class.java)
+    }
     val verifying = cookie is CookieUi.Verifying
 
-    ModeHeader(
-        "Cookie 导入",
-        "浏览器登录 bilibili.com → F12 → Application → Cookies，复制 SESSDATA 的 Value",
-    )
+    ModeHeader("Cookie 导入", "从已登录的浏览器整段复制 Cookie，粘贴后自动验证")
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        HelperText("1. F12 → Network → 任意 bilibili.com 请求")
+        HelperText("2. Request Headers → Cookie → 右键 Copy value")
+        HelperText("3. 整段粘贴到下面即可，不需要逐条抄")
+    }
     OutlinedTextField(
         value = text,
         onValueChange = { text = it },
@@ -699,7 +706,17 @@ private fun CookieContent(vm: LoginViewModel) {
         minLines = 4,
         maxLines = 6,
         shape = RoundedCornerShape(14.dp),
-        supportingText = { Text("可整段粘贴；SESSDATA 是 HttpOnly，document.cookie 里没有") },
+        trailingIcon = {
+            TextButton(
+                onClick = {
+                    clipboard?.primaryClip?.getItemAt(0)
+                        ?.coerceToText(context)?.toString()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { text = it }
+                },
+            ) { Text("粘贴") }
+        },
+        supportingText = { Text("SESSDATA 是 HttpOnly，document.cookie 里没有；也可在 Application → Cookies 单独复制") },
     )
     if (cookie is CookieUi.Failed) {
         ErrorNotice((cookie as CookieUi.Failed).message)
