@@ -28,3 +28,26 @@ fun chapterLabel(title: String?, pageIndex: Int?, pageCount: Int = 1): String {
     val name = title?.takeIf { it.isNotBlank() } ?: return "未播放"
     return if (pageIndex != null && pageIndex > 0 && pageCount > 1) "P$pageIndex · $name" else name
 }
+
+/**
+ * 分 P 标签：多 P 且序号已知时给 `P{n}`，单 P/同名标题（BV 标题就是分 P 名）时返回 null。
+ *
+ * 规则本体在 core:data `episodePageLabel`，core:media 的通知栏标题也用它，避免口径漂移。
+ */
+fun trackPageLabel(title: String, videoTitle: String?, pageIndex: Int?): String? =
+    cn.debubu.tingbili.core.data.model.episodePageLabel(title, videoTitle, pageIndex)
+
+/**
+ * 列表副标题：`P19 · BV 总标题`。
+ * 单 P（BV 标题与分 P 同名）时省略 `P1` 和重复的标题；两者都没有时返回 null。
+ */
+fun trackMetaLabel(
+    title: String,
+    videoTitle: String?,
+    pageIndex: Int?,
+    showVideoTitle: Boolean = true,
+): String? {
+    val page = trackPageLabel(title, videoTitle, pageIndex)
+    val video = videoTitle?.takeIf { showVideoTitle && it.isNotBlank() && it != title }
+    return listOfNotNull(page, video).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}

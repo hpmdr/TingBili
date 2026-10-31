@@ -5,7 +5,7 @@
 - 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 37 / compileSdk 37 / Java 17`
 - 技术栈：Kotlin + Compose (Material3, dynamicColor) + Navigation + Hilt + Room + DataStore + Media3 + Retrofit/OkHttp + Coil + Paging3
   （依赖与插件版本统一在 `gradle/libs.versions.toml` 维护，文档里不再重复，免得两处跑偏）
-- 架构：`app` 壳 + `core:ui/media/data` + `feature:home/playlist/history/player/mine/detail/search` + `data:bilibili`（特性模块化 Clean Architecture）
+- 架构：`app` 壳 + `core:ui/media/data/bili-ui` + `feature:home/favorites/history/player/mine/detail/space` + `data:bilibili`（特性模块化 Clean Architecture）
 
 ## 构建与测试
 
@@ -30,15 +30,16 @@ android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.
 
 ```
 app (MainActivity + AdaptiveMainScaffold + AppDataModule)
-core:ui (TingBiliTheme)
-core:data (Room playlists/history + DataStore prefs + Result)
+core:ui (TingBiliTheme + 共享组件)
+core:data (Room 收藏/历史 + DataStore prefs + Result)
 core:media (ExoPlayer audio-only + MediaSession + PlayerManager + Timer)
+core:bili-ui (B站账号侧共享 UI：未登录门、错误态、视频列表)
 data:bilibili (search/view/playurl/subtitle, Wbi stub, visitor)
 feature:home (Paging3 搜索列表 + 自适应网格；推荐 = 默认词自动执行一次搜索)
-feature:playlist (CRUD + dedup + reorder + playAll)
+feature:favorites (我的最爱/手动收藏夹/BV 收藏缓存 + B站收藏只读页)
 feature:history (history flow + resume)
 feature:player (LyricState + SubtitleParser + full-screen)
-feature:mine (我的 + B站收藏/历史/稍后听 + 设置/登录)
+feature:mine (我的 + B站历史 + 设置/登录)
 feature:space (UP 主主页：头像/粉丝/签名 + 投稿列表，pubdate/click/stow 三种排序)
 ```
 

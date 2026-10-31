@@ -10,6 +10,8 @@ import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,11 +33,16 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -150,13 +157,26 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
-    // null = 首 Tab 还没定：什么都不画，系统启动屏继续盖着
-    val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value ?: return
+    // null = 首 Tab 还没定：先不画内容，系统启动屏继续盖着。
+    // 但 pagerState 必须先创建：否则 Activity 因 IME/弹窗重建时，页面会回到首 Tab。
+    val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value
     val navController = rememberNavController()
     // 4 Tab 的横向分页：与底栏共享同一个 state，点击/左右滑都落到这里
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(
-        initialPage = cn.debubu.tingbili.navigation.mainTabPageOf(startTab)
+        initialPage = cn.debubu.tingbili.navigation.mainTabPageOf(
+            startTab ?: cn.debubu.tingbili.navigation.HomeRoute
+        )
     ) { 4 }
+    var startTabApplied by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(startTab) {
+        val tab = startTab ?: return@LaunchedEffect
+        if (!startTabApplied) {
+            startTabApplied = true
+            val page = cn.debubu.tingbili.navigation.mainTabPageOf(tab)
+            if (pagerState.currentPage != page) pagerState.scrollToPage(page)
+        }
+    }
+    if (startTab == null) return
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
@@ -192,20 +212,25 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         ) { innerPadding ->
             // 沉浸式状态栏：顶部不预留安全区，由各页内容顶到状态栏下、顶栏自行 statusBarsPadding 避让图标
             val layoutDirection = LocalLayoutDirection.current
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = innerPadding.calculateStartPadding(layoutDirection),
-                        end = innerPadding.calculateEndPadding(layoutDirection),
-                        bottom = innerPadding.calculateBottomPadding()
-                    )
-            ) {
+            // mini 条在整屏坐标里定位：主页 Tab 时停在底栏上沿，二级页时贴屏幕底。
+            // 位置变化走动画，避免进出详情页时上下硬跳（内容 padding 仍立即生效）。
+            val miniPlayerBottom by animateDpAsState(
+                targetValue = if (inMainTabs) innerPadding.calculateBottomPadding() else 0.dp,
+                animationSpec = tween(durationMillis = 220),
+                label = "miniPlayerBottom",
+            )
+            Box(modifier = Modifier.fillMaxSize()) {
                 AppRootNavHost(
                     navController = navController,
                     pagerState = pagerState,
                     mainViewModel = mainViewModel,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = innerPadding.calculateStartPadding(layoutDirection),
+                            end = innerPadding.calculateEndPadding(layoutDirection),
+                            bottom = innerPadding.calculateBottomPadding()
+                        ),
                 )
                 // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过；
                 // 显隐只做位移+淡出，内边距全程不动，滑到底不弹
@@ -215,7 +240,8 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                         visibility = miniPlayerVisibility,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .padding(bottom = miniPlayerBottom),
                     )
                 }
             }

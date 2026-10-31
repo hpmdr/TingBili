@@ -9,7 +9,7 @@ import androidx.navigation.NavHostController
 import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.mine.MeScreen
-import cn.debubu.tingbili.feature.playlist.PlaylistScreen
+import cn.debubu.tingbili.feature.favorites.FavoritesScreen
 
 /**
  * 主页 4 个 Tab 的唯一容器：横向分页，跟手左右滑切换（微信式）。
@@ -42,10 +42,16 @@ fun MainTabsPager(
             }
 
             1 -> ImageFormatScope(mainViewModel) {
-                PlaylistScreen(onPlaylistClick = { id -> navController.navigate(PlaylistDetailRoute(id)) })
+                FavoritesScreen(
+                    onFolderClick = { id -> navController.navigate(FavoriteFolderRoute(id)) },
+                    onBvClick = { bvid -> navController.navigate(BvFavoriteRoute(bvid)) },
+                    onBiliClick = { navController.navigate(BiliFavoritesRoute) },
+                )
             }
 
-            2 -> ImageFormatScope(mainViewModel) { HistoryScreen() }
+            2 -> ImageFormatScope(mainViewModel) {
+                HistoryScreen(onFolderClick = { id -> navController.navigate(FavoriteFolderRoute(id)) })
+            }
 
             else -> ImageFormatScope(mainViewModel) {
                 MeScreen(
@@ -53,7 +59,7 @@ fun MainTabsPager(
                     onOpenSettings = { navController.navigate(SettingsRoute) },
                     onOpenStorage = { navController.navigate(StorageRoute) },
                     onOpenGeneral = { navController.navigate(GeneralRoute) },
-                    onOpenBiliFav = { navController.navigate(BiliFavFoldersRoute) },
+                    onOpenBiliFav = { navController.navigate(BiliFavoritesRoute) },
                     onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
                     onOpenBiliToview = { navController.navigate(BiliToviewRoute) },
                     onOpenLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },

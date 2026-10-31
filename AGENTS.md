@@ -6,6 +6,9 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 ## 命令
 
 ```bash
+# 日常迭代（本机调试）：保留 Gradle daemon，只出 debug 包
+./gradlew :app:installDebug
+# 提交前门禁 / CI：无 daemon + 全量
 ./gradlew assembleDebug --no-daemon --stacktrace
 ./gradlew :core:data:testDebugUnitTest :core:media:testDebugUnitTest --no-daemon --stacktrace
 ```
@@ -22,7 +25,7 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 
 ## 环境（先探测，不假设）
 
-- 先跑 `java -version` 确认；字节码目标是 17，构建一律用 `./gradlew` 并加 `--no-daemon`。如报工具链错误，以报错信息和 `gradle/wrapper/gradle-wrapper.properties` 为准对齐 JDK，不要跟本文件较劲。
+- 先跑 `java -version` 确认；字节码目标是 17，构建一律用 `./gradlew`。日常调试可保留 daemon（`./gradlew :app:installDebug`）；提交前门禁/CI 用 `--no-daemon`。如报工具链错误，以报错信息和 `gradle/wrapper/gradle-wrapper.properties` 为准对齐 JDK，不要跟本文件较劲。
 - SDK 通过 `ANDROID_HOME` / `local.properties` 解析（`local.properties` 各机器不同，不入库）。缺组件看 `README.md` 快速开始。
 - **SDK 组件管理一律用新版 `android` CLI**（`$ANDROID_HOME/cmdline-tools/latest/bin/android`，如 `android sdk list` / `android sdk update` / `android sdk install`；可加 `--sdk=<路径>` 指定 SDK）。**`sdkmanager` 已废弃**：会打印弃用警告且首次执行易卡死，禁止再用。网络操作加 `timeout`。
 - `settings.gradle.kts` 已自动切换镜像（本地 vs `CI=true`），不要为了修网络去改它。先重试一次，再读报错。

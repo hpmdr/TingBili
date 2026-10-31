@@ -19,15 +19,15 @@ import cn.debubu.tingbili.feature.history.HistoryScreen
 import cn.debubu.tingbili.feature.home.HomeScreen
 import cn.debubu.tingbili.feature.space.SpaceScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
-import cn.debubu.tingbili.feature.playlist.PlaylistDetailScreen
-import cn.debubu.tingbili.feature.playlist.PlaylistScreen
+import cn.debubu.tingbili.feature.favorites.BvFavoriteScreen
+import cn.debubu.tingbili.feature.favorites.FavoriteFolderScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
 import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
-import cn.debubu.tingbili.feature.mine.BiliFavDetailScreen
-import cn.debubu.tingbili.feature.mine.BiliFavFoldersScreen
+import cn.debubu.tingbili.feature.favorites.BiliFavDetailScreen
+import cn.debubu.tingbili.feature.favorites.BiliFavoritesScreen
+import cn.debubu.tingbili.feature.favorites.BiliToviewScreen
 import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
-import cn.debubu.tingbili.feature.mine.BiliToviewScreen
 import cn.debubu.tingbili.feature.mine.MeScreen
 import cn.debubu.tingbili.feature.mine.StorageSettingsScreen
 import cn.debubu.tingbili.feature.mine.QualityScreen
@@ -91,11 +91,12 @@ fun AppRootNavHost(
         composable<AudioDecodersRoute> {
             AudioDecodersScreen(onBack = { navController.popBackStack() })
         }
-        composable<BiliFavFoldersRoute> {
+        composable<BiliFavoritesRoute> {
             ImageFormatScope(mainViewModel) {
-                BiliFavFoldersScreen(
+                BiliFavoritesScreen(
                     onBack = { navController.popBackStack() },
                     onFolderClick = { id, title -> navController.navigate(BiliFavDetailRoute(id, title)) },
+                    onToviewClick = { navController.navigate(BiliToviewRoute) },
                     onLogin = { navController.navigate(LoginRoute) { launchSingleTop = true } },
                 )
             }
@@ -148,9 +149,18 @@ fun AppRootNavHost(
                 )
             }
         }
-        composable<PlaylistDetailRoute> {
+        composable<FavoriteFolderRoute> {
             ImageFormatScope(mainViewModel) {
-                PlaylistDetailScreen(onBack = { navController.popBackStack() })
+                FavoriteFolderScreen(onBack = { navController.popBackStack() })
+            }
+        }
+        composable<BvFavoriteRoute> { entry ->
+            val args = entry.toRoute<BvFavoriteRoute>()
+            ImageFormatScope(mainViewModel) {
+                BvFavoriteScreen(
+                    bvid = args.bvid,
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
         composable<PlayerRoute>(

@@ -114,6 +114,42 @@ class QueueManagerTest {
     }
 
     @Test
+    fun `setActiveQueue persists source folder so restore keeps following it`() = runTest {
+        manager.attach(this, listener)
+        manager.setActiveQueue(listOf(track("BV1", 1)), 0, "夹", sourceFolderId = 7L)
+        runCurrent()
+        assertEquals(7L, manager.sourceFolderId)
+        assertEquals(7L, dao.snapshot!!.sourceFolderId)
+
+        val restored = QueueManager(dao, prefs).also { it.attach(this, listener) }.restore()
+        runCurrent()
+        assertEquals(7L, restored?.sourceFolderId)
+    }
+
+    @Test
+    fun `play order and shuffle are persisted with the queue`() = runTest {
+        manager.attach(this, listener)
+        val tracks = listOf(track("BV1", 1), track("BV1", 2), track("BV1", 3))
+        manager.setActiveQueue(tracks, 1, "夹", sourceFolderId = 7L)
+        manager.setPlayOrder(PlayOrder.REVERSE)
+        manager.setShuffleEnabled(true)
+        runCurrent()
+
+        // 队列反转，当前项按 key 重新定位
+        assertEquals(listOf(3L, 2L, 1L), manager.queue.map { it.cid })
+        assertEquals(1, manager.currentIndex)
+        assertEquals(PlayOrder.REVERSE, manager.playOrder)
+        assertEquals(true, manager.shuffleEnabled)
+        assertEquals(1, dao.snapshot!!.playOrder)
+        assertEquals(true, dao.snapshot!!.shuffleEnabled)
+
+        val restored = QueueManager(dao, prefs).also { it.attach(this, listener) }.restore()
+        runCurrent()
+        assertEquals(PlayOrder.REVERSE, restored?.playOrder)
+        assertEquals(true, restored?.shuffleEnabled)
+    }
+
+    @Test
     fun `adoptTracks holds without valid index`() = runTest {
         manager.attach(this, listener)
         manager.adoptTracks(listOf(track("BV1", 1)), "搜")

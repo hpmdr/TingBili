@@ -51,8 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
-import cn.debubu.tingbili.core.ui.chapterLabel
 import cn.debubu.tingbili.core.ui.formatDurationMs
+import cn.debubu.tingbili.core.ui.trackPageLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -138,7 +138,12 @@ private fun DismissableBarContent(
     val title = remember(track) {
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }
     }
-    val subtitle = remember(track) { chapterLabel(track.title, track.pageIndex, track.pageCount) }
+    val subtitle = remember(track) {
+        listOfNotNull(
+            trackPageLabel(track.title, track.videoTitle, track.pageIndex),
+            track.title.ifBlank { track.bvid },
+        ).joinToString(" · ")
+    }
     val progress = if (durationMs > 0L) {
         (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     } else {

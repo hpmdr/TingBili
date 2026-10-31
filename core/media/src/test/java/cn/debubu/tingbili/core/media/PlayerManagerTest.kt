@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -45,6 +46,7 @@ class PlayerManagerTest {
         var storedListener: Player.Listener? = null
         private var _duration: Long = 100_000L
         override var repeatMode: Int = Player.REPEAT_MODE_OFF
+        override var shuffleModeEnabled: Boolean = false
         private var _currentIdx: Int = 0
         override val currentMediaItemIndex: Int get() = _currentIdx
         private var _pos: Long = 0L
@@ -56,9 +58,13 @@ class PlayerManagerTest {
         fun moveTo(index: Int) { _currentIdx = index.coerceIn(0, mediaItems.size - 1) }
         fun setDuration(v: Long) { _duration = v }
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
+            if (failSetMediaItems) throw IllegalStateException("setMediaItems failed")
             mediaItems = items; this.startIndex = startIndex; _currentIdx = startIndex; _pos = startPositionMs
         }
+        var failSetMediaItems = false
+        var replaceCalls = 0
         override fun replaceMediaItem(index: Int, item: MediaItem) {
+            replaceCalls++
             mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it[index] = item }
         }
 
@@ -77,6 +83,24 @@ class PlayerManagerTest {
             seekToPos = positionMs
             _pos = positionMs
         }
+        override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+            if (mediaItems.isEmpty()) return
+            _currentIdx = mediaItemIndex.coerceIn(0, mediaItems.lastIndex)
+            seekToPos = positionMs
+            _pos = positionMs
+            storedListener?.onMediaItemTransition(
+                mediaItems[_currentIdx],
+                Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+            )
+        }
+        override fun seekToNextMediaItem() {
+            if (_currentIdx >= mediaItems.lastIndex) return
+            seekTo(_currentIdx + 1, 0L)
+        }
+        override fun seekToPreviousMediaItem() {
+            if (_currentIdx <= 0) return
+            seekTo(_currentIdx - 1, 0L)
+        }
         override fun setPlaybackSpeed(speed: Float) { capturedSpeed = speed }
         override fun addListener(listener: Player.Listener) { storedListener = listener }
         override fun release() {}
@@ -86,6 +110,7 @@ class PlayerManagerTest {
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
         override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun get(key: String): cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity? = map[key]
         override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
             rows.forEach { map[it.key] = it }
         }
@@ -94,6 +119,9 @@ class PlayerManagerTest {
         }
         override suspend fun pruneOverflow(keep: Int) {
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
+        }
+        override suspend fun delete(key: String) {
+            map.remove(key)
         }
     }
 
@@ -112,15 +140,21 @@ class PlayerManagerTest {
     class FakeHistoryDao : HistoryDao {
         val saved = mutableListOf<HistoryEntity>()
         private val map = mutableMapOf<String, HistoryEntity>()
-        override suspend fun save(e: HistoryEntity) { saved.add(e); map[e.bvid] = e }
-        override suspend fun get(bvid: String): HistoryEntity? = map[bvid]
+        private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
+        override suspend fun save(e: HistoryEntity) { saved.add(e); map[key(e)] = e }
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? =
+            map["$sourceType:$sourceId"]
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? =
+            map.values.filter { it.bvid == bvid && it.cid == cid }.maxByOrNull { it.updatedAt }
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(map.values.toList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(map.values.sumOf { it.listenDurationMs })
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid == bvid })
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(map.values.filter { it.bvid in bvids })
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(map.values.count { it.updatedAt >= todayStart })
-        override suspend fun delete(bvid: String) { map.remove(bvid) }
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {
+            map.remove("$sourceType:$sourceId")
+        }
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
 
@@ -174,6 +208,225 @@ class PlayerManagerTest {
         assertEquals(1, fakePlayer.mediaItems.size)
         assertEquals(0, fakePlayer.startIndex)
         assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play order reverse keeps current track and position`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 3, "p3", "a", "", 10_000, null),
+            Track("BV1", 4, "p4", "a", "", 10_000, null),
+        )
+        playerManager.play(tracks, 1, "收藏夹", sourceFolderId = 7L)
+        playerManager.seekTo(1234L)
+
+        playerManager.setPlayOrder(cn.debubu.tingbili.core.media.PlayOrder.REVERSE)
+
+        // 队列整体反转，在播的 p2 从下标 1 挪到 2；声音和进度不变
+        assertEquals(listOf(4L, 3L, 2L, 1L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(2, playerManager.state.value.currentIndex)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(1234L, playerManager.state.value.positionMs)
+        assertEquals(2, fakePlayer.startIndex)
+
+        playerManager.setPlayOrder(cn.debubu.tingbili.core.media.PlayOrder.FORWARD)
+        assertEquals(listOf(1L, 2L, 3L, 4L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        playerManager.release()
+    }
+
+    @Test
+    fun `shuffle switch follows random mode`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+        )
+        playerManager.play(tracks, 0)
+        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.PURE_RANDOM)
+
+        playerManager.setShuffleEnabled(true)
+        assertEquals(true, playerManager.state.value.shuffleEnabled)
+        assertEquals(false, fakePlayer.shuffleModeEnabled)
+        assertEquals(Player.REPEAT_MODE_ALL, fakePlayer.repeatMode)
+
+        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
+        playerManager.setShuffleEnabled(false)
+        assertEquals(false, playerManager.state.value.shuffleEnabled)
+        assertEquals(Player.REPEAT_MODE_OFF, fakePlayer.repeatMode)
+
+        playerManager.setShuffleEnabled(true)
+        assertEquals(true, fakePlayer.shuffleModeEnabled)
+        playerManager.release()
+    }
+
+    @Test
+    fun `pure random next jumps to another item`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+        )
+        playerManager.play(tracks, 0)
+        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.PURE_RANDOM)
+        playerManager.setShuffleEnabled(true)
+
+        playerManager.next()
+        // 两首列表里排除当前项后只剩 p2，必跳它
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play resumes source specific history when available`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        fakeHistory.save(
+            HistoryEntity(
+                bvid = "BV1",
+                cid = 1,
+                positionMs = 6_000,
+                sourceType = HistoryEntity.SOURCE_FOLDER,
+                sourceId = "7",
+                sourceTitle = "胖宝宝",
+            )
+        )
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        playerManager.play(tracks, 0, "胖宝宝", sourceFolderId = 7L)
+        assertEquals(6_000L, fakePlayer.currentPosition)
+        playerManager.release()
+    }
+
+    @Test
+    fun `play falls back to latest track history across sources`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        fakeHistory.save(
+            HistoryEntity(
+                bvid = "BV1",
+                cid = 1,
+                positionMs = 4_000,
+                sourceType = HistoryEntity.SOURCE_BV,
+                sourceId = "BV1",
+                sourceTitle = "T",
+            )
+        )
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        // 从收藏夹 7 起播，但夹记录不存在 → 回退该分 P 最近一条
+        playerManager.play(tracks, 0, "胖宝宝", sourceFolderId = 7L)
+        assertEquals(4_000L, fakePlayer.currentPosition)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue appends new P without touching the playing item`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        playerManager.play(listOf(p1), 0, "收藏夹", sourceFolderId = 7L)
+        assertEquals(7L, playerManager.state.value.sourceFolderId)
+
+        assertTrue(playerManager.syncFolderQueue(7L, listOf(p1, p2), "收藏夹"))
+        assertEquals(listOf(1L, 2L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(0, playerManager.state.value.currentIndex)
+        assertEquals(2, fakePlayer.mediaItems.size)
+        assertEquals(0, fakePlayer.startIndex)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue ignores folders other than the queue source`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        playerManager.play(listOf(p1), 0, "收藏夹", sourceFolderId = 7L)
+
+        assertFalse(playerManager.syncFolderQueue(8L, listOf(p1, p2), "别的夹"))
+        assertEquals(1, playerManager.state.value.queue.size)
+        assertEquals(7L, playerManager.state.value.sourceFolderId)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue reorder rebuilds transport and keeps playing item`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
+
+        assertTrue(playerManager.syncFolderQueue(7L, listOf(p2, p1), "收藏夹"))
+        // 在播项仍是 p1，只是跟随夹内新顺序挪到第 2 位
+        assertEquals(listOf(2L, 1L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(1, fakePlayer.startIndex)
+        assertTrue(fakePlayer.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue stops and clears queue when folder is emptied`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
+
+        assertTrue(playerManager.syncFolderQueue(7L, emptyList(), "收藏夹"))
+        // 夹被清空：按 Media3「无后继 → ended」停播并清空队列
+        assertTrue(playerManager.state.value.queue.isEmpty())
+        assertEquals(null, playerManager.state.value.currentTrack)
+        assertEquals(-1, playerManager.state.value.currentIndex)
+        assertEquals(null, playerManager.state.value.sourceFolderId)
+        assertEquals(false, playerManager.state.value.isPlaying)
+        assertEquals(0, fakePlayer.mediaItems.size)
+        assertEquals(false, fakePlayer.isPlaying)
+        runCurrent()
+        assertEquals(null, fakePlayQueue.snapshot)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue keeps reverse order when folder changes`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p3 = Track("BV1", 3, "p3", "a", "", 1000, null)
+        playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
+        playerManager.setPlayOrder(cn.debubu.tingbili.core.media.PlayOrder.REVERSE)
+
+        assertTrue(playerManager.syncFolderQueue(7L, listOf(p1, p2, p3), "收藏夹"))
+        // 收藏夹从 [p1,p2] 变成 [p1,p2,p3]；倒序播放时应是 [p3,p2,p1]
+        assertEquals(listOf(3L, 2L, 1L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(2, playerManager.state.value.currentIndex)
+        playerManager.release()
+    }
+
+    @Test
+    fun `syncFolderQueue keeps playing item when removed from folder`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
+        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        playerManager.play(listOf(p1, p2), 1, "收藏夹", sourceFolderId = 7L)
+
+        assertTrue(playerManager.syncFolderQueue(7L, listOf(p1), "收藏夹"))
+        assertEquals(listOf(1L, 2L), playerManager.state.value.queue.map { it.cid })
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(1, playerManager.state.value.currentIndex)
         playerManager.release()
     }
 
@@ -732,50 +985,66 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `play with empty result sets error and not loading`() = runTest {
+    fun `play starts without resolving urls upfront`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        // Fake API returns empty playUrl if cid==-1 (simulate error)
-        val fakeApi = FakeMediaResolvers().also { it.nextUrl = null }
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val file = context.preferencesDataStoreFile("test_media_prefs_err_${System.nanoTime()}")
-        val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
-        val errPrefs = PreferencesRepository(ds)
-        val errManager = PlayerManager(fakePlayer, fakeHistory, errPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
-        errManager.testScope = this
-        errManager.play(listOf(Track("BVX", 999, "t", "a", "", 1000, null)), 0)
+        // 67 P 的 BV 也不该在起播前批量解析直链（否则瞬间打 67 次 playurl 触发风控）
+        val tracks = (1..5).map { Track("BV1", it.toLong(), "t$it", "a", "", 1000, null) }
+        playerManager.play(tracks, 0)
         runCurrent()
-        assertEquals(false, errManager.state.value.isLoading)
-        assertEquals(false, errManager.state.value.isPlaying)
-        assertTrue(errManager.state.value.errorMessage != null)
-        errManager.release()
+        assertEquals(5, fakePlayer.mediaItems.size)
+        assertEquals(0, fakeResolvers.resolveCalls)
+        assertEquals(true, playerManager.state.value.isPlaying)
+        assertEquals(null, playerManager.state.value.errorMessage)
+        assertTrue(PlayUrlPipeline.isLazyUri(fakePlayer.mediaItems.first().localConfiguration!!.uri))
+        playerManager.release()
     }
 
     @Test
-    fun `url expiry 403 triggers refresh and replaces mediaItem`() = runTest {
+    fun `play failure while old track playing restores old track and resumes`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val fakeApi = FakeMediaResolvers().also {
-            it.urlSequence = listOf("http://example.com/audio1.mp3", "http://example.com/audio2.mp3")
-        }
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val file = context.preferencesDataStoreFile("test_media_prefs_refresh_${System.nanoTime()}")
-        val ds = PreferenceDataStoreFactory.create(scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), produceFile = { file })
-        val refreshPrefs = PreferencesRepository(ds)
-        val m = PlayerManager(fakePlayer, fakeHistory, refreshPrefs, fakeApi, fakeApi, fakeApi, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
-        m.testScope = this
-        m.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
+        playerManager.play(listOf(Track("BVOLD", 1, "old", "a", "", 100_000, null)), 0)
         runCurrent()
-        assertEquals("http://example.com/audio1.mp3", fakePlayer.mediaItems.first().localConfiguration?.uri.toString())
+        fakePlayer.play()
+        fakePlayer.setCurrentPosition(30_000L)
+        runCurrent()
+
+        // 新曲目装载失败：不能留下「新标题 + 旧声音」
+        fakePlayer.failSetMediaItems = true
+        playerManager.play(listOf(Track("BVNEW", 2, "new", "a", "", 10_000, null)), 0)
+        runCurrent()
+
+        val state = playerManager.state.value
+        assertEquals("BVOLD", state.currentTrack?.bvid)
+        assertEquals(100_000L, state.durationMs)
+        assertEquals(false, state.isLoading)
+        assertTrue(state.errorMessage != null)
+        // 旧声音恢复，transport 队列未被新曲目污染
+        assertTrue(fakePlayer.isPlaying)
+        assertEquals("BVOLD:1", fakePlayer.mediaItems.first().mediaId)
+        playerManager.release()
+    }
+
+    @Test
+    fun `url expiry 403 triggers retry with lazy item`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
+        runCurrent()
+        val before = fakePlayer.mediaItems.first()
+        assertEquals(0, fakePlayer.replaceCalls)
         // simulate 403 error from ExoPlayer
         val error = androidx.media3.common.PlaybackException("403", null, androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
         fakePlayer.storedListener?.onPlayerError(error)
         // allow retry delay 1s
         advanceTimeBy(1100L)
         runCurrent()
-        // should have replaced with second URL
-        assertEquals("http://example.com/audio2.mp3", fakePlayer.mediaItems.first().localConfiguration?.uri.toString())
+        // 换回同一个惰性 item 再 prepare：DataSource 打开时会重新解析直链
+        assertEquals(1, fakePlayer.replaceCalls)
         assertEquals("BV1:1", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
-        m.release()
+        assertTrue(PlayUrlPipeline.isLazyUri(fakePlayer.mediaItems.first().localConfiguration!!.uri))
+        assertEquals(before.mediaId, fakePlayer.mediaItems.first().mediaId)
+        playerManager.release()
     }
 }

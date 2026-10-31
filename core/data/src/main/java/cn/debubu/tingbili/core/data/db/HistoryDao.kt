@@ -7,24 +7,51 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-/** 一个 BV 只留一条历史；cid 记录"最近播放的那个分 P"，仅用于续播定位。 */
-@Entity(primaryKeys = ["bvid"])
+/**
+ * 历史按「播单」记：一条 = 一个来源播单（BV 或收藏夹），
+ * 保留最后一次播放的分 P 与位置，用于「听过什么 + 继续听」。
+ *
+ * - sourceType = BV：sourceId = bvid，sourceTitle = BV 标题快照；
+ * - sourceType = 收藏夹：sourceId = folderId，sourceTitle = 收藏夹名快照。
+ *
+ * 同一个 BV 从收藏夹播过、又从搜索播过，会有两条记录（夹一条、BV 一条），符合产品语义。
+ * 字段顺序把 bvid/cid 放前面、来源字段放后面并带默认值，兼容旧的构造/测试。
+ */
+@Entity(primaryKeys = ["sourceType", "sourceId"])
 data class HistoryEntity(
     val bvid: String,
     val cid: Long,
     val positionMs: Long,
     val updatedAt: Long = System.currentTimeMillis(),
-    /** 本条目累计收听时长（本地统计，不含 seek 跳变） */
-    val listenDurationMs: Long = 0L
-)
+    /** 本播单累计收听时长（本地统计，不含 seek 跳变） */
+    val listenDurationMs: Long = 0L,
+    val sourceType: Int = SOURCE_BV,
+    /** BV 用 bvid；收藏夹用 folderId.toString() */
+    val sourceId: String = bvid,
+    /** 播放时的来源名快照（收藏夹名 / BV 标题）；不实时跟着改名 */
+    val sourceTitle: String? = null,
+) {
+    companion object {
+        const val SOURCE_BV = 0
+        const val SOURCE_FOLDER = 1
+    }
+}
 
 @Dao
-interface HistoryDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+interface HistoryDao {    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(e: HistoryEntity)
 
-    @Query("SELECT * FROM HistoryEntity WHERE bvid=:bvid LIMIT 1")
-    suspend fun get(bvid: String): HistoryEntity?
+    /** 某个播单当前一行的快照（累计时长/最后位置） */
+    @Query(
+        "SELECT * FROM HistoryEntity WHERE sourceType=:sourceType AND sourceId=:sourceId LIMIT 1"
+    )
+    suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity?
+
+    /** 某个分 P 最近一次的位置（无论来自 BV 还是某个收藏夹），用于自动续播兜底 */
+    @Query(
+        "SELECT * FROM HistoryEntity WHERE bvid=:bvid AND cid=:cid ORDER BY updatedAt DESC LIMIT 1"
+    )
+    suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity?
 
     @Query("SELECT * FROM HistoryEntity ORDER BY updatedAt DESC")
     suspend fun getAll(): List<HistoryEntity>
@@ -32,11 +59,11 @@ interface HistoryDao {
     @Query("SELECT * FROM HistoryEntity ORDER BY updatedAt DESC")
     fun observeAll(): Flow<List<HistoryEntity>>
 
-    /** 详情/播放按 BV 订阅：播放器每秒写全表时，不再让单页跟着全量 associateBy */
+    /** 详情/播放按 BV 订阅：同 track 可能有多条来源记录，调用方按 updatedAt 取最新 */
     @Query("SELECT * FROM HistoryEntity WHERE bvid=:bvid")
     fun observeByBvid(bvid: String): Flow<List<HistoryEntity>>
 
-    /** 歌单按多 BV 订阅：只收本单相关 BV，避免全表扫描 */
+    /** 收藏夹按多 BV 订阅：只收本夹相关 BV，同 track 可能有多条来源记录 */
     @Query("SELECT * FROM HistoryEntity WHERE bvid IN (:bvids)")
     fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>>
 
@@ -47,9 +74,24 @@ interface HistoryDao {
     @Query("SELECT COALESCE(SUM(listenDurationMs), 0) FROM HistoryEntity")
     fun observeTotalListenMs(): Flow<Long>
 
-    @Query("DELETE FROM HistoryEntity WHERE bvid=:bvid")
-    suspend fun delete(bvid: String)
+    /** 删一条播单历史；不会动收藏夹本身 */
+    @Query("DELETE FROM HistoryEntity WHERE sourceType=:sourceType AND sourceId=:sourceId")
+    suspend fun deleteSource(sourceType: Int, sourceId: String)
 
     @Query("DELETE FROM HistoryEntity")
     suspend fun clearAll()
+}
+
+/**
+ * 同一分 P 可能有多条播单记录（BV 一条、收藏夹一条）。
+ * 页面展示/进度焦点只认最近一次，按 updatedAt 取最新，避免旧来源覆盖新位置。
+ */
+fun List<HistoryEntity>.latestPerTrack(): Map<String, HistoryEntity> {
+    val result = HashMap<String, HistoryEntity>(size)
+    for (e in this) {
+        val key = "${e.bvid}:${e.cid}"
+        val old = result[key]
+        if (old == null || e.updatedAt >= old.updatedAt) result[key] = e
+    }
+    return result
 }

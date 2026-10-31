@@ -5,6 +5,7 @@ import cn.debubu.tingbili.data.bilibili.dto.FavDetailDto
 import cn.debubu.tingbili.data.bilibili.dto.FavFolderDto
 import cn.debubu.tingbili.data.bilibili.dto.ToviewDto
 import cn.debubu.tingbili.data.bilibili.dto.extractBvid
+import cn.debubu.tingbili.data.bilibili.dto.toAllFolders
 import cn.debubu.tingbili.data.bilibili.dto.toFolders
 import cn.debubu.tingbili.data.bilibili.dto.toSpaceVideos
 import kotlinx.serialization.json.Json
@@ -25,6 +26,23 @@ class BiliSpaceDtoTest {
         assertEquals(5, folders[0].count)
         assertFalse(hasMore)
         assertTrue(folders[0].cover.startsWith("https://"))
+    }
+
+    @Test
+    fun `default fav folder uses attr bit and title fallback`() {
+        val dto = json.decodeFromString<FavFolderDto>(
+            """{"code":0,"data":{"list":[
+                {"id":1,"title":"默认收藏夹","attr":0},
+                {"id":2,"title":"我的收藏","attr":2},
+                {"id":3,"title":"默认收藏夹"},
+                {"id":4,"title":"普通"}
+            ]}}"""
+        )
+        val folders = dto.toAllFolders()
+        assertTrue(folders[0].isDefault)
+        assertFalse(folders[1].isDefault)
+        assertTrue(folders[2].isDefault)
+        assertFalse(folders[3].isDefault)
     }
 
     @Test

@@ -3,28 +3,36 @@ package cn.debubu.tingbili.navigation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
-import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
+import cn.debubu.tingbili.core.data.model.toTrack
+import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
     prefs: PreferencesRepository,
     auth: AuthRepository,
     private val scrollTopBus: HomeScrollTopBus,
-    private val playlistDao: PlaylistDao,
+    private val favoritesRepository: FavoritesRepository,
 ) : ViewModel() {
 
     /**
@@ -42,13 +50,44 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { auth.maintainSession() }
         viewModelScope.launch {
             _startTab.value = try {
-                val count = withTimeoutOrNull(3_000) { playlistDao.countTracks() } ?: 0
-                if (count > 0) PlaylistRoute else HomeRoute
+                val hasFavorite = withTimeoutOrNull(3_000) { favoritesRepository.hasAnyFavorite() } ?: false
+                if (hasFavorite) FavoritesRoute else HomeRoute
             } catch (_: Exception) {
                 HomeRoute
             }
         }
+        // 播放列表跟随来源收藏夹：夹内增删 P / 改名 / 拖拽排序后，播放页章节实时对齐
+        viewModelScope.launch {
+            playerManager.state
+                .map { it.sourceFolderId }
+                .distinctUntilChanged()
+                .flatMapLatest { folderId ->
+                    if (folderId == null) {
+                        flowOf(null)
+                    } else {
+                        combine(
+                            favoritesRepository.observeTracks(folderId),
+                            favoritesRepository.observeFolder(folderId),
+                        ) { tracks, folder -> FolderSnapshot(folderId, folder?.name, tracks) }
+                    }
+                }
+                .collect { snapshot ->
+                    if (snapshot != null) {
+                        playerManager.syncFolderQueue(
+                            folderId = snapshot.folderId,
+                            newTracks = snapshot.tracks.map { it.toTrack() },
+                            folderName = snapshot.name,
+                        )
+                    }
+                }
+        }
     }
+
+    private data class FolderSnapshot(
+        val folderId: Long,
+        val name: String?,
+        val tracks: List<cn.debubu.tingbili.core.data.db.FavoriteTrackEntity>,
+    )
     val imageFormat = prefs.imageFormat.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

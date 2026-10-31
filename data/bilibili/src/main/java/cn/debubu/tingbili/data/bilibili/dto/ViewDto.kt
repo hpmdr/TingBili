@@ -1,5 +1,7 @@
 package cn.debubu.tingbili.data.bilibili.dto
 
+import cn.debubu.tingbili.core.data.model.BvFavoritePageSnapshot
+import cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.serialization.Serializable
 
@@ -79,6 +81,30 @@ data class ViewSubtitleItem(
 )
 
 fun ViewDto.toTracks(): List<Track> = data?.toTracks() ?: emptyList()
+
+/**
+ * BV 收藏的缓存输入：把线上详情转成 core:data 的中立模型。
+ * Repository 住在 core:data，不能直接收 ViewData。
+ */
+fun ViewData.toFavoriteSnapshot(): BvFavoriteSnapshot {
+    val tracks = toTracks()
+    return BvFavoriteSnapshot(
+        bvid = bvid,
+        title = title,
+        author = owner?.name.orEmpty(),
+        authorMid = owner?.mid?.takeIf { it > 0 },
+        cover = tracks.firstOrNull { it.cover.isNotBlank() }?.cover ?: pic.normalizeBiliImageUrl(),
+        durationMs = duration * 1000L,
+        pages = tracks.mapIndexed { index, track ->
+            BvFavoritePageSnapshot(
+                cid = track.cid,
+                pageIndex = track.pageIndex ?: (index + 1),
+                title = track.title,
+                durationMs = track.durationMs,
+            )
+        },
+    )
+}
 
 fun ViewData.toTracks(): List<Track> {
     if (pages.isEmpty()) {

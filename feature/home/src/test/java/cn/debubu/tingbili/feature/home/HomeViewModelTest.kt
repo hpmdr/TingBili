@@ -1,14 +1,10 @@
-package cn.debubu.tingbili.feature.home
+﻿package cn.debubu.tingbili.feature.home
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.test.core.app.ApplicationProvider
-import cn.debubu.tingbili.core.data.db.PlaylistDao
-import cn.debubu.tingbili.core.data.db.PlaylistEntity
-import cn.debubu.tingbili.core.data.db.PlaylistSummary
-import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.media.PlayerHandle
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -84,9 +80,9 @@ class HomeViewModelTest {
         }
         override suspend fun view(bvid: String): ViewDto = viewResult
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
         override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
         override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
         override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
@@ -120,6 +116,7 @@ class HomeViewModelTest {
 
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun get(key: String): cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity? = map[key]
         override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
         override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
             rows.forEach { map[it.key] = it }
@@ -127,6 +124,7 @@ class HomeViewModelTest {
         override suspend fun pruneExpired(cutoffMs: Long) {
             map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
         }
+        override suspend fun delete(key: String) { map.remove(key) }
         override suspend fun pruneOverflow(keep: Int) {
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
         }
@@ -146,65 +144,16 @@ class HomeViewModelTest {
 
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
-        override suspend fun get(bvid: String): HistoryEntity? = null
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? = null
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? = null
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
-        override suspend fun delete(bvid: String) {}
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {}
         override suspend fun clearAll() {}
-    }
-
-    class FakePlaylistDao : PlaylistDao {
-        private var idSeq = 1L
-        private val playlists = mutableListOf<PlaylistEntity>()
-        private val tracks = mutableListOf<PlaylistTrackEntity>()
-        override suspend fun insert(p: PlaylistEntity): Long { val id = idSeq++; playlists.add(p.copy(id = id)); return id }
-        override suspend fun addTrack(t: PlaylistTrackEntity) { tracks.add(t) }
-        override suspend fun getTracks(id: Long): List<PlaylistTrackEntity> = tracks.filter { it.playlistId == id }
-        override fun observePlaylists(): Flow<List<PlaylistEntity>> = flowOf(playlists)
-        override fun observePlaylistSummaries(): Flow<List<PlaylistSummary>> = flowOf(
-            playlists.map { playlist ->
-                val playlistTracks = tracks.filter { it.playlistId == playlist.id }
-                PlaylistSummary(
-                    playlist = playlist,
-                    trackCount = playlistTracks.size,
-                    totalDurationMs = playlistTracks.sumOf { it.durationMs }
-                )
-            }
-        )
-        override suspend fun getPlaylists(): List<PlaylistEntity> = playlists.toList()
-        override suspend fun removeTrack(playlistId: Long, bvid: String, cid: Long) { tracks.removeIf { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid } }
-        override suspend fun deletePlaylist(id: Long) { playlists.removeIf { it.id == id } }
-        override suspend fun clearTracks(playlistId: Long) { tracks.removeIf { it.playlistId == playlistId } }
-        override suspend fun updateOrder(playlistId: Long, bvid: String, cid: Long, newOrder: Int) {
-            val idx = tracks.indexOfFirst { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
-            if (idx >= 0) tracks[idx] = tracks[idx].copy(order = newOrder)
-        }
-
-        override suspend fun updateTrackMeta(playlistId: Long, bvid: String, cid: Long, videoTitle: String?, pageIndex: Int?) {
-            val idx = tracks.indexOfFirst { it.playlistId == playlistId && it.bvid == bvid && it.cid == cid }
-            if (idx >= 0) tracks[idx] = tracks[idx].copy(videoTitle = videoTitle, pageIndex = pageIndex)
-        }
-        override fun observePlaylist(id: Long): Flow<PlaylistEntity?> = flowOf(playlists.firstOrNull { it.id == id })
-        override fun observeTracks(id: Long): Flow<List<PlaylistTrackEntity>> = flowOf(tracks.filter { it.playlistId == id }.sortedBy { it.order })
-        override suspend fun updateName(playlistId: Long, name: String) {
-            val idx = playlists.indexOfFirst { it.id == playlistId }
-            if (idx >= 0) playlists[idx] = playlists[idx].copy(name = name)
-        }
-        override suspend fun getPlaylist(id: Long): PlaylistEntity? = playlists.firstOrNull { it.id == id }
-        override suspend fun getPlaylistByBvid(bvid: String): PlaylistEntity? =
-            playlists.firstOrNull { it.sourceBvid == bvid }
-        override fun observePlaylistByBvid(bvid: String): Flow<PlaylistEntity?> =
-            flowOf(playlists.firstOrNull { it.sourceBvid == bvid })
-        override suspend fun updateCover(playlistId: Long, cover: String) {
-            val idx = playlists.indexOfFirst { it.id == playlistId }
-            if (idx >= 0) playlists[idx] = playlists[idx].copy(cover = cover)
-        }
-        override suspend fun countTracks(): Int = tracks.size
-        fun addedCount() = tracks.size
     }
 
     class FakeHomeSnapshotDao : HomeSnapshotDao {
@@ -218,7 +167,6 @@ class HomeViewModelTest {
     private lateinit var fakeApi: FakeBiliApi
     private lateinit var repo: BiliRepository
     private lateinit var player: PlayerManager
-    private lateinit var playlistDao: FakePlaylistDao
     private lateinit var snapshotDao: FakeHomeSnapshotDao
     private lateinit var prefs: PreferencesRepository
 
@@ -228,10 +176,13 @@ class HomeViewModelTest {
         fakeApi = FakeBiliApi()
         repo = BiliRepository(fakeApi)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        prefs = PreferencesRepository(androidx.datastore.preferences.core.PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("test_prefs") })
+        prefs = PreferencesRepository(
+            androidx.datastore.preferences.core.PreferenceDataStoreFactory.create {
+                context.preferencesDataStoreFile("test_prefs_${System.nanoTime()}")
+            }
+        )
         val resolvers = cn.debubu.tingbili.data.bilibili.BiliMediaResolvers(repo, prefs)
         player = PlayerManager(FakePlayerHandle(), FakeHistoryDao(), prefs, resolvers, resolvers, resolvers, FakePlayUrlCacheDao(), FakePlayQueueDao(), context)
-        playlistDao = FakePlaylistDao()
         snapshotDao = FakeHomeSnapshotDao()
     }
 
@@ -242,14 +193,14 @@ class HomeViewModelTest {
 
     @Test
     fun `home exposes recommended paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         val pagingData = vm.pagingFlow.first()
         assertNotNull(pagingData)
     }
 
     @Test
     fun `refresh emits new paging data`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         vm.pagingFlow.first()
         vm.refresh()
         // 常驻流：刷新后必有新一份 PagingData
@@ -266,7 +217,7 @@ class HomeViewModelTest {
             tracksJson = json.encodeToString(tracks),
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
         assertEquals(1, vm.snapshotTracks.value?.size)
         vm.viewModelScope.cancel()
@@ -275,7 +226,7 @@ class HomeViewModelTest {
     @Test
     fun `scroll top request surfaces as tick`() = runTest(dispatcher) {
         val bus = cn.debubu.tingbili.core.ui.HomeScrollTopBus()
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, bus)
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, bus)
         assertEquals(0, vm.scrollTopTick.value)
         bus.requestScrollTop()
         assertEquals(1, vm.scrollTopTick.value)
@@ -312,9 +263,9 @@ class HomeViewModelTest {
             }
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
             override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
             override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
@@ -337,9 +288,9 @@ class HomeViewModelTest {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = throw RuntimeException("network error")
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
             override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
             override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
@@ -352,7 +303,7 @@ class HomeViewModelTest {
 
     @Test
     fun `showBottomSheet expands BV via view`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         vm.showBottomSheetForBv("BV1xx")
         advanceUntilIdle()
         assertTrue(vm.showBottomSheet.first())
@@ -360,18 +311,6 @@ class HomeViewModelTest {
         assertNotNull(tracks)
         assertEquals(2, tracks!!.size)
         assertEquals(1001L, tracks[0].cid)
-    }
-
-    @Test
-    fun `addToPlaylist single and all`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
-        val track = Track(bvid = "BV1xx", cid = 1001, title = "T1", author = "a", cover = "", durationMs = 60000, subtitleUrl = null)
-        vm.addToPlaylist(track)
-        advanceUntilIdle()
-        assertEquals(1, playlistDao.addedCount())
-        vm.addToPlaylist(listOf(track, track.copy(cid = 1002)))
-        advanceUntilIdle()
-        assertEquals(3, playlistDao.addedCount())
     }
 
     @Test
@@ -398,10 +337,11 @@ class HomeViewModelTest {
             tracksJson = json.encodeToString(tracks),
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
-        advanceUntilIdle()
-        assertEquals(1, vm.snapshotTracks.first()?.size)
-        assertEquals("BV1xx", vm.snapshotTracks.first()!![0].bvid)
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        // init 在 Dispatchers.IO 里读快照；先等 keyword 初始化完成，再断言快照
+        vm.keyword.first { it.isNotBlank() }
+        assertEquals(1, vm.snapshotTracks.value?.size)
+        assertEquals("BV1xx", vm.snapshotTracks.value!![0].bvid)
     }
 
     @Test
@@ -416,7 +356,7 @@ class HomeViewModelTest {
 
     @Test
     fun `snapshot empty when no cache`() = runTest(dispatcher) {
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         advanceUntilIdle()
         assertEquals(null, vm.snapshotTracks.first())
     }
@@ -424,7 +364,7 @@ class HomeViewModelTest {
     @Test
     fun `no cache resolves a keyword and starts paging`() = runTest(dispatcher) {
         prefs.clearSearchHistory()
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
         vm.viewModelScope.cancel()
     }
@@ -438,7 +378,7 @@ class HomeViewModelTest {
             tracksJson = json.encodeToString(listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))),
             updatedAt = System.currentTimeMillis()
         )
-        val vm = HomeViewModel(repo, prefs, player, playlistDao, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
+        val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())
         assertEquals("有声小说", vm.keyword.first { it.isNotBlank() })
         assertEquals(null, vm.snapshotTracks.value)
         vm.viewModelScope.cancel()
@@ -468,9 +408,9 @@ class HomeViewModelTest {
                 SearchDto(code = -412, message = "请求被拦截")
             override suspend fun view(bvid: String): ViewDto = limitedApi.view(bvid)
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = limitedApi.playUrl(bvid, cid, fnval)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = limitedApi.playUrl(bvid, cid, fnval)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = limitedApi.subtitle(bvid, cid)
-            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
             override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
             override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()

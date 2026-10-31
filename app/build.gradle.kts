@@ -124,7 +124,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":data:bilibili"))
     implementation(project(":feature:home"))
-    implementation(project(":feature:playlist"))
+    implementation(project(":feature:favorites"))
     implementation(project(":feature:history"))
     implementation(project(":feature:player"))
     implementation(project(":feature:mine"))

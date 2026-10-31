@@ -67,9 +67,11 @@ class LoginScreenTest {
             LoginScreen(onBack = {}, onSuccess = {}, vm = viewModel(), autoStartQr = false)
         }
         composeTestRule.onNodeWithText("Cookie").performClick()
-        composeTestRule.onNodeWithText("Cookie 导入").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("如何获取 Cookie", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
         // 普通用户能看懂的复制路径：电脑登录 → F12 → 任意请求 → 右键 Copy value
-        composeTestRule.onNodeWithText("任意一个请求", substring = true)
+        composeTestRule.onNodeWithText("任意一条请求", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("复制值", substring = true)

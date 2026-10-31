@@ -23,6 +23,15 @@ data class PlayQueueSnapshotEntity(
     val tracksJson: String = "[]",
     val currentIndex: Int = -1,
     val sourceTitle: String? = null,
+    /**
+     * 队列来源的本地收藏夹 id（非空 = 该队列跟随收藏夹内容变化）。
+     * 搜索/历史/BV 分 P 等其它来源为 null。
+     */
+    val sourceFolderId: Long? = null,
+    /** 当前播放列表的顺序（0=正序，1=倒序）；只属于这条队列 */
+    val playOrder: Int = 0,
+    /** 当前播放列表的随机开关（只管开关，随机方式在播放设置里） */
+    val shuffleEnabled: Boolean = false,
     val updatedAt: Long = 0L,
 )
 

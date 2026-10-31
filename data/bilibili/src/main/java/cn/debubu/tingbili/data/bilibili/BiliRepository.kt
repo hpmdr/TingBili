@@ -6,7 +6,7 @@ import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.data.bilibili.dto.BiliFavFolder
 import cn.debubu.tingbili.data.bilibili.dto.BiliSpaceVideo
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleFile
-import cn.debubu.tingbili.data.bilibili.dto.toFolders
+import cn.debubu.tingbili.data.bilibili.dto.toAllFolders
 import cn.debubu.tingbili.data.bilibili.dto.toSpaceVideos
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleTrack
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleResult
@@ -190,8 +190,10 @@ class BiliRepository @Inject constructor(
         bvid: String,
         cid: Long,
         preferQuality: Int = AudioQuality.DEFAULT_CODE,
+        /** true = 不带登录 Cookie 走游客身份（只在高档被风控时兜底，音质可能降级） */
+        guest: Boolean = false,
     ): Result<String> = try {
-        val dto = api.playUrl(bvid, cid, qn = preferQuality)
+        val dto = api.playUrl(bvid, cid, qn = preferQuality, guest = guest)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
@@ -257,10 +259,10 @@ class BiliRepository @Inject constructor(
 
     // ── 我的页:B站账号体系(只读,需登录 Cookie) ──
 
-    suspend fun getFavFolders(upMid: Long, pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliFavFolder>, Boolean>> = try {
-        val dto = api.favFolders(pn, ps, upMid)
+    suspend fun getAllFavFolders(upMid: Long): Result<List<BiliFavFolder>> = try {
+        val dto = api.favFoldersAll(upMid)
         if (dto.code != 0) Result.Error(dto.message.ifBlank { "fav folders failed: code ${dto.code}" })
-        else Result.Success(dto.toFolders())
+        else Result.Success(dto.toAllFolders())
     } catch (e: Exception) {
         Result.Error(e.message ?: "fav folders failed", e)
     }

@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -20,6 +21,14 @@ class SettingsViewModel @Inject constructor(
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
     fun setStep(v: Int) {
         viewModelScope.launch { prefs.setStep(v.coerceIn(5, 60)) }
+    }
+
+    /** 随机播放方式（洗牌 / 纯随机；开关本身在播放列表里，不全局常开） */
+    val randomPlayMode: StateFlow<RandomPlayMode> = prefs.randomPlayMode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), RandomPlayMode.SHUFFLE
+    )
+    fun setRandomPlayMode(mode: RandomPlayMode) {
+        viewModelScope.launch { prefs.setRandomPlayMode(mode) }
     }
 
     /** 字幕字号四档（相对系数，跟随系统缩放；0.85 小 / 1.0 标准 / 1.15 大 / 1.3 特大） */

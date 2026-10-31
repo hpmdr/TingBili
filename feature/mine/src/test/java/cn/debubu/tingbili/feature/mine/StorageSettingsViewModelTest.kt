@@ -1,4 +1,4 @@
-package cn.debubu.tingbili.feature.mine
+﻿package cn.debubu.tingbili.feature.mine
 
 import android.content.Context
 import androidx.media3.common.MediaItem
@@ -101,6 +101,7 @@ class StorageSettingsViewModelTest {
 
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun get(key: String): cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity? = map[key]
         override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
         override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
             rows.forEach { map[it.key] = it }
@@ -108,6 +109,7 @@ class StorageSettingsViewModelTest {
         override suspend fun pruneExpired(cutoffMs: Long) {
             map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
         }
+        override suspend fun delete(key: String) { map.remove(key) }
         override suspend fun pruneOverflow(keep: Int) {
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
         }
@@ -127,25 +129,26 @@ class StorageSettingsViewModelTest {
 
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
-        override suspend fun get(bvid: String): HistoryEntity? = null
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? = null
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? = null
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
-        override suspend fun delete(bvid: String) {}
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {}
         override suspend fun clearAll() {}
     }
 
     class FakeBiliApi : BiliApi {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto(code = 0)
         override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto =
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto =
             PlayUrlDto(code = 0, data = PlayUrlData(dash = DashData(audio = listOf(DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): FavFolderDto = FavFolderDto()
+        override suspend fun favFoldersAll(upMid: Long): FavFolderDto = FavFolderDto()
         override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): FavDetailDto = FavDetailDto()
         override suspend fun toview(pn: Int, ps: Int): ToviewDto = ToviewDto()
         override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): BiliHistoryDto = BiliHistoryDto()

@@ -42,8 +42,9 @@ PiliPlus `VideoUtils.findTargetAudio`（`lib/utils/video_utils.dart`）取
 ## 4. 切换不断播
 
 `PlayerViewModel.selectAudioQuality`：先落盘偏好 → `PlayerManager.refreshCurrentUrl`
-（沿用过期重试的原位 replace 模式：重解析→`replaceMediaItem`→回到原进度→保持播/停态）
-→ 面板本地按新偏好重算有效档。失败（无在播/解析失败）Toast 并保留当前播放。
+（删掉该集直链缓存 → 换回惰性 item → 回原进度 → 保持播/停态；直链在真正打开时按新偏好
+重新解析，见 [PLAYBACK_URL_RESOLUTION](./PLAYBACK_URL_RESOLUTION.md)）→ 面板本地按新偏好重算有效档。
+失败（无在播）Toast 并保留当前播放；解析失败会走播放错误链路提示「音源解析失败」。
 
 ## 5. 落点
 

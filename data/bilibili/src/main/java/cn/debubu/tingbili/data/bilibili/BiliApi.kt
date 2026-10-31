@@ -10,6 +10,7 @@ import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SubtitleDto
 import cn.debubu.tingbili.data.bilibili.dto.ViewDto
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Query
 
 interface BiliApi {
@@ -39,14 +40,15 @@ interface BiliApi {
         @Query("bvid") bvid: String,
         @Query("cid") cid: Long,
         @Query("fnval") fnval: Int = 16,
-        @Query("qn") qn: Int? = null
+        @Query("qn") qn: Int? = null,
+        /** 游客标记：拦截器据此跳过登录 Cookie（风控兜底） */
+        @Header(WbiInterceptor.GUEST_HEADER) guest: Boolean = false,
     ): PlayUrlDto
 
     // B站账号体系(我的页二级页,只读):收藏夹/夹内/稍后看/历史,对标 PiliPlus
-    @GET("/x/v3/fav/folder/created/list")
-    suspend fun favFolders(
-        @Query("pn") pn: Int = 1,
-        @Query("ps") ps: Int = 20,
+    // list-all 一次拉全，不再分页
+    @GET("/x/v3/fav/folder/created/list-all")
+    suspend fun favFoldersAll(
         @Query("up_mid") upMid: Long = 0L,
     ): FavFolderDto
 

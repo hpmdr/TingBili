@@ -6,6 +6,8 @@ import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.toTrack
+import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,11 +28,18 @@ import kotlinx.coroutines.sync.withPermit
 class HistoryViewModel @Inject constructor(
     private val dao: HistoryDao,
     private val player: PlayerManager,
-    private val repo: BiliRepository
+    private val repo: BiliRepository,
+    private val favoritesRepository: FavoritesRepository,
 ) : ViewModel() {
 
+    /** 一个播单（BV / 收藏夹）一行，按最后播放时间倒序 */
     val history: StateFlow<List<HistoryEntity>> =
         dao.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** 当前仍存在的收藏夹 id：null=尚未加载（先按可用展示），决定历史行「收藏夹」跳转是否可用 */
+    val folderIds: StateFlow<Set<Long>?> = favoritesRepository.observeFolders()
+        .map { folders -> folders.map { it.id }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** bvid -> 该视频的 Track 列表（标题/UP主/封面/每P时长），用于列表展示，按 bvid 懒加载缓存 */
     private val _videoInfo = MutableStateFlow<Map<String, List<Track>>>(emptyMap())
@@ -48,8 +58,14 @@ class HistoryViewModel @Inject constructor(
         combine(_startingResume, player.state) { starting, s -> starting || s.isLoading }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    /** 正在等起播的那条记录，键为 "bvid:cid" */
+    /** 正在等起播的那条记录，键为 "sourceType:sourceId" */
     val pendingKey: StateFlow<String?> = _pendingKey.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+    fun consumeMessage() {
+        _message.value = null
+    }
 
     /** 详情并发上限：进页瞬间 60 个 BV 不会同时打出去，超限的排队 */
     private val videoInfoSemaphore = Semaphore(4)
@@ -70,27 +86,81 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 续播：
+     * - 收藏夹播单：夹还在且这一集还在 → 恢复夹当前队列；
+     * - 否则回退 BV 分 P；
+     * - BV 播单：直接恢复 BV 分 P。
+     */
     fun resume(h: HistoryEntity) {
-        val key = "${h.bvid}:${h.cid}"
+        val key = "${h.sourceType}:${h.sourceId}"
         if (_startingResume.value) return
         viewModelScope.launch {
             _pendingKey.value = key
             _startingResume.value = true
             try {
-                val result = repo.getView(h.bvid)
-                val tracks = when (result) {
-                    is Result.Success -> result.data
-                    is Result.Error -> return@launch
+                if (h.sourceType == HistoryEntity.SOURCE_FOLDER) {
+                    if (resumeFolder(h)) return@launch
                 }
-                if (tracks.isEmpty()) return@launch
-                val idx = tracks.indexOfFirst { it.cid == h.cid }.coerceAtLeast(0)
-                player.play(tracks, idx, "播放历史")
-                player.seekTo(h.positionMs)
+                resumeBv(h)
             } finally {
                 _startingResume.value = false
                 _pendingKey.value = null
             }
         }
+    }
+
+    /** @return true=已在收藏夹队列起播；false=需要回退 BV */
+    private suspend fun resumeFolder(h: HistoryEntity): Boolean {
+        val folderId = h.sourceId.toLongOrNull()
+        if (folderId == null) {
+            _message.value = "原收藏夹已不可用，已按 BV 续播"
+            return false
+        }
+        val folder = favoritesRepository.getFolder(folderId)
+        if (folder == null) {
+            _message.value = "原收藏夹已删除，已按 BV 续播"
+            return false
+        }
+        val tracks = favoritesRepository.getTracks(folderId).map { it.toTrack() }
+        val idx = tracks.indexOfFirst { it.bvid == h.bvid && it.cid == h.cid }
+        if (idx < 0) {
+            _message.value = "该集已移出收藏夹，已按 BV 续播"
+            return false
+        }
+        player.play(
+            tracks,
+            idx,
+            folder.name,
+            startPositionMs = h.positionMs.coerceAtLeast(0L),
+            sourceFolderId = folderId,
+        )
+        return true
+    }
+
+    private suspend fun resumeBv(h: HistoryEntity) {
+        val tracks = when (val result = repo.getView(h.bvid)) {
+            is Result.Success -> result.data
+            is Result.Error -> {
+                _message.value = result.msg.ifBlank { "续播失败" }
+                return
+            }
+        }
+        if (tracks.isEmpty()) {
+            _message.value = "暂无分 P"
+            return
+        }
+        val idx = tracks.indexOfFirst { it.cid == h.cid }
+        if (idx < 0) {
+            _message.value = "该分 P 已失效"
+            return
+        }
+        player.play(
+            tracks,
+            idx,
+            "播放历史",
+            startPositionMs = h.positionMs.coerceAtLeast(0L),
+        )
     }
 
     /** Back-compat overload for tests that pass bvid/cid directly */
@@ -102,8 +172,9 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch { dao.clearAll() }
     }
 
-    fun delete(bvid: String) {
-        viewModelScope.launch { dao.delete(bvid) }
+    /** 删一条播单历史；不会删除收藏夹本身 */
+    fun delete(h: HistoryEntity) {
+        viewModelScope.launch { dao.deleteSource(h.sourceType, h.sourceId) }
     }
 }
 

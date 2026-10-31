@@ -37,7 +37,7 @@ fun MainBottomNav(
     val scope = rememberCoroutineScope()
     val currentPage = pagerState.currentPage
     val isHomeSelected = currentPage == 0
-    val isPlaylistSelected = currentPage == 1
+    val isFavoritesSelected = currentPage == 1
     val isHistorySelected = currentPage == 2
     val isMeSelected = currentPage == 3
     // M3 默认配色：选中指示块为 secondaryContainer 胶囊
@@ -59,11 +59,11 @@ fun MainBottomNav(
             label = { Text("搜索") }
         )
         NavigationBarItem(
-            selected = isPlaylistSelected,
+            selected = isFavoritesSelected,
             onClick = { scope.launch { pagerState.scrollToPage(1) } },
             icon = {
                 Icon(
-                    imageVector = if (isPlaylistSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
+                    imageVector = if (isFavoritesSelected) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
                     contentDescription = null
                 )
             },

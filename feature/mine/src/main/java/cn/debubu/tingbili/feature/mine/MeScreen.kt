@@ -94,7 +94,6 @@ fun MeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val darkTheme = LocalDarkTheme.current
-    val playlistCount by vm.playlistCount.collectAsStateWithLifecycle()
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
     val totalListenMs by vm.totalListenMs.collectAsStateWithLifecycle()
@@ -128,7 +127,7 @@ fun MeScreen(
             onUserClick = { if (session == null) onOpenLogin() },
         )
 
-        // ── 2. 悬浮四宫格数据卡:B站收藏/历史/稍后听 + 离线缓存 ──
+        // ── 2. 悬浮四宫格数据卡:B站收藏/历史/稍后再看 + 离线缓存 ──
         // 首页 Tab 的收藏/历史是本 app 本地数据,这里只进 B站账号体系。
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             DashboardGrid(
@@ -434,7 +433,7 @@ private fun DashboardGrid(
             GridItem(
                 icon = Icons.Filled.BookmarkBorder, tint = Color(0xFFA855F7),
                 bg = if (darkTheme) Color(0xFF231038) else Color(0xFFF3E8FF),
-                title = "稍后听", value = biliValue, onClick = onBiliToview, weight = 1f
+                title = "稍后再看", value = biliValue, onClick = onBiliToview, weight = 1f
             )
             GridItem(
                 icon = Icons.Filled.Download, tint = Color(0xFFF59E0B),

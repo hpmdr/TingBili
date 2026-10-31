@@ -1,5 +1,7 @@
 package cn.debubu.tingbili.feature.history
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,9 +44,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.episodePageLabel
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.playedProgressLabel
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -52,12 +56,23 @@ import coil3.compose.AsyncImage
 
 @Composable
 fun HistoryScreen(
-    vm: HistoryViewModel = hiltViewModel()
+    onFolderClick: (Long) -> Unit = {},
+    vm: HistoryViewModel = hiltViewModel(),
 ) {
     val list by vm.history.collectAsStateWithLifecycle()
     val info by vm.videoInfo.collectAsStateWithLifecycle()
+    val folderIds by vm.folderIds.collectAsStateWithLifecycle()
     val startingResume by vm.startingResume.collectAsStateWithLifecycle()
     val pendingKey by vm.pendingKey.collectAsStateWithLifecycle()
+    val message by vm.message.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(message) {
+        message?.let {
+            vm.consumeMessage()
+            snackbarHostState.showSnackbar(it)
+        }
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -70,7 +85,8 @@ fun HistoryScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         if (list.isEmpty()) {
             Box(
@@ -85,16 +101,24 @@ fun HistoryScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(list, key = { "${it.bvid}:${it.cid}" }) { item ->
+                items(list, key = { "${it.sourceType}:${it.sourceId}" }) { item ->
                     // 可见才拉：行进入组合才发 view 请求，进页不再 N 路齐发
                     LaunchedEffect(item.bvid) { vm.prefetch(item.bvid) }
                     val track = info[item.bvid].orEmpty().firstOrNull { it.cid == item.cid }
+                    val isFolder = item.sourceType == HistoryEntity.SOURCE_FOLDER
+                    val folderId = item.sourceId.toLongOrNull()
+                    val folderExists = isFolder && folderId != null &&
+                        (folderIds?.contains(folderId) ?: true)
                     HistoryRow(
                         entity = item,
                         track = track,
-                        isPending = startingResume && pendingKey == "${item.bvid}:${item.cid}",
+                        isFolder = isFolder,
+                        folderExists = folderExists,
+                        isPending = startingResume &&
+                            pendingKey == "${item.sourceType}:${item.sourceId}",
                         onResume = { vm.resume(item) },
-                        onDelete = { vm.delete(item.bvid) }
+                        onFolderClick = { folderId?.let(onFolderClick) },
+                        onDelete = { vm.delete(item) }
                     )
                 }
             }
@@ -106,23 +130,40 @@ fun HistoryScreen(
 private fun HistoryRow(
     entity: HistoryEntity,
     track: Track?,
+    isFolder: Boolean,
+    folderExists: Boolean,
     isPending: Boolean = false,
     onResume: () -> Unit,
+    onFolderClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     val imageFormat = LocalImageFormat.current
-    // 主标题用 BV 总标题（“在听哪本书”）；章节行放分 P 名/UP主，避免和主标题重复
     val bvTitle = track?.videoTitle?.takeIf { it.isNotBlank() }
         ?: track?.title?.takeIf { it.isNotBlank() }
+        ?: entity.sourceTitle?.takeIf { it.isNotBlank() }
         ?: entity.bvid
+    // 收藏夹记录：主标题是夹名，副标题才是 BV 标题；BV 记录直接用 BV 标题
+    val mainTitle = if (isFolder) {
+        entity.sourceTitle?.takeIf { it.isNotBlank() } ?: "收藏夹"
+    } else {
+        bvTitle
+    }
+    val folderSubtitle = if (isFolder && bvTitle != mainTitle) bvTitle else null
+
     // 行内字符串拼装（trim/startsWith/SimpleDateFormat）每帧都贵，key 变化才重算
     val chapterText = remember(track, bvTitle) { historyChapterLine(track, bvTitle) }
     val coverUrl = remember(track?.cover, imageFormat) {
         track?.cover?.takeIf { it.isNotBlank() }?.biliImage(BiliImageVariant.ListThumb, imageFormat)
     }
     val dateText = remember(entity.updatedAt) { formatDate(entity.updatedAt) }
-    val progressText = remember(track?.pageIndex, entity.positionMs, track?.durationMs) {
-        "上次听到 " + playedProgressLabel(track?.pageIndex, entity.positionMs, track?.durationMs)
+    val progressText = remember(track?.pageIndex, entity.positionMs, track?.durationMs, track?.videoTitle) {
+        // 单 P 不显示 P1，与播放页/迷你/通知栏统一
+        val page = track?.let { episodePageLabel(it.title, it.videoTitle, it.pageIndex) }
+        "上次听到 " + playedProgressLabel(
+            pageIndex = if (page != null) track?.pageIndex else null,
+            positionMs = entity.positionMs,
+            durationMs = track?.durationMs,
+        )
     }
 
     Card(
@@ -142,7 +183,7 @@ private fun HistoryRow(
                 model = coverUrl,
                 contentDescription = null,
                 // 正方封面：横/方/竖源都只居中裁掉边缘，主体不断头；
-                // 96dp 与右侧三段文字等高，不再显小
+                // 96dp 与右侧文字区等高，不再显小
                 modifier = Modifier
                     .size(96.dp)
                     .clip(RoundedCornerShape(12.dp)),
@@ -150,14 +191,33 @@ private fun HistoryRow(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = bvTitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = mainTitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    SourceBadge(
+                        isFolder = isFolder,
+                        folderExists = folderExists,
+                        onClick = onFolderClick,
+                    )
+                }
+                folderSubtitle?.let {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = chapterText,
@@ -174,7 +234,7 @@ private fun HistoryRow(
                         maxLines = 1
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = progressText,
                     style = MaterialTheme.typography.bodySmall,
@@ -183,7 +243,7 @@ private fun HistoryRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 track?.durationMs?.takeIf { it > 0 }?.let { duration ->
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(Modifier.height(6.dp))
                     val fraction = (entity.positionMs.toFloat() / duration).coerceIn(0f, 1f)
                     LinearProgressIndicator(
                         progress = { fraction },
@@ -216,6 +276,36 @@ private fun HistoryRow(
 }
 
 /**
+ * 类型 badge：收藏夹可点跳转（`收藏夹 ›`），删除后置灰；
+ * BV 只做类型标识。中性色，不使用主题强调色。
+ */
+@Composable
+private fun SourceBadge(
+    isFolder: Boolean,
+    folderExists: Boolean,
+    onClick: () -> Unit,
+) {
+    val text = when {
+        !isFolder -> "BV"
+        folderExists -> "收藏夹 ›"
+        else -> "收藏夹已删除"
+    }
+    val enabled = isFolder && folderExists
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = if (enabled || !isFolder) MaterialTheme.colorScheme.onSurfaceVariant
+        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+/**
  * 章节行：`P7 · 云南虫谷07 · 肉饼搞机`。
  * 分 P 名常以 BV 总标题开头（如“国风版鬼吹灯第四季·云南虫谷07”），会剥掉这段重复前缀；
  * 剥完只剩纯数字（`07`）时整段省掉，避免出现“P7 · 07”。
@@ -231,9 +321,9 @@ private fun historyChapterLine(track: Track?, bvTitle: String): String {
     }
     val keepName = short.isNotBlank() && short.any { !it.isDigit() } && short != bvTitle
     return buildList {
-        val page = track.pageIndex
-        if (page != null && page > 0 && track.pageCount > 1) {
-            add(if (keepName) "P$page · $short" else "P$page")
+        val page = episodePageLabel(track.title, track.videoTitle, track.pageIndex)
+        if (page != null) {
+            add(if (keepName) "$page · $short" else page)
         } else if (keepName) {
             add(short)
         }

@@ -37,6 +37,15 @@ class HistoryTracker(
         suspend fun onPersistPosition(pos: Long)
 
         /**
+         * 当前队列来源收藏夹 id：只有“从收藏夹播放”时非空；
+         * 搜索/详情/BV 页/历史续播等返回 null。
+         */
+        fun sourceFolderId(): Long? = null
+
+        /** 当前队列来源标题（收藏夹名）；非收藏夹来源可为 null。 */
+        fun sourceTitle(): String? = null
+
+        /**
          * 检测到「墙钟流逝 ≫ 播放位置前进」：进程被系统冻结/深度睡眠期间
          * DSP 仍独立推进，恢复后位置源可能已和实际出声脱节，调用方决定是否重同步。
          */
@@ -59,11 +68,13 @@ class HistoryTracker(
         const val PAUSED_SAMPLE_EVERY_TICKS = 4
     }
 
-    // 本地累计收听时长统计：当前条目累计值 + 上次 tick 位置（排除 seek 跳变）
+    // 本地累计收听时长统计：当前播单累计值 + 上次 tick 位置（排除 seek 跳变）
     private var listenAccumMs = 0L
     private var lastTickPos = -1L
-    /** 历史按 BV 归属：同一 BV 换分 P 不算换条目，累计收听接着算 */
+    /** 当前播单来源（BV/收藏夹）+ 分集：同一播单换 P 保留累计，换播单重新载入 */
+    private var lastSourceKey: String? = null
     private var lastListenBvid: String? = null
+    private var lastListenCid: Long? = null
     private var lastSaveAtMs = 0L
     // 冻结检测：上一次 tick 的墙钟与播放位置（与「累计收听」的 lastTickPos 分开，避免互相污染）
     private var lastTickWallMs = 0L
@@ -90,6 +101,8 @@ class HistoryTracker(
         lastSaveAtMs = nowMs
         lastTickWallMs = nowMs
         lastPosForStall = -1L
+        // 重开窗口：下一 tick 重新按当前播单载入已累计时长
+        lastSourceKey = null
         // 开播瞬间同步基线：之前累积的 underrun 不算本轮证据
         lastSeenUnderruns = underrunCount()
         job = scope?.launch {
@@ -128,10 +141,12 @@ class HistoryTracker(
                 }
                 lastPosForStall = pos
                 l.onTick(pos, transport.bufferedPosition)
-                noteProgress(l, pos, force = false)
+                val track = l.currentTrack() ?: continue
+                val source = sourceOf(l, track)
+                noteProgress(l, track, pos, force = false, source = source)
                 // 暂停期间 continue 不推进 lastSaveAt：恢复后若已过期立刻补一次落盘
                 if (clockMs() - lastSaveAtMs >= HISTORY_SAVE_INTERVAL_MS) {
-                    saveNow(l, pos)
+                    saveNow(l, track, pos, source)
                     lastSaveAtMs = clockMs()
                 }
             }
@@ -146,38 +161,75 @@ class HistoryTracker(
         val l = listener ?: return
         val track = l.currentTrack() ?: return
         val pos = l.statePositionMs()
-        if (track.bvid != lastListenBvid) noteProgressKeyChanged(track, pos)
-        saveNow(l, pos)
+        // 来源/曲目在 flush 开始时捕获，避免 await IO 期间队列切换后把旧曲写成新来源
+        val source = sourceOf(l, track)
+        // force 不累计 delta，但会在来源/分集变化时重载播单累计值
+        noteProgress(l, track, pos, force = true, source = source)
+        saveNow(l, track, pos, source)
         lastSaveAtMs = clockMs()
     }
 
     /**
-     * tick/force 共用的累计收听记账（无 IO，除了换 BV 时重载已有累计值）。
-     * force 写不参与累计（seek 落点/切歌瞬间不算收听）。
+     * tick/force 共用的累计收听记账。
+     * - 换播单：从该播单历史行载入已累计时长；
+     * - 同播单换 P：保留播单累计，只重置位置基线；
+     * - force 写不参与累计（seek 落点/切歌瞬间不算收听）。
      */
-    private suspend fun noteProgress(l: Listener, pos: Long, force: Boolean) {
-        val track = l.currentTrack() ?: return
-        if (track.bvid != lastListenBvid) {
-            noteProgressKeyChanged(track, pos)
-        } else if (!force) {
+    private suspend fun noteProgress(
+        l: Listener,
+        track: Track,
+        pos: Long,
+        force: Boolean,
+        source: Source,
+    ) {
+        val key = "${source.type}:${source.id}"
+        if (key != lastSourceKey) {
+            listenAccumMs = try {
+                historyDao.getSource(source.type, source.id)?.listenDurationMs ?: 0L
+            } catch (_: Exception) {
+                0L
+            }
+            lastSourceKey = key
+            lastListenBvid = track.bvid
+            lastListenCid = track.cid
+            lastTickPos = pos
+            return
+        }
+        if (track.bvid != lastListenBvid || track.cid != lastListenCid) {
+            // 同一播单换分集：累计时长接着算，但位置 delta 必须从新集基线开始
+            lastListenBvid = track.bvid
+            lastListenCid = track.cid
+            lastTickPos = pos
+            return
+        }
+        if (!force) {
             val delta = pos - lastTickPos
             if (delta in 1..(HISTORY_SAVE_INTERVAL_MS + 2000L)) listenAccumMs += delta
             lastTickPos = pos
         }
     }
 
-    private suspend fun noteProgressKeyChanged(track: Track, pos: Long) {
-        listenAccumMs = try {
-            historyDao.get(track.bvid)?.listenDurationMs ?: 0L
-        } catch (_: Exception) {
-            0L
+    /** 当前播单来源：收藏夹优先，否则归到当前 BV。 */
+    private fun sourceOf(l: Listener, track: Track): Source {
+        val folderId = l.sourceFolderId()
+        return if (folderId != null) {
+            Source(
+                type = HistoryEntity.SOURCE_FOLDER,
+                id = folderId.toString(),
+                title = l.sourceTitle()?.takeIf { it.isNotBlank() },
+            )
+        } else {
+            Source(
+                type = HistoryEntity.SOURCE_BV,
+                id = track.bvid,
+                title = track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title,
+            )
         }
-        lastListenBvid = track.bvid
-        lastTickPos = pos
     }
 
-    private suspend fun saveNow(l: Listener, pos: Long) {
-        val track = l.currentTrack() ?: return
+    private data class Source(val type: Int, val id: String, val title: String?)
+
+    private suspend fun saveNow(l: Listener, track: Track, pos: Long, source: Source) {
         try {
             historyDao.save(
                 HistoryEntity(
@@ -186,6 +238,9 @@ class HistoryTracker(
                     positionMs = pos,
                     updatedAt = System.currentTimeMillis(),
                     listenDurationMs = listenAccumMs,
+                    sourceType = source.type,
+                    sourceId = source.id,
+                    sourceTitle = source.title,
                 ),
             )
         } catch (_: Exception) {

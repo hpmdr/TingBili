@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +41,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     val stepSec: Flow<Int> = ds.data.map { it[STEP_SEC] ?: 15 }
     val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
+    /** 随机播放方式（洗牌 / 纯随机；只管方式，开关属于当前播放列表） */
+    val randomPlayMode: Flow<RandomPlayMode> = ds.data.map {
+        RandomPlayMode.fromCode(it[RANDOM_PLAY_MODE] ?: RandomPlayMode.SHUFFLE.code)
+    }
     val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
     /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
     val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
@@ -120,6 +125,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setRepeatMode(v: Int) {
         ds.edit { it[REPEAT_MODE] = v }
+    }
+
+    suspend fun setRandomPlayMode(mode: RandomPlayMode) {
+        ds.edit { it[RANDOM_PLAY_MODE] = mode.code }
     }
 
     suspend fun setSpeed(v: Float) {
@@ -278,6 +287,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     companion object {
         val STEP_SEC = intPreferencesKey("step_sec")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
+        val RANDOM_PLAY_MODE = intPreferencesKey("random_play_mode")
         val SPEED = floatPreferencesKey("speed")
         val SUBTITLE_SCALE = floatPreferencesKey("subtitle_scale")
         val AUDIO_HW_DECODE = androidx.datastore.preferences.core.booleanPreferencesKey("audio_hw_decode")

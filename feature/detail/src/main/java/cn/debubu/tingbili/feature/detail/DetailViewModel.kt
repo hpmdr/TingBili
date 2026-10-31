@@ -4,15 +4,16 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.core.data.db.FavoriteFolderEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
-import cn.debubu.tingbili.core.data.db.PlaylistDao
-import cn.debubu.tingbili.core.data.db.PlaylistEntity
-import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
+import cn.debubu.tingbili.core.data.db.latestPerTrack
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
+import cn.debubu.tingbili.data.bilibili.dto.toFavoriteSnapshot
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -57,7 +58,7 @@ class DetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repo: BiliRepository,
     private val player: PlayerManager,
-    private val playlistDao: PlaylistDao,
+    private val favoritesRepository: FavoritesRepository,
     private val historyDao: HistoryDao
 ) : ViewModel() {
 
@@ -71,6 +72,9 @@ class DetailViewModel @Inject constructor(
 
     private val _isFavorited = MutableStateFlow(false)
     val isFavorited: StateFlow<Boolean> = _isFavorited.asStateFlow()
+
+    val folders: StateFlow<List<FavoriteFolderEntity>> = favoritesRepository.observeFolders()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -91,7 +95,7 @@ class DetailViewModel @Inject constructor(
 
     /** "bvid:cid" -> 播放记录（只订阅本 BV，播放器每秒写全表时不再全量 associateBy） */
     val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeByBvid(bvid)
-        .map { list -> list.associateBy { "${it.bvid}:${it.cid}" } }
+        .map { list -> list.latestPerTrack() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** 正在播放的分P 快照（键 + 整秒进度），用于替代该行的「上次听到」 */
@@ -124,12 +128,15 @@ class DetailViewModel @Inject constructor(
     init {
         load()
         observeFavorite()
+        viewModelScope.launch {
+            runCatching { favoritesRepository.ensureDefaultFolder() }
+        }
     }
 
     private fun observeFavorite() {
         viewModelScope.launch {
-            playlistDao.observePlaylistByBvid(bvid).collect { entity ->
-                _isFavorited.value = entity != null
+            favoritesRepository.observeIsBvFavorited(bvid).collect { favorited ->
+                _isFavorited.value = favorited
             }
         }
     }
@@ -187,46 +194,48 @@ class DetailViewModel @Inject constructor(
 
     fun toggleFavorite() {
         viewModelScope.launch {
-            val existing = playlistDao.getPlaylistByBvid(bvid)
-            if (existing != null) {
-                playlistDao.deletePlaylist(existing.id)
-                playlistDao.clearTracks(existing.id)
-                _message.value = "已取消收藏"
-            } else {
-                val current = state.value as? DetailUiState.Success ?: run {
-                    _message.value = "视频信息尚未加载"
-                    return@launch
-                }
-                val video = current.video
-                val tracks = current.tracks
-                val cover = tracks.firstOrNull { it.cover.isNotBlank() }?.cover ?: video.pic
-                val pid = playlistDao.insert(
-                    PlaylistEntity(
-                        name = video.title.ifBlank { "收藏 ${video.bvid}" },
-                        cover = cover?.takeIf { it.isNotBlank() },
-                        sourceBvid = bvid,
-                        kind = "bv"
-                    )
-                )
-                var order = 0
-                tracks.forEach { t ->
-                    playlistDao.addTrack(
-                        PlaylistTrackEntity(
-                            playlistId = pid,
-                            bvid = t.bvid,
-                            cid = t.cid,
-                            title = t.title,
-                            order = order++,
-                            author = t.author,
-                            cover = t.cover,
-                            durationMs = t.durationMs,
-                            videoTitle = t.videoTitle,
-                            pageIndex = t.pageIndex
-                        )
-                    )
-                }
-                _message.value = "已收藏（${tracks.size} 集）"
+            if (_isFavorited.value) {
+                favoritesRepository.removeBvFavorite(bvid)
+                _message.value = "已取消 BV 收藏"
+                return@launch
             }
+            val current = state.value as? DetailUiState.Success ?: run {
+                _message.value = "视频信息尚未加载"
+                return@launch
+            }
+            favoritesRepository.addBvFavorite(current.video.toFavoriteSnapshot())
+            _message.value = "已收藏整本 BV"
+        }
+    }
+
+    /** 长按弹层确认：把选中的 P 加入选中的收藏夹，只加不删。 */
+    fun addTracksToFolders(folderIds: Set<Long>, tracks: List<Track>) {
+        if (folderIds.isEmpty() || tracks.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { favoritesRepository.addTracksToFolders(folderIds, tracks) }
+                .onSuccess { result ->
+                    _message.value = when {
+                        result.added > 0 && result.skipped > 0 ->
+                            "已收藏 ${result.added} 个P，${result.skipped} 个已存在"
+                        result.added > 0 -> "已收藏 ${result.added} 个P"
+                        else -> "这些 P 已在所选收藏夹中"
+                    }
+                }
+                .onFailure { _message.value = it.message ?: "加入收藏夹失败" }
+        }
+    }
+
+    /** 弹层内新建收藏夹：创建后立即收取当前选中的 P。 */
+    fun createFolderAndAdd(name: String, tracks: List<Track>) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || tracks.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                val folderId = favoritesRepository.createFolder(trimmed)
+                favoritesRepository.addTracksToFolders(setOf(folderId), tracks)
+            }.onSuccess { result ->
+                _message.value = "已新建「$trimmed」并收藏 ${result.added} 个P"
+            }.onFailure { _message.value = it.message ?: "新建收藏夹失败" }
         }
     }
 }

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
 import cn.debubu.tingbili.core.data.db.HistoryDao
-import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -18,18 +17,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
  * 「我的」页数据：
- * - 收藏数 = 歌单数；历史数 = 今日新增条数；缓存 = 音频缓存实际占用
+ * - 历史数 = 今日新增条数；缓存 = 音频缓存实际占用
  * - 听视频累计时长暂无数据源，未登录态头部显示引导文案
  */
 @HiltViewModel
 class MeViewModel @Inject constructor(
-    playlistDao: PlaylistDao,
     historyDao: HistoryDao,
     private val prefs: PreferencesRepository,
     private val audioCache: SimpleCache,
@@ -77,10 +74,6 @@ class MeViewModel @Inject constructor(
             prefs.setDarkMode(if (currentEffectiveDark) DarkMode.LIGHT else DarkMode.DARK)
         }
     }
-
-    val playlistCount: StateFlow<Int> = playlistDao.observePlaylists()
-        .map { it.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     /** 本地累计收听时长（ms），无需登录 */
     val totalListenMs: StateFlow<Long> = historyDao.observeTotalListenMs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)

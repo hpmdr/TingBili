@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.db.DEFAULT_FOLDER_ID
+import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
@@ -85,6 +87,7 @@ class PlayerViewModel @Inject constructor(
     private val auth: AuthRepository,
     private val prefs: PreferencesRepository,
     private val repo: BiliRepository,
+    private val favoritesRepository: FavoritesRepository,
     /** 字幕管线 IO 调度器（`PlayerModule` 提供 IO；单测传入 StandardTestDispatcher 保虚拟时间确定性） */
     @Named("subtitleIo") private val subtitleIo: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
@@ -108,6 +111,42 @@ class PlayerViewModel @Inject constructor(
     val isLoggedIn: StateFlow<Boolean> = auth.sessionFlow
         .map { it != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, auth.sessionFlow.value != null)
+
+    /** 当前 P 所在的收藏夹 id；换集自动重订阅 */
+    private val favoriteFolderIds: StateFlow<Set<Long>> = trackFlow
+        .flatMapLatest { track ->
+            if (track == null) {
+                flowOf(emptySet())
+            } else {
+                favoritesRepository.observeFolderIdsContaining(track.bvid, track.cid)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    /** 爱心实心只表示当前 P 在「我的最爱」，不反映手动夹 */
+    val isDefaultFavorite: StateFlow<Boolean> = favoriteFolderIds
+        .map { DEFAULT_FOLDER_ID in it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    data class PlayerFavoriteFolder(
+        val id: Long,
+        val name: String,
+        val isDefault: Boolean,
+        val checked: Boolean,
+    )
+
+    /** 长按弹层：我的最爱 + 手动夹，带当前 P 是否已在 */
+    val favoriteFolders: StateFlow<List<PlayerFavoriteFolder>> =
+        combine(favoritesRepository.observeFolders(), favoriteFolderIds) { folders, ids ->
+            folders.map { folder ->
+                PlayerFavoriteFolder(
+                    id = folder.id,
+                    name = folder.name,
+                    isDefault = folder.isDefault,
+                    checked = folder.id in ids,
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** 字幕失败重试计数：+1 即按当前曲目重走一遍 */
     private val _subtitleRetryTick = MutableStateFlow(0)
@@ -175,6 +214,53 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             trackFlow.collect { selectedSubtitleIndex.value = 0 }
         }
+        viewModelScope.launch {
+            runCatching { favoritesRepository.ensureDefaultFolder() }
+        }
+    }
+
+    // ---- 本地收藏（我的最爱 / 手动收藏夹）----
+
+    fun toggleDefaultFavorite() {
+        val track = player.state.value.currentTrack ?: return
+        viewModelScope.launch {
+            runCatching { favoritesRepository.toggleDefaultTrack(track) }
+                .onSuccess { nowFavorite ->
+                    _message.value = if (nowFavorite) "已收藏到我的最爱" else "已从我的最爱移除"
+                }
+                .onFailure { _message.value = it.message ?: "操作失败" }
+        }
+    }
+
+    fun toggleFavoriteFolder(folderId: Long) {
+        val track = player.state.value.currentTrack ?: return
+        val name = favoriteFolders.value.firstOrNull { it.id == folderId }?.name
+        viewModelScope.launch {
+            runCatching { favoritesRepository.toggleTrackInFolder(folderId, track) }
+                .onSuccess { nowFavorite ->
+                    _message.value = when {
+                        nowFavorite && name != null -> "已加入「$name」"
+                        nowFavorite -> "已加入收藏夹"
+                        name != null -> "已从「$name」移除"
+                        else -> "已从收藏夹移除"
+                    }
+                }
+                .onFailure { _message.value = it.message ?: "操作失败" }
+        }
+    }
+
+    fun createFavoriteFolderAndAdd(name: String) {
+        val trimmed = name.trim()
+        val track = player.state.value.currentTrack ?: return
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                val folderId = favoritesRepository.createFolder(trimmed)
+                favoritesRepository.addTracksToFolders(setOf(folderId), listOf(track))
+            }.onSuccess {
+                _message.value = "已新建「$trimmed」并收藏本集"
+            }.onFailure { _message.value = it.message ?: "新建收藏夹失败" }
+        }
     }
 
     /**
@@ -193,6 +279,10 @@ class PlayerViewModel @Inject constructor(
         val speed: Float = 1f,
         val repeatMode: Int = 0,
         val stepSec: Int = 15,
+        /** 当前播放列表的正/倒序（只属于这条队列） */
+        val playOrder: cn.debubu.tingbili.core.media.PlayOrder = cn.debubu.tingbili.core.media.PlayOrder.FORWARD,
+        /** 当前播放列表的随机开关 */
+        val shuffleEnabled: Boolean = false,
     )
 
     val trackUi: StateFlow<TrackUiState> = combine(player.state, prefs.stepSec) { p, stepSec ->
@@ -207,6 +297,8 @@ class PlayerViewModel @Inject constructor(
             speed = p.speed,
             repeatMode = p.repeatMode,
             stepSec = stepSec,
+            playOrder = p.playOrder,
+            shuffleEnabled = p.shuffleEnabled,
         )
     }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrackUiState())
@@ -363,9 +455,17 @@ class PlayerViewModel @Inject constructor(
 
     /** 章节点播（读常热的 player.state：uiState 自屏幕改收三层流后已无生产订阅者，读它会拿到过期初值） */
     fun playAt(index: Int) {
-        val s = player.state.value
-        if (index !in s.queue.indices) return
-        viewModelScope.launch { player.play(s.queue, index, s.sourceTitle) }
+        player.playAt(index)
+    }
+
+    /** 当前播放列表切正序/倒序（只重排这条队列，不碰收藏夹/BV）。 */
+    fun setPlayOrder(order: cn.debubu.tingbili.core.media.PlayOrder) {
+        viewModelScope.launch { player.setPlayOrder(order) }
+    }
+
+    /** 当前播放列表的随机开关（随机方式在播放设置里选）。 */
+    fun setShuffleEnabled(enabled: Boolean) {
+        viewModelScope.launch { player.setShuffleEnabled(enabled) }
     }
 
     /** “到点后播完本章再停”默认开关（持久化，下次弹窗沿用） */
@@ -436,7 +536,7 @@ class PlayerViewModel @Inject constructor(
                 when (val r = repo.getViewDetail(cur.bvid, forceRefresh = true)) {
                     is Result.Error -> _message.value = "刷新失败，已保留旧数据"
                     is Result.Success -> {
-                        val res = player.refreshQueue(r.data.toTracks(), r.data.title)
+                        val res = player.refreshQueue(r.data.toTracks(), r.data.title, sourceFolderId = null)
                         // 字幕可能后补/改版：作废该 BV 缓存，管线重走按需重拉
                         subtitles.invalidateBv(cur.bvid)
                         retrySubtitles()

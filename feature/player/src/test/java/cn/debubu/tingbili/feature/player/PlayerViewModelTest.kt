@@ -1,13 +1,21 @@
-package cn.debubu.tingbili.feature.player
+﻿package cn.debubu.tingbili.feature.player
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.test.core.app.ApplicationProvider
+import cn.debubu.tingbili.core.data.db.BvFavoriteEntity
+import cn.debubu.tingbili.core.data.db.BvFavoritePageEntity
+import cn.debubu.tingbili.core.data.db.FavoriteFolderEntity
+import cn.debubu.tingbili.core.data.db.FavoriteFolderSummary
+import cn.debubu.tingbili.core.data.db.FavoriteTrackEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.AddTracksResult
+import cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.AudioPipelineMonitor
 import cn.debubu.tingbili.core.media.PlayerHandle
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -60,13 +68,13 @@ class PlayerViewModelTest {
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
         override suspend fun view(bvid: String): ViewDto = ViewDto()
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
             subtitleCalls++
             delay(10_000)
             return SubtitleDto()
         }
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+        override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
         override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
         override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
         override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
@@ -93,6 +101,7 @@ class PlayerViewModelTest {
 
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun get(key: String): cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity? = map[key]
         override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
         override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
             rows.forEach { map[it.key] = it }
@@ -100,6 +109,7 @@ class PlayerViewModelTest {
         override suspend fun pruneExpired(cutoffMs: Long) {
             map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
         }
+        override suspend fun delete(key: String) { map.remove(key) }
         override suspend fun pruneOverflow(keep: Int) {
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
         }
@@ -117,16 +127,48 @@ class PlayerViewModelTest {
         }
     }
 
+    class FakeFavoritesRepository : FavoritesRepository {
+        override fun observeFolderSummaries(): Flow<List<FavoriteFolderSummary>> = flowOf(emptyList())
+        override fun observeFolders(): Flow<List<FavoriteFolderEntity>> = flowOf(emptyList())
+        override fun observeFolder(id: Long): Flow<FavoriteFolderEntity?> = flowOf(null)
+        override suspend fun getFolder(id: Long): FavoriteFolderEntity? = null
+        override fun observeTracks(folderId: Long): Flow<List<FavoriteTrackEntity>> = flowOf(emptyList())
+        override suspend fun getTracks(folderId: Long): List<FavoriteTrackEntity> = emptyList()
+        override fun observeBvFavorites(): Flow<List<BvFavoriteEntity>> = flowOf(emptyList())
+        override fun observeBvFavorite(bvid: String): Flow<BvFavoriteEntity?> = flowOf(null)
+        override fun observeBvPages(bvid: String): Flow<List<BvFavoritePageEntity>> = flowOf(emptyList())
+        override fun observeFolderIdsContaining(bvid: String, cid: Long): Flow<Set<Long>> = flowOf(emptySet())
+        override fun observeTrackInFolder(folderId: Long, bvid: String, cid: Long): Flow<Boolean> = flowOf(false)
+        override fun observeIsBvFavorited(bvid: String): Flow<Boolean> = flowOf(false)
+        override suspend fun ensureDefaultFolder(): Long = 1L
+        override suspend fun createFolder(name: String): Long = 2L
+        override suspend fun renameFolder(id: Long, name: String) {}
+        override suspend fun deleteFolder(id: Long): Boolean = true
+        override suspend fun reorderFolders(orderedIds: List<Long>) {}
+        override suspend fun addTracksToFolders(
+            folderIds: Set<Long>,
+            tracks: List<Track>,
+        ): AddTracksResult = AddTracksResult(tracks.size, 0)
+        override suspend fun removeTrack(folderId: Long, bvid: String, cid: Long) {}
+        override suspend fun toggleDefaultTrack(track: Track): Boolean = true
+        override suspend fun toggleTrackInFolder(folderId: Long, track: Track): Boolean = true
+        override suspend fun addBvFavorite(snapshot: BvFavoriteSnapshot) {}
+        override suspend fun removeBvFavorite(bvid: String) {}
+        override suspend fun refreshBvFavorite(snapshot: BvFavoriteSnapshot) {}
+        override suspend fun hasAnyFavorite(): Boolean = false
+    }
+
     class FakeHistoryDao : HistoryDao {
         override suspend fun save(e: HistoryEntity) {}
-        override suspend fun get(bvid: String): HistoryEntity? = null
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? = null
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? = null
         override suspend fun getAll(): List<HistoryEntity> = emptyList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
-        override suspend fun delete(bvid: String) {}
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {}
         override suspend fun clearAll() {}
     }
 
@@ -191,7 +233,7 @@ class PlayerViewModelTest {
         player.restoreLastPlayback()
         prefs.stepSec.first()
         assertEquals("BV1xx", player.state.value.currentTrack?.bvid)
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -212,7 +254,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -235,13 +277,13 @@ class PlayerViewModelTest {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
             override suspend fun view(bvid: String): ViewDto = ViewDto()
             override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
             override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
                 calls++
                 if (fail) throw RuntimeException("cdn 抽风")
                 return SubtitleDto()
             }
-            override suspend fun favFolders(pn: Int, ps: Int, upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
             override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
             override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
@@ -252,7 +294,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         prefs.stepSec.first()
-        val vm = PlayerViewModel(player, cache, auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, cache, auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -281,7 +323,7 @@ class PlayerViewModelTest {
         val callsBefore = api.subtitleCalls
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, disk), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -301,7 +343,7 @@ class PlayerViewModelTest {
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
         // SlowSubtitleApi.view 回空 data → getViewDetail 走 Error（真机对应“刷新失败”）
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         val collectJob = launch { vm.uiState.collect {} }
         try {
             runCurrent()
@@ -325,7 +367,7 @@ class PlayerViewModelTest {
         val track = demoTrack()
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
         player.restoreLastPlayback()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         // 故意不 collect vm.uiState：SlowSubtitleApi.view 回空 data → 走 Error 分支
         runCurrent()
         vm.refreshBv()
@@ -340,7 +382,7 @@ class PlayerViewModelTest {
         prefs.setAudioOffload(true)
         AudioPipelineMonitor.onOffloadSleepingChanged(true)
         runCurrent()
-        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, dispatcher)
+        val vm = PlayerViewModel(player, SubtitleCache(repo, FakeSubtitleDiskDao()), auth, prefs, repo, FakeFavoritesRepository(), dispatcher)
         vm.cycleSpeed()
         runCurrent()
         advanceTimeBy(100)

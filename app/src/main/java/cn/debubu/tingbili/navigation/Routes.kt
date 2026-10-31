@@ -13,7 +13,7 @@ object MainTabsRoute
 object HomeRoute
 
 @Serializable
-object PlaylistRoute
+object FavoritesRoute
 
 @Serializable
 object HistoryRoute
@@ -53,9 +53,9 @@ object LoginRoute
 @Serializable
 object PlayerRoute
 
-/** 我的页二级页:B站收藏夹列表 */
+/** B站收藏总页（只读） */
 @Serializable
-object BiliFavFoldersRoute
+object BiliFavoritesRoute
 
 /** 我的页二级页:收藏夹详情 */
 @Serializable
@@ -65,7 +65,7 @@ data class BiliFavDetailRoute(val mediaId: Long, val title: String = "")
 @Serializable
 object BiliHistoryRoute
 
-/** 我的页二级页:稍后听 */
+/** B站稍后再看（只读） */
 @Serializable
 object BiliToviewRoute
 
@@ -77,13 +77,17 @@ data class UpSpaceRoute(val mid: Long)
 @Serializable
 data class VideoDetailRoute(val bvid: String)
 
-/** 收藏详情页路由，携带收藏 id */
+/** 收藏夹详情页路由，携带收藏夹 id */
 @Serializable
-data class PlaylistDetailRoute(val playlistId: Long)
+data class FavoriteFolderRoute(val folderId: Long)
+
+/** BV 收藏缓存页路由，携带 BV 号 */
+@Serializable
+data class BvFavoriteRoute(val bvid: String)
 
 /** 底部 4 个 Tab 在 HorizontalPager 里的页序号（顺序即底栏从左到右） */
 fun mainTabPageOf(route: Any?): Int = when (route) {
-    is PlaylistRoute -> 1
+    is FavoritesRoute -> 1
     is HistoryRoute -> 2
     is MeRoute -> 3
     else -> 0
@@ -91,7 +95,7 @@ fun mainTabPageOf(route: Any?): Int = when (route) {
 
 /** 页序号 → Tab 路由（底栏选中态仍以路由表达，避免两套常量漂移） */
 fun mainTabRouteOf(page: Int): Any = when (page) {
-    1 -> PlaylistRoute
+    1 -> FavoritesRoute
     2 -> HistoryRoute
     3 -> MeRoute
     else -> HomeRoute
@@ -99,7 +103,7 @@ fun mainTabRouteOf(page: Int): Any = when (page) {
 
 /** 主页 4 Tab 的集合，用于判断是否显示底栏 */
 fun isMainTabRoute(route: Any?): Boolean = when (route) {
-    is HomeRoute, is PlaylistRoute, is HistoryRoute, is MeRoute, is MainTabsRoute -> true
+    is HomeRoute, is FavoritesRoute, is HistoryRoute, is MeRoute, is MainTabsRoute -> true
     else -> false
 }
 
@@ -108,7 +112,7 @@ fun isMainTabRoute(route: Any?): Boolean = when (route) {
 fun isMainTabDestination(destination: androidx.navigation.NavDestination?): Boolean =
     destination?.hierarchy?.any {
         it.hasRoute<HomeRoute>() ||
-            it.hasRoute<PlaylistRoute>() ||
+            it.hasRoute<FavoritesRoute>() ||
             it.hasRoute<HistoryRoute>() ||
             it.hasRoute<MeRoute>() ||
             it.hasRoute<MainTabsRoute>()

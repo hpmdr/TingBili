@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,11 +32,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
@@ -43,10 +50,11 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
@@ -106,11 +114,13 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -124,10 +134,13 @@ import java.time.LocalTime
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
+import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.SettingRadioRow
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
-import cn.debubu.tingbili.core.ui.chapterLabel
+import cn.debubu.tingbili.core.ui.formatDurationMs
+import cn.debubu.tingbili.core.ui.trackMetaLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -152,6 +165,8 @@ fun PlayerScreen(
     val audioOptions by vm.audioOptions.collectAsStateWithLifecycle()
     val loggedIn by vm.isLoggedIn.collectAsStateWithLifecycle()
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
+    val isDefaultFavorite by vm.isDefaultFavorite.collectAsStateWithLifecycle()
+    val favoriteFolders by vm.favoriteFolders.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
@@ -172,6 +187,7 @@ fun PlayerScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var infoReturnToMore by remember { mutableStateOf(false) }
     var showQualitySheet by remember { mutableStateOf(false) }
+    var showFavoriteSheet by remember { mutableStateOf(false) }
 
     // 歌词行跳转的撤销提示：误触跳走时 2.5s 内可一键回到原位置
     var undoJump by remember { mutableStateOf<JumpUndo?>(null) }
@@ -195,6 +211,10 @@ fun PlayerScreen(
     ) {
         PlayerTopBar(
             title = headerTitle,
+            favoriteAvailable = trackUi.track != null,
+            isFavorite = isDefaultFavorite,
+            onFavoriteClick = { vm.toggleDefaultFavorite() },
+            onFavoriteLongClick = { showFavoriteSheet = true },
             onMoreClick = { showMoreSheet = true },
             onBack = onBack,
         )
@@ -444,6 +464,25 @@ fun PlayerScreen(
         )
     }
 
+    if (showFavoriteSheet && trackUi.track != null) {
+        FavoriteFolderSinglePickerSheet(
+            title = "收藏到收藏夹",
+            subtitle = trackUi.track?.title,
+            folders = favoriteFolders.map {
+                FavoriteFolderOption(it.id, it.name, it.isDefault, it.checked)
+            },
+            onDismiss = { showFavoriteSheet = false },
+            onToggle = { folderId ->
+                vm.toggleFavoriteFolder(folderId)
+                showFavoriteSheet = false
+            },
+            onCreateFolder = { name ->
+                vm.createFavoriteFolderAndAdd(name)
+                showFavoriteSheet = false
+            },
+        )
+    }
+
     if (showTimerSheet) {
         SleepTimerSheet(
             remainSec = progUi.sleepRemainSec,
@@ -462,6 +501,11 @@ fun PlayerScreen(
         ChapterSheet(
             queue = trackUi.queue,
             currentIndex = trackUi.currentIndex,
+            sourceTitle = trackUi.sourceTitle,
+            playOrder = trackUi.playOrder,
+            shuffleEnabled = trackUi.shuffleEnabled,
+            onPlayOrderChange = vm::setPlayOrder,
+            onShuffleChange = vm::setShuffleEnabled,
             onSelect = {
                 vm.playAt(it)
                 showChapterSheet = false
@@ -838,12 +882,18 @@ private fun SkipIcon(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerTopBar(
     title: String,
+    favoriteAvailable: Boolean,
+    isFavorite: Boolean,
+    onFavoriteClick: () -> Unit,
+    onFavoriteLongClick: () -> Unit,
     onMoreClick: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -875,17 +925,41 @@ private fun PlayerTopBar(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth()
-                .padding(horizontal = 64.dp, vertical = 6.dp),
+                // 右侧有爱心 + ⋮ 两个动作位，左右留白同步放大避免标题压到按钮
+                .padding(horizontal = 96.dp, vertical = 6.dp),
         )
 
-        IconButton(
-            onClick = onMoreClick,
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.MoreVert,
-                contentDescription = "播放设置",
-            )
+        Row(modifier = Modifier.align(Alignment.CenterEnd)) {
+            if (favoriteAvailable) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .combinedClickable(
+                            onClickLabel = if (isFavorite) "取消收藏到我的最爱" else "收藏到我的最爱",
+                            onLongClickLabel = "选择收藏夹",
+                            onClick = onFavoriteClick,
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onFavoriteLongClick()
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "已收藏到我的最爱" else "收藏到我的最爱",
+                        tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            IconButton(onClick = onMoreClick) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "播放设置",
+                )
+            }
         }
     }
 }
@@ -1761,24 +1835,87 @@ internal fun sleepEndClockLabel(min: Int, now: LocalTime = LocalTime.now()): Str
 private fun ChapterSheet(
     queue: List<cn.debubu.tingbili.core.data.model.Track>,
     currentIndex: Int,
+    sourceTitle: String?,
+    playOrder: cn.debubu.tingbili.core.media.PlayOrder,
+    shuffleEnabled: Boolean,
+    onPlayOrderChange: (cn.debubu.tingbili.core.media.PlayOrder) -> Unit,
+    onShuffleChange: (Boolean) -> Unit,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = rememberLazyListState()
-    // 打开即定位到在播章节（上方留两条上下文）：长队列（几十上百集）否则要手动滑很久
-    LaunchedEffect(Unit) {
+    // 打开时、切顺序、随机跳到新集都定位到当前项（上方留两条上下文）
+    LaunchedEffect(currentIndex, playOrder) {
         if (currentIndex in queue.indices) {
             listState.scrollToItem((currentIndex - 2).coerceAtLeast(0))
         }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Text(
-            text = "章节目录（${queue.size}）",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        )
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Text(
+                text = "播放列表（${queue.size}）",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            sourceTitle?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "来自「$it」",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                SingleChoiceSegmentedButtonRow {
+                    SegmentedButton(
+                        selected = playOrder == cn.debubu.tingbili.core.media.PlayOrder.FORWARD,
+                        onClick = { onPlayOrderChange(cn.debubu.tingbili.core.media.PlayOrder.FORWARD) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        icon = {
+                            Icon(
+                                Icons.Filled.ArrowUpward,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        label = { Text("正序") },
+                    )
+                    SegmentedButton(
+                        selected = playOrder == cn.debubu.tingbili.core.media.PlayOrder.REVERSE,
+                        onClick = { onPlayOrderChange(cn.debubu.tingbili.core.media.PlayOrder.REVERSE) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        icon = {
+                            Icon(
+                                Icons.Filled.ArrowDownward,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        label = { Text("倒序") },
+                    )
+                }
+                FilterChip(
+                    selected = shuffleEnabled,
+                    onClick = { onShuffleChange(!shuffleEnabled) },
+                    label = { Text("随机播放") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
+        }
         androidx.compose.foundation.lazy.LazyColumn(
             state = listState,
             modifier = Modifier
@@ -1787,28 +1924,87 @@ private fun ChapterSheet(
                 .padding(bottom = 32.dp),
         ) {
             itemsIndexed(items = queue, key = { _, track -> "${track.bvid}:${track.cid}" }) { idx, track ->
-                val selected = idx == currentIndex
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            text = chapterLabel(track.title, track.pageIndex, track.pageCount),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    },
-                    supportingContent = { Text(text = track.author, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    trailingContent = {
-                        Text(
-                            text = formatChapterDuration(track.durationMs),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    modifier = Modifier.clickable { onSelect(idx) },
+                ChapterRow(
+                    index = idx,
+                    track = track,
+                    selected = idx == currentIndex,
+                    onClick = { onSelect(idx) },
                 )
             }
+        }
+    }
+}
+
+/**
+ * 播放列表行：与收藏夹列表（`FavoriteTrackRow`）同一套信息层级，
+ * 序号 / 主标题 / `P{n} · BV 标题` / 时长，正在播的一行高亮。
+ */
+@Composable
+private fun ChapterRow(
+    index: Int,
+    track: cn.debubu.tingbili.core.data.model.Track,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                else androidx.compose.ui.graphics.Color.Transparent
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = String.format(java.util.Locale.getDefault(), "%02d", index + 1),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(32.dp),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp),
+        ) {
+            Text(
+                text = track.title.ifBlank { track.bvid },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            trackMetaLabel(track.title, track.videoTitle, track.pageIndex)?.let { meta ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (selected) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "正在播放",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        track.durationMs.takeIf { it > 0L }?.let { durationMs ->
+            Text(
+                text = formatDurationMs(durationMs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
@@ -1836,11 +2032,4 @@ private fun SubtitleSheet(
         }
     }
 }
-private fun formatChapterDuration(durationMs: Long): String {
-    if (durationMs <= 0L) return "--:--"
-    val totalSec = durationMs / 1000
-    val h = totalSec / 3600
-    val m = (totalSec % 3600) / 60
-    val s = totalSec % 60
-    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-}
+

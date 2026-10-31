@@ -39,4 +39,26 @@ class TrackFormatTest {
         assertEquals("P7 · 0:41", playedProgressLabel(7, 41_000L, 0L))
         assertEquals("0:41", playedProgressLabel(0, 41_000L, null))
     }
+
+    @Test
+    fun `track page label uses page index without page count`() {
+        // 收藏夹的 Track 没有真实页数（默认 1），但 P 序号仍应显示
+        assertEquals("P19", trackPageLabel("97-108", "【一口气看完】…", 19))
+        assertEquals("P1", trackPageLabel("1-20", "无限流…", 1))
+        assertEquals(null, trackPageLabel("1-20", "1-20", 1))
+        assertEquals(null, trackPageLabel("单曲", null, null))
+    }
+
+    @Test
+    fun `track meta label mirrors favorites row subtitle`() {
+        assertEquals(
+            "P17 · 无限流悬疑多人有声《请活到天明》连载最新",
+            trackMetaLabel("295-308（1023）", "无限流悬疑多人有声《请活到天明》连载最新", 17),
+        )
+        // 主标题已经是 BV 标题：只留分 P
+        assertEquals("P19", trackMetaLabel("97-108", "【一口气看完】…", 19, showVideoTitle = false))
+        // 单 P / 同名单 P：整行没有小字
+        assertEquals(null, trackMetaLabel("一首单曲", "一首单曲", 1))
+        assertEquals(null, trackMetaLabel("一首单曲", null, 1))
+    }
 }

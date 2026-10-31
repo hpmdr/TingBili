@@ -10,7 +10,7 @@ fun extractBvid(raw: String?): String? {
     return BVID_REGEX.find(raw)?.value
 }
 
-// -- 收藏夹列表 GET /x/v3/fav/folder/created/list --
+// -- 收藏夹列表 GET /x/v3/fav/folder/created/list-all --
 
 @Serializable
 data class FavFolderDto(
@@ -32,6 +32,8 @@ data class FavFolderItem(
     val title: String = "",
     val cover: String = "",
     @SerialName("media_count") val mediaCount: Int = 0,
+    /** 默认收藏夹：attr & 2 == 0；接口缺字段时为 null，交给标题兜底 */
+    val attr: Int? = null,
 )
 
 // -- 夹内视频 GET /x/v3/fav/resource/list --
@@ -146,6 +148,7 @@ data class BiliFavFolder(
     val title: String,
     val cover: String,
     val count: Int,
+    val isDefault: Boolean = false,
 )
 
 data class BiliSpaceVideo(
@@ -158,12 +161,20 @@ data class BiliSpaceVideo(
     val tag: String = "",
 )
 
-fun FavFolderDto.toFolders(): Pair<List<BiliFavFolder>, Boolean> {
-    val d = data ?: return emptyList<BiliFavFolder>() to false
-    return d.list.map {
-        BiliFavFolder(it.id, it.title.ifBlank { "未命名收藏夹" }, it.cover.normalizeBiliImageUrl(), it.mediaCount)
-    } to d.hasMore
-}
+fun FavFolderDto.toAllFolders(): List<BiliFavFolder> =
+    data?.list.orEmpty().map {
+        val title = it.title.ifBlank { "未命名收藏夹" }
+        BiliFavFolder(
+            id = it.id,
+            title = title,
+            cover = it.cover.normalizeBiliImageUrl(),
+            count = it.mediaCount,
+            isDefault = it.attr?.let { attr -> (attr and 2) == 0 } ?: (title == "默认收藏夹"),
+        )
+    }
+
+fun FavFolderDto.toFolders(): Pair<List<BiliFavFolder>, Boolean> =
+    toAllFolders() to (data?.hasMore ?: false)
 
 fun FavDetailDto.toSpaceVideos(): Pair<List<BiliSpaceVideo>, Boolean> {
     val d = data ?: return emptyList<BiliSpaceVideo>() to false

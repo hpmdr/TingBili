@@ -43,25 +43,40 @@ class HistoryTrackerTest {
     class FakeHistory : HistoryDao {
         val saved = mutableListOf<HistoryEntity>()
         private val map = mutableMapOf<String, HistoryEntity>()
-        override suspend fun save(e: HistoryEntity) { saved += e; map[e.bvid] = e }
-        override suspend fun get(bvid: String): HistoryEntity? = map[bvid]
+
+        private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
+
+        override suspend fun save(e: HistoryEntity) {
+            saved += e
+            map[key(e)] = e
+        }
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? =
+            map["$sourceType:$sourceId"]
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? =
+            map.values.filter { it.bvid == bvid && it.cid == cid }.maxByOrNull { it.updatedAt }
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flowOf(map.values.toList())
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flowOf(emptyList())
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flowOf(0)
-        override suspend fun delete(bvid: String) { map.remove(bvid) }
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {
+            map.remove("$sourceType:$sourceId")
+        }
         override suspend fun clearAll() { map.clear(); saved.clear() }
     }
 
     class FakeListener(var track: Track? = null, var statePos: Long = 0L) : HistoryTracker.Listener {
         var lastTickPos: Long? = null
+        var folderId: Long? = null
+        var folderTitle: String? = null
         val persisted = mutableListOf<Long>()
         val stalls = mutableListOf<Pair<Long, Long>>()
         val samples = mutableListOf<Long>()
         override fun currentTrack(): Track? = track
         override fun statePositionMs(): Long = statePos
+        override fun sourceFolderId(): Long? = folderId
+        override fun sourceTitle(): String? = folderTitle
         override fun onTick(positionMs: Long, bufferedMs: Long) { lastTickPos = positionMs }
         override fun onPositionSampled(positionMs: Long) { samples += positionMs }
         override suspend fun onPersistPosition(pos: Long) { persisted += pos }
@@ -91,6 +106,49 @@ class HistoryTrackerTest {
         assertTrue(dao.saved.isNotEmpty())
         assertEquals(12345L, dao.saved.first().positionMs)
         assertEquals(listOf(12345L), listener.persisted)
+        tracker.release()
+    }
+
+    @Test
+    fun `saves folder source for folder playback`() = runTest {
+        val transport = FakeTransport().also { it.pos = 12_345L }
+        val dao = FakeHistory()
+        val listener = FakeListener(track(), 0L).apply {
+            folderId = 7L
+            folderTitle = "胖宝宝"
+        }
+        var now = 0L
+        val tracker = HistoryTracker(transport, dao)
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 10_100L
+        advanceTimeBy(10_100L)
+        runCurrent()
+        val saved = dao.saved.last()
+        assertEquals(HistoryEntity.SOURCE_FOLDER, saved.sourceType)
+        assertEquals("7", saved.sourceId)
+        assertEquals("胖宝宝", saved.sourceTitle)
+        assertEquals("BV1", saved.bvid)
+        tracker.release()
+    }
+
+    @Test
+    fun `saves BV source when not from folder`() = runTest {
+        val transport = FakeTransport().also { it.pos = 12_345L }
+        val dao = FakeHistory()
+        val listener = FakeListener(track(), 0L)
+        var now = 0L
+        val tracker = HistoryTracker(transport, dao)
+        tracker.clockMs = { now }
+        tracker.attach(this, listener)
+        tracker.start(now)
+        now = 10_100L
+        advanceTimeBy(10_100L)
+        runCurrent()
+        val saved = dao.saved.last()
+        assertEquals(HistoryEntity.SOURCE_BV, saved.sourceType)
+        assertEquals("BV1", saved.sourceId)
         tracker.release()
     }
 

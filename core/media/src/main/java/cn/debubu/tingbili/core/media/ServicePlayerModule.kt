@@ -8,6 +8,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -39,6 +40,7 @@ object ServicePlayerModule {
         @ApplicationContext context: Context,
         cache: SimpleCache,
         prefs: cn.debubu.tingbili.core.data.datastore.PreferencesRepository,
+        audioUrls: AudioUrlResolver,
         @Named("biliUserAgent") userAgent: String,
         @Named("biliReferer") referer: String,
     ): Player {
@@ -50,11 +52,27 @@ object ServicePlayerModule {
             .setReadTimeoutMs(8_000)
             .setAllowCrossProtocolRedirects(true)
 
+        // 惰性直链：MediaItem 里存的是 tingbili-audio://play?bvid=&cid=，
+        // 真正要读音频时才换成本次解析出的 CDN 直链（一次播放只解析一次，不批量打接口）。
+        val resolvingFactory = ResolvingDataSource.Factory(httpFactory) { spec ->
+            val uri = spec.uri
+            if (PlayUrlPipeline.isLazyUri(uri)) {
+                val bvid = PlayUrlPipeline.bvidOf(uri)
+                val cid = PlayUrlPipeline.cidOf(uri)
+                if (bvid == null || cid == null) {
+                    throw java.io.IOException("${AudioUrlResolver.RESOLVE_FAILED_MARK}：缺少 bvid/cid")
+                }
+                spec.withUri(android.net.Uri.parse(audioUrls.resolveBlocking(bvid, cid)))
+            } else {
+                spec
+            }
+        }
+
         // 缓存层：先查本地缓存，未命中再走网络；写入时同时落盘
         // 注意：不要 setCacheWriteDataSinkFactory(null)，那会关闭缓存写入导致缓存永不增长
         val cacheFactory = CacheDataSource.Factory()
             .setCache(cache)
-            .setUpstreamDataSourceFactory(httpFactory)
+            .setUpstreamDataSourceFactory(resolvingFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
         // 解码器经 PreferHardwareAudioDecoderSelector 重排：有硬解优先硬解，

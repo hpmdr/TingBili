@@ -248,8 +248,8 @@ class NavigationTest {
         composeTestRule.setContent {
             navController = TestNavHostController(LocalContext.current)
             navController.navigatorProvider.addNavigator(ComposeNavigator())
-            NavHost(navController = navController, startDestination = BiliFavFoldersRoute) {
-                composable<BiliFavFoldersRoute> { Text("bili favs") }
+            NavHost(navController = navController, startDestination = BiliFavoritesRoute) {
+                composable<BiliFavoritesRoute> { Text("bili favs") }
                 composable<BiliFavDetailRoute> { Text("bili fav detail") }
                 composable<BiliHistoryRoute> { Text("bili history") }
                 composable<BiliToviewRoute> { Text("bili toview") }

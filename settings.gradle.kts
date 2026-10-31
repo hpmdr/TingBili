@@ -26,4 +26,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "TingBili"
-include(":app", ":core:ui", ":core:data", ":core:media", ":data:bilibili", ":feature:home", ":feature:playlist", ":feature:history", ":feature:player", ":feature:mine", ":feature:detail", ":feature:space")
+include(":app", ":core:ui", ":core:data", ":core:media", ":core:bili-ui", ":data:bilibili", ":feature:home", ":feature:favorites", ":feature:history", ":feature:player", ":feature:mine", ":feature:detail", ":feature:space")

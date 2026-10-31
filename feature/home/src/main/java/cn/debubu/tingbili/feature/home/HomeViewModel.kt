@@ -9,10 +9,7 @@ import androidx.paging.cachedIn
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
 import cn.debubu.tingbili.core.data.db.HomeSnapshotEntity
-import cn.debubu.tingbili.core.data.db.PlaylistDao
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
-import cn.debubu.tingbili.core.data.db.PlaylistEntity
-import cn.debubu.tingbili.core.data.db.PlaylistTrackEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.HomeScrollTopBus
@@ -38,7 +35,6 @@ class HomeViewModel @Inject constructor(
     private val repo: BiliRepository,
     private val prefs: PreferencesRepository,
     private val player: PlayerManager,
-    private val playlistDao: PlaylistDao,
     private val homeSnapshotDao: HomeSnapshotDao,
     private val scrollTopBus: HomeScrollTopBus,
     private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
@@ -261,72 +257,6 @@ class HomeViewModel @Inject constructor(
     }
 
     fun playSingle(track: Track) = playTracks(listOf(track), 0)
-
-    suspend fun addToPlaylist(playlistId: Long, track: Track) {
-        playlistDao.addTrack(
-            PlaylistTrackEntity(
-                playlistId = playlistId,
-                bvid = track.bvid,
-                cid = track.cid,
-                title = track.title,
-                order = 0,
-                author = track.author,
-                cover = track.cover,
-                durationMs = track.durationMs,
-                videoTitle = track.videoTitle,
-                pageIndex = track.pageIndex
-            )
-        )
-    }
-
-    suspend fun addToPlaylist(playlistId: Long, tracks: List<Track>) {
-        tracks.forEach { t ->
-            playlistDao.addTrack(
-                PlaylistTrackEntity(
-                    playlistId = playlistId,
-                    bvid = t.bvid,
-                    cid = t.cid,
-                    title = t.title,
-                    order = 0,
-                    author = t.author,
-                    cover = t.cover,
-                    durationMs = t.durationMs,
-                    videoTitle = t.videoTitle,
-                    pageIndex = t.pageIndex
-                )
-            )
-        }
-    }
-
-    /**
-     * Convenience: add single track to playlist; creates default playlist if none exists.
-     * Used by bottomSheet “单P加入” / “整集合集加入收藏”.
-     */
-    fun addToPlaylist(track: Track) {
-        viewModelScope.launch {
-            val pid = ensureDefaultPlaylist()
-            addToPlaylist(pid, track)
-        }
-    }
-
-    fun addToPlaylist(tracks: List<Track>) {
-        viewModelScope.launch {
-            val pid = ensureDefaultPlaylist()
-            addToPlaylist(pid, tracks)
-        }
-    }
-
-    /** Back-compat alias per brief: addToPlaylist(trackOrBv) */
-    fun addBvToPlaylist(bvid: String, playlistId: Long) {
-        val tracks = _expandedTracks.value?.filter { it.bvid == bvid } ?: return
-        viewModelScope.launch { addToPlaylist(playlistId, tracks) }
-    }
-
-    private suspend fun ensureDefaultPlaylist(): Long {
-        val existing = playlistDao.getPlaylists()
-        if (existing.isNotEmpty()) return existing.first().id
-        return playlistDao.insert(PlaylistEntity(name = "默认收藏"))
-    }
 
     companion object {
         /** 快照 TTL：15min 内不提示过期，超期仍展示、后台静默刷 */

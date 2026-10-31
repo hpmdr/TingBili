@@ -15,6 +15,15 @@ data class PlaybackState(
      * 单条播放（首页/搜索/详情直接播）没有来源时为 null；曲名用 [Track.videoTitle] 表达。
      */
     val sourceTitle: String? = null,
+    /**
+     * 队列来源的本地收藏夹 id（非空 = 队列跟随该收藏夹实时更新，
+     * 见 [PlayerManager.syncFolderQueue]）；其它来源为 null。
+     */
+    val sourceFolderId: Long? = null,
+    /** 当前播放列表的播放顺序（只属于这条队列） */
+    val playOrder: PlayOrder = PlayOrder.FORWARD,
+    /** 当前播放列表的随机开关（随机方式在播放设置里选） */
+    val shuffleEnabled: Boolean = false,
     val positionMs: Long = 0L,
     /** 当前音源已缓存/已缓冲到的位置，用于播放页进度条底层展示。 */
     val bufferedPositionMs: Long = 0L,

@@ -1,27 +1,23 @@
 package cn.debubu.tingbili.core.media
 
+import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
-import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
-import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import cn.debubu.tingbili.core.data.model.episodeLabel
 
 /**
- * 直链管线（类 MediaSource 的数据源层）：cid 补齐 + playurl 批量解析 + MediaItem 组装 +
- * 过期刷新 + 可恢复错误判定。不碰 transport/_state，只做数据。
+ * 直链管线（类 MediaSource 的数据源层）：cid 补齐 + MediaItem 组装 + 可恢复错误判定。
+ *
+ * 直链 **不在起播前批量解析**（一部 67 P 的视频会瞬间打 67 次 playurl，必被风控 -412，
+ * 而且全部解析完才开始出声）。MediaItem 一律带惰性 URI，真正打开某个分 P 时才由
+ * [AudioUrlResolver] 解析一次（见 ServicePlayerModule 的 ResolvingDataSource）。
  */
 class PlayUrlPipeline(
-    private val playUrls: PlayUrlResolver,
     private val catalog: CatalogResolver,
     private val artwork: ArtworkResolver,
-    private val playUrlCache: PlayUrlCacheDao,
 ) {
     /** cid=0（搜索结果）时经目录解析第一个分 P 的真实 cid */
     suspend fun resolveCid(track: Track): Track =
@@ -32,85 +28,22 @@ class PlayUrlPipeline(
             )
         } ?: track
 
-    /**
-     * playurl 批量解析：持久缓存命中即用，未命中并发补（限 4 并发防风控），结果回写。
-     * 返回 track→url（解析失败的项直接丢掉，调用方跳过）。
-     * 冷启动/重装恢复时缓存命中则 0 网络解析、秒开。
-     */
-    suspend fun resolveUrls(tracks: List<Track>): Map<Track, String> {
-        if (tracks.isEmpty()) return emptyMap()
-        val nowMs = System.currentTimeMillis()
-        val urlCache = try {
-            playUrlCache.getAll().associateBy { it.key }
-        } catch (_: Exception) {
-            emptyMap()
-        }
-        val out = mutableMapOf<Track, String>()
-        val missing = mutableListOf<Track>()
-        for (t in tracks) {
-            val hit = urlCache["${t.bvid}:${t.cid}"]?.takeIf { it.isFresh(nowMs) }?.url
-            if (hit.isNullOrBlank()) missing.add(t) else out[t] = hit
-        }
-        if (missing.isNotEmpty()) {
-            val semaphore = Semaphore(4)
-            val fetched = supervisorScope {
-                missing.map { track ->
-                    async {
-                        runCatching {
-                            semaphore.withPermit {
-                                val url = playUrls.resolve(track.bvid, track.cid)?.takeIf { it.isNotBlank() }
-                                if (url != null) track to url else null
-                            }
-                        }.getOrNull()
-                    }
-                }.awaitAll().filterNotNull()
-            }
-            if (fetched.isNotEmpty()) {
-                playUrlCache.putAll(
-                    fetched.map { (t, u) -> PlayUrlCacheEntity("${t.bvid}:${t.cid}", u, nowMs) }
-                )
-                playUrlCache.pruneExpired(nowMs - PlayUrlCacheEntity.TTL_MS)
-                playUrlCache.pruneOverflow(PlayUrlCacheEntity.MAX_ENTRIES)
-                fetched.forEach { (t, u) -> out[t] = u }
-            }
-        }
-        return out
-    }
-
-    /** Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它） */
-    fun buildItem(track: Track, url: String, imageFormat: ImageFormat): MediaItem =
+    /** Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它；URI 是惰性协议） */
+    fun buildItem(track: Track, imageFormat: ImageFormat): MediaItem =
         MediaItem.Builder()
-            .setUri(url)
+            .setUri(AudioUrlResolver.lazyUri(track.bvid, track.cid))
             .setMediaId("${track.bvid}:${track.cid}")
             .setCustomCacheKey("${track.bvid}:${track.cid}")
             .setMediaMetadata(
                 MediaMetadata.Builder()
-                    .setTitle(track.title)
+                    .setTitle(track.episodeLabel())
                     .setArtist(track.author)
                     .setArtworkUri(artwork.artwork(track.cover, imageFormat))
                     .build()
             )
             .build()
 
-    /**
-     * 单条直链刷新（403 过期/主动刷新共用）：解析 + 回写缓存。
-     * 解析失败（null/空）返回 null，调用方沿用旧 URI，下次错误再重试。
-     */
-    suspend fun refreshUrl(track: Track): String? {
-        val newUrl = try {
-            playUrls.resolve(track.bvid, track.cid)
-        } catch (_: Exception) {
-            null
-        }
-        if (newUrl.isNullOrBlank()) return null
-        try {
-            playUrlCache.putAll(listOf(PlayUrlCacheEntity("${track.bvid}:${track.cid}", newUrl, System.currentTimeMillis())))
-        } catch (_: Exception) {
-        }
-        return newUrl
-    }
-
-    /** 可恢复的直链错误（过期/403/断网）：值得花一次重试；其余直接报 Result.Error。 */
+    /** 可恢复的直链错误（过期/403/断网/直链解析失败）：值得重试；其余直接报 Result.Error。 */
     fun isRecoverable(error: PlaybackException): Boolean =
         error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
             || error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
@@ -118,4 +51,17 @@ class PlayUrlPipeline(
             || error.errorCodeName.contains("403", ignoreCase = true)
             || error.message?.contains("403") == true
             || error.message?.contains("expire", ignoreCase = true) == true
+            || error.message?.contains(AudioUrlResolver.RESOLVE_FAILED_MARK, ignoreCase = true) == true
+
+    companion object {
+        /** 惰性直链协议的 scheme；ServicePlayerModule 据此识别需要现场解析的 MediaItem */
+        const val LAZY_SCHEME = "tingbili-audio"
+        const val PARAM_BVID = "bvid"
+        const val PARAM_CID = "cid"
+
+        fun isLazyUri(uri: Uri): Boolean = uri.scheme == LAZY_SCHEME
+
+        fun bvidOf(uri: Uri): String? = uri.getQueryParameter(PARAM_BVID)
+        fun cidOf(uri: Uri): Long? = uri.getQueryParameter(PARAM_CID)?.toLongOrNull()
+    }
 }

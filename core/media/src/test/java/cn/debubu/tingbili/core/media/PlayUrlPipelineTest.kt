@@ -1,34 +1,39 @@
 package cn.debubu.tingbili.core.media
 
+import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** PlayUrlPipeline 单测：解析/缓存/组装/错误判定（MediaItem 需 Robolectric）。 */
+/** PlayUrlPipeline + 惰性直链解析单测（MediaItem 需 Robolectric）。 */
 @RunWith(RobolectricTestRunner::class)
 class PlayUrlPipelineTest {
 
-    class FakeCache : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
+    class FakeCache : PlayUrlCacheDao {
         val map = mutableMapOf<String, PlayUrlCacheEntity>()
         var pruneExpiredCalls = 0
-        var pruneOverflowCalls = 0
         override suspend fun getAll(): List<PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun get(key: String): PlayUrlCacheEntity? = map[key]
         override suspend fun putAll(rows: List<PlayUrlCacheEntity>) { rows.forEach { map[it.key] = it } }
         override suspend fun pruneExpired(cutoffMs: Long) {
             pruneExpiredCalls++
             map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
         }
+        override suspend fun delete(key: String) {
+            map.remove(key)
+        }
         override suspend fun pruneOverflow(keep: Int) {
-            pruneOverflowCalls++
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
         }
     }
@@ -48,40 +53,80 @@ class PlayUrlPipelineTest {
     private lateinit var cache: FakeCache
     private lateinit var resolvers: FakeResolvers
     private lateinit var pipeline: PlayUrlPipeline
+    private lateinit var audioUrls: AudioUrlResolver
 
     @Before
     fun setUp() {
         cache = FakeCache()
         resolvers = FakeResolvers()
-        pipeline = PlayUrlPipeline(resolvers, resolvers, resolvers, cache)
+        pipeline = PlayUrlPipeline(resolvers, resolvers)
+        audioUrls = AudioUrlResolver(resolvers, cache)
     }
 
     private fun track(cid: Long = 1L) = Track("BV1", cid, "t", "a", "", 1000, null)
 
     @Test
-    fun `cache hit avoids network`() = runTest {
+    fun `buildItem metadata title includes part number`() {
+        val part = Track(
+            bvid = "BV1",
+            cid = 7,
+            title = "295-308",
+            author = "a",
+            cover = "",
+            durationMs = 1000,
+            subtitleUrl = null,
+            videoTitle = "无限流悬疑多人有声《请活到天明》",
+            pageIndex = 17,
+        )
+        val item = pipeline.buildItem(part, ImageFormat.WEBP)
+        assertEquals("P17 · 295-308", item.mediaMetadata.title)
+    }
+
+    @Test
+    fun `buildItem carries lazy uri and stable cache key`() {
+        val item = pipeline.buildItem(track(7), ImageFormat.WEBP)
+        assertEquals("BV1:7", item.mediaId)
+        assertEquals("BV1:7", item.localConfiguration?.customCacheKey)
+        val uri = item.localConfiguration!!.uri
+        assertTrue(PlayUrlPipeline.isLazyUri(uri))
+        assertEquals("BV1", PlayUrlPipeline.bvidOf(uri))
+        assertEquals(7L, PlayUrlPipeline.cidOf(uri))
+        // 惰性 URI 不是可直接播放的 http 直链
+        assertFalse(uri.toString().startsWith("http"))
+    }
+
+    @Test
+    fun `fresh cache skips network`() {
         cache.map["BV1:1"] = PlayUrlCacheEntity("BV1:1", "http://cached/x.mp3", System.currentTimeMillis())
-        val out = pipeline.resolveUrls(listOf(track()))
-        assertEquals("http://cached/x.mp3", out[track()])
+        assertEquals("http://cached/x.mp3", audioUrls.resolveBlocking("BV1", 1L))
         assertEquals(0, resolvers.resolveCalls)
     }
 
     @Test
-    fun `miss resolves and writes back`() = runTest {
-        val out = pipeline.resolveUrls(listOf(track(), track(2)))
-        assertEquals(2, out.size)
-        assertEquals(2, resolvers.resolveCalls)
-        assertEquals(2, cache.map.size)
+    fun `miss resolves once and writes cache`() {
+        assertEquals("http://example.com/a.mp3", audioUrls.resolveBlocking("BV1", 1L))
+        assertEquals(1, resolvers.resolveCalls)
+        assertEquals("http://example.com/a.mp3", cache.map["BV1:1"]?.url)
         assertEquals(1, cache.pruneExpiredCalls)
-        assertEquals(1, cache.pruneOverflowCalls)
     }
 
     @Test
-    fun `blank url is skipped`() = runTest {
-        resolvers.nextUrl = "  "
-        val out = pipeline.resolveUrls(listOf(track()))
-        assertTrue(out.isEmpty())
-        assertTrue(cache.map.isEmpty())
+    fun `stale cache is used when resolve fails`() {
+        resolvers.nextUrl = null
+        cache.map["BV1:2"] = PlayUrlCacheEntity("BV1:2", "http://cached/old.mp3", 1L)
+        assertEquals("http://cached/old.mp3", audioUrls.resolveBlocking("BV1", 2L))
+    }
+
+    @Test
+    fun `resolve failure without cache throws retryable error`() {
+        resolvers.nextUrl = null
+        val e = assertThrows(IOException::class.java) { audioUrls.resolveBlocking("BV1", 3L) }
+        assertTrue(e.message!!.contains(AudioUrlResolver.RESOLVE_FAILED_MARK))
+        assertTrue(pipeline.isRecoverable(
+            androidx.media3.common.PlaybackException(
+                e.message, e, androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+            )
+        ))
     }
 
     @Test
@@ -118,24 +163,10 @@ class PlayUrlPipelineTest {
     }
 
     @Test
-    fun `refreshUrl writes cache`() = runTest {
-        val url = pipeline.refreshUrl(track())
-        assertEquals("http://example.com/a.mp3", url)
-        assertEquals(url, cache.map["BV1:1"]?.url)
-    }
-
-    @Test
-    fun `refreshUrl null keeps old`() = runTest {
-        resolvers.nextUrl = null
-        assertNull(pipeline.refreshUrl(track()))
-        assertTrue(cache.map.isEmpty())
-    }
-
-    @Test
-    fun `buildItem keys by bvid and cid`() {
-        val item = pipeline.buildItem(track(), "http://example.com/a.mp3", ImageFormat.WEBP)
-        assertEquals("BV1:1", item.mediaId)
-        assertEquals("BV1:1", item.localConfiguration?.customCacheKey)
-        assertEquals("http://example.com/a.mp3", item.localConfiguration?.uri.toString())
+    fun `lazy uri round trips`() {
+        val uri = AudioUrlResolver.lazyUri("BVabc", 42L)
+        assertEquals("BVabc", PlayUrlPipeline.bvidOf(uri))
+        assertEquals(42L, PlayUrlPipeline.cidOf(uri))
+        assertNull(PlayUrlPipeline.bvidOf(android.net.Uri.parse("http://x/y")))
     }
 }

@@ -29,8 +29,8 @@ class PlaybackEventHandler(
     interface Listener {
         /** 当前队列快照（transition 越界保护用）。 */
         fun queueSnapshot(): List<Track>
-        /** 切歌：同步队列/状态/落盘/重排主动刷新（重试计数由本类自清）。 */
-        fun onTransition(index: Int)
+        /** 切歌：同步队列/状态/落盘/重排主动刷新（重试计数由本类自清）。reason 见 Player.MEDIA_ITEM_TRANSITION_REASON_*。 */
+        fun onTransition(index: Int, reason: Int)
         fun onPlayingChanged(isPlaying: Boolean)
         fun onPlayerStateChanged(buffering: Boolean)
         /** 播放器位置不连续（seek/切章/自动跳变）：调用方按播放器位置立即对表。 */
@@ -69,7 +69,7 @@ class PlaybackEventHandler(
                 val idx = transport.currentMediaItemIndex
                 if (idx in (listener.queueSnapshot().indices)) {
                     resetRetry()
-                    listener.onTransition(idx)
+                    listener.onTransition(idx, reason)
                 }
             }
 
@@ -95,7 +95,7 @@ class PlaybackEventHandler(
 
             override fun onPlayerError(error: PlaybackException) {
                 if (!pipeline.isRecoverable(error) || retryCount >= MAX_URL_REFRESH_RETRY) {
-                    listener.onFatalError(error.message ?: "播放出错")
+                    listener.onFatalError(friendlyMessage(error))
                     return
                 }
                 retryCount++
@@ -115,5 +115,15 @@ class PlaybackEventHandler(
     fun release() {
         retryJob?.cancel()
         retryJob = null
+    }
+
+    /**
+     * ExoPlayer 的播放错误外层 message 通常是没信息量的 "Source error"，
+     * 真正原因在 cause（例如惰性直链解析失败 / 403）。取最具体的一层给 UI。
+     */
+    private fun friendlyMessage(error: PlaybackException): String {
+        error.cause?.message?.takeIf { it.isNotBlank() }?.let { return it }
+        return error.message?.takeIf { it.isNotBlank() && it != "Source error" }
+            ?: "音源加载失败，请稍后重试"
     }
 }

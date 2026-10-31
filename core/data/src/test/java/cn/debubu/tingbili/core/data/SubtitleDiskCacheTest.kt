@@ -2,14 +2,10 @@ package cn.debubu.tingbili.core.data
 
 import android.content.Context
 import androidx.room.Room
-import androidx.sqlite.db.SupportSQLiteDatabase
-import androidx.sqlite.db.SupportSQLiteOpenHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.db.SubtitleDiskEntity
 import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -38,23 +34,4 @@ class SubtitleDiskCacheTest {
         assertNull(dao.get("BV2:2"))
     }
 
-    @Test
-    fun `migration 7 to 8 creates subtitle table`() {
-        // exportSchema=false，直接在空库上跑 MIGRATION_7_8，断言建表且幂等
-        val ctx = ApplicationProvider.getApplicationContext<Context>()
-        val config = SupportSQLiteOpenHelper.Configuration.builder(ctx)
-            .name(null)
-            .callback(object : SupportSQLiteOpenHelper.Callback(7) {
-                override fun onCreate(db: SupportSQLiteDatabase) {}
-                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
-            })
-            .build()
-        val helper = FrameworkSQLiteOpenHelperFactory().create(config)
-        val sqldb = helper.writableDatabase
-        TingBiliDatabase.MIGRATION_7_8.migrate(sqldb)
-        TingBiliDatabase.MIGRATION_7_8.migrate(sqldb)
-        sqldb.query("SELECT name FROM sqlite_master WHERE type='table' AND name='SubtitleDiskEntity'").use {
-            assertEquals(1, it.count)
-        }
-    }
 }

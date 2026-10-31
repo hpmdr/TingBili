@@ -372,7 +372,7 @@ private fun HomeSearchEntry(
         )
         Spacer(Modifier.width(12.dp))
         // 用 BasicTextField 自绘外壳：M3 TextField 自带 56dp 最小高度 + 大内边距，
-        // 在首页顶栏显得过胖；这里高度完全由内容决定（约 40dp），与原来的胶囊条一致
+        // 在首页顶栏显得过胖；这里高度完全由内容决定（约 34~36dp），贴合文字行高
         BasicTextField(
             value = input,
             onValueChange = onInputChange,
@@ -391,9 +391,10 @@ private fun HomeSearchEntry(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(36.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -421,10 +422,10 @@ private fun HomeSearchEntry(
                             imageVector = Icons.Default.Clear,
                             contentDescription = "清空",
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(24.dp)
                                 .clip(CircleShape)
                                 .clickable(onClick = onClearInput)
-                                .padding(7.dp),
+                                .padding(5.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -740,12 +741,8 @@ private fun TrackGridCard(
             Text(
                 text = "UP: ${track.author}",
                 style = MaterialTheme.typography.bodySmall,
-                // 能进主页时用主题色，明确"这行可点"
-                color = if (upMid != null) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                // UP 名只是辅助信息，不抢主体强调色；可点进主页的语义靠点击涟漪表达
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (upMid != null) {

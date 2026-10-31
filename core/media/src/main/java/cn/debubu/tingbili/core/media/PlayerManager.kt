@@ -1,4 +1,4 @@
-package cn.debubu.tingbili.core.media
+﻿package cn.debubu.tingbili.core.media
 
 import android.content.Context
 import android.content.Intent
@@ -12,14 +12,15 @@ import cn.debubu.tingbili.core.data.db.PlayQueueDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +66,9 @@ class PlayerManager @Inject constructor(
                     currentIndex = index,
                     currentTrack = queue.getOrNull(index),
                     sourceTitle = sourceTitle,
+                    sourceFolderId = queueManager.sourceFolderId,
+                    playOrder = queueManager.playOrder,
+                    shuffleEnabled = queueManager.shuffleEnabled,
                 )
             }
         }
@@ -87,6 +91,13 @@ class PlayerManager @Inject constructor(
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
     /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
     internal var clock: () -> Long = { System.currentTimeMillis() }
+
+    /** 当前随机方式（播放设置里的全局偏好；开关本身属于当前队列）。 */
+    @Volatile
+    private var randomMode: RandomPlayMode = RandomPlayMode.SHUFFLE
+
+    /** 纯随机自动切歌时，正在改跳到的目标下标（SEEK 回调用来清标记，避免递归）。 */
+    private var randomRedirectTarget: Int = -1
 
     // ── 历史/进度：单 tick（位置轮询 + 历史节流合并），逻辑在 HistoryTracker ──
     private val historyTracker: HistoryTracker =
@@ -119,6 +130,8 @@ class PlayerManager @Inject constructor(
     private val historyListener = object : HistoryTracker.Listener {
         override fun currentTrack(): Track? = _state.value.currentTrack
         override fun statePositionMs(): Long = _state.value.positionMs
+        override fun sourceFolderId(): Long? = queueManager.sourceFolderId
+        override fun sourceTitle(): String? = _state.value.sourceTitle
 
         /**
          * 进程被系统冻结期间 DSP 仍在出声，解冻后位置源可能落后于实际播放。
@@ -155,8 +168,8 @@ class PlayerManager @Inject constructor(
             prefs.setLastPosition(pos)
         }
     }
-    // ── 直链管线：cid 补齐 + 解析 + 组装 + 刷新（类 MediaSource 数据源层）──
-    private val playUrlPipeline = PlayUrlPipeline(playUrls, catalog, artwork, playUrlCache)
+    // ── 直链管线：cid 补齐 + 惰性直链 item 组装（真正的 playurl 解析在 Service 的 DataSource 里）──
+    private val playUrlPipeline = PlayUrlPipeline(catalog, artwork)
 
     private val playMutex = Mutex()
 
@@ -228,6 +241,13 @@ class PlayerManager @Inject constructor(
             restoreLastPlayback()
             restoreSleepTimer()
         }
+        // 随机方式改了且当前队列开着随机：立即换下发策略（洗牌 / 纯随机）
+        scope.launch {
+            prefs.randomPlayMode.collect { mode ->
+                randomMode = mode
+                if (queueManager.shuffleEnabled) applyShuffleToTransport()
+            }
+        }
         scope.launch {
             try {
                 val legacy = prefs.drainPlayUrlCache()
@@ -249,6 +269,9 @@ class PlayerManager @Inject constructor(
                 currentIndex = r.index,
                 currentTrack = track,
                 sourceTitle = r.sourceTitle,
+                sourceFolderId = r.sourceFolderId,
+                playOrder = r.playOrder,
+                shuffleEnabled = r.shuffleEnabled,
                 positionMs = r.positionMs,
                 durationMs = track.durationMs,
                 isPlaying = false,
@@ -256,6 +279,8 @@ class PlayerManager @Inject constructor(
                 repeatMode = r.repeatMode
             )
         }
+        randomMode = prefs.randomPlayMode.first()
+        applyShuffleToTransport()
     }
 
     private fun persistPosition(pos: Long) {
@@ -378,18 +403,33 @@ class PlayerManager @Inject constructor(
      * - transport 与 queue 对不上（理论上不会）时只更新 UI、不碰 transport，绝不崩。
      * - 与 play() 互斥（同一把锁），空新列表直接忽略。
      */
-    suspend fun refreshQueue(newTracks: List<Track>, sourceTitle: String?): QueueRefreshResult =
+    suspend fun refreshQueue(
+        newTracks: List<Track>,
+        sourceTitle: String?,
+        /** 队列来源收藏夹；BV 手动刷新等换了来源的场景传 null（默认清空跟随） */
+        sourceFolderId: Long? = null,
+    ): QueueRefreshResult =
         playMutex.withLock {
             if (newTracks.isEmpty()) return QueueRefreshResult(0, 0, 0)
             val title = sourceTitle?.takeIf { it.isNotBlank() }
+            // 当前列表是倒序时，新内容也要按倒序参与对齐/落库
+            val ordered = if (queueManager.playOrder == PlayOrder.REVERSE) newTracks.reversed() else newTracks
             val old = queue
             if (old.isEmpty() || currentIndex !in old.indices) {
                 // 无有效队列：收下新列表等用户点（本来也没在播，不碰 transport）
-                queueManager.adoptTracks(newTracks, title)
-                _state.update { it.copy(queue = newTracks, currentIndex = -1, currentTrack = null, sourceTitle = title) }
+                queueManager.adoptTracks(ordered, title, sourceFolderId)
+                _state.update {
+                    it.copy(
+                        queue = ordered,
+                        currentIndex = -1,
+                        currentTrack = null,
+                        sourceTitle = title,
+                        sourceFolderId = sourceFolderId,
+                    )
+                }
                 return QueueRefreshResult(0, 0, 0)
             }
-            val plan = QueueRefreshPlanner.compute(old, currentIndex, newTracks)
+            val plan = QueueRefreshPlanner.compute(old, currentIndex, ordered)
             val transportOk = try {
                 transport.mediaItemCount == old.size
             } catch (_: Exception) {
@@ -406,18 +446,11 @@ class PlayerManager @Inject constructor(
                 }
                 // 增/改：按最终顺序走一遍（B 站分 P 只增删不重排，走位必然对齐；
                 // 万一重排，对不上就停手：UI 照新，transport 不再动，绝不插出重复项）
-                val urlMap = playUrlPipeline.resolveUrls(plan.addedTracks)
                 val imageFormat = prefs.imageFormat.first()
-                val urlCache = try {
-                    playUrlCache.getAll().associateBy { it.key }
-                } catch (_: Exception) {
-                    emptyMap()
-                }
-                val nowMs = System.currentTimeMillis()
-                added = spliceTransport(plan, urlMap, urlCache, imageFormat, nowMs)
+                added = spliceTransport(plan, imageFormat)
             }
             // 队列真相唯一在 QueueManager（同步经 listener）；added 按新增 key 数报数，保持旧语义
-            queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title)
+            queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title, sourceFolderId)
             return QueueRefreshResult(
                 if (transportOk) added else plan.addedIfNoTransport,
                 plan.removed,
@@ -431,12 +464,9 @@ class PlayerManager @Inject constructor(
      * （在播项不动，换 uri 会打断当前播放），新增项插空，返回实际插入数。
      * 重排（某项在 base 里但位置对不上）直接停手：UI 照新，transport 不再动。
      */
-    private suspend fun spliceTransport(
+    private fun spliceTransport(
         plan: RefreshPlan,
-        urlMap: Map<Track, String>,
-        urlCache: Map<String, PlayUrlCacheEntity>,
         imageFormat: ImageFormat,
-        nowMs: Long,
     ): Int {
         val expected = plan.base.toMutableList()
         var playIdx = plan.playingTransportIdx
@@ -445,21 +475,17 @@ class PlayerManager @Inject constructor(
             val m = expected.getOrNull(i)
             if (m != null && m.queueKey() == item.queueKey()) {
                 if (m != item && i != playIdx) {
-                    val url = urlCache["${item.bvid}:${item.cid}"]
-                        ?.takeIf { it.isFresh(nowMs) }?.url
-                    if (url != null) {
-                        try {
-                            transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, url, imageFormat))
-                        } catch (_: Exception) {
-                        }
+                    // 元数据变了但直链要等真正开播才解析，直接换惰性 item 即可
+                    try {
+                        transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, imageFormat))
+                    } catch (_: Exception) {
                     }
                 }
                 continue
             }
             if (expected.any { it.queueKey() == item.queueKey() }) break // 重排：停手保平安
-            val url = urlMap[item] ?: continue // 新增解析失败：UI 和 transport 都跳过该集
             try {
-                transport.addMediaItem(i, playUrlPipeline.buildItem(item, url, imageFormat))
+                transport.addMediaItem(i, playUrlPipeline.buildItem(item, imageFormat))
             } catch (_: Exception) {
                 continue
             }
@@ -468,6 +494,228 @@ class PlayerManager @Inject constructor(
             added++
         }
         return added
+    }
+
+    /**
+     * 收藏夹内容变化后把播放列表对齐到夹内最新内容（不断播）。
+     *
+     * - 只在当前队列来源就是 [folderId] 时生效；其它来源（搜索/历史/BV 分 P）不受影响。
+     * - 增删/改名：复用 [refreshQueue] 的增量 splice，正在播的 P 不断。
+     * - 拖拽排序：transport 的旧顺序已经错了，按最终顺序重建播放列表并回到原进度。
+     * - 整夹被清空/删除：按 Media3 规范（删掉在播项且没有后继 → ended）停止播放并清空队列；
+     *   停之前先落一次历史，重新收藏后还能续播。
+     * - 只删在播的这一集、夹里还有别的：不打断当前声音，播完继续放剩下的。
+     *
+     * @return 是否真的改动了队列
+     */
+    suspend fun syncFolderQueue(
+        folderId: Long,
+        newTracks: List<Track>,
+        folderName: String?,
+    ): Boolean {
+        if (queueManager.sourceFolderId != folderId) return false
+        val old = queue
+        if (currentIndex !in old.indices) return false
+        val title = folderName?.takeIf { it.isNotBlank() } ?: _state.value.sourceTitle
+        // 当前列表倒序时，收藏夹的新内容也按倒序对齐
+        val ordered = if (queueManager.playOrder == PlayOrder.REVERSE) newTracks.reversed() else newTracks
+        if (old.size == ordered.size && old.zip(ordered).all { (a, b) -> a == b }) {
+            // 内容/顺序没变，只有夹名可能改了：只更新来源名，不动 transport
+            if (title != _state.value.sourceTitle) {
+                queueManager.applyRefresh(old, currentIndex, title, folderId)
+            }
+            return false
+        }
+        if (newTracks.isEmpty()) {
+            playMutex.withLock {
+                // 等待锁期间来源/队列可能已被别的 play 换掉
+                if (queueManager.sourceFolderId != folderId) return false
+                stopAndClearQueue()
+            }
+            return true
+        }
+        val plan = QueueRefreshPlanner.compute(old, currentIndex, ordered)
+        val baseKeys = plan.base.map { it.queueKey() }
+        val finalSurvivorKeys = plan.final.map { it.queueKey() }.filter { it in baseKeys }
+        val reordered = finalSurvivorKeys != baseKeys
+        if (!reordered) {
+            refreshQueue(newTracks, title, folderId)
+            return true
+        }
+        // 重排：transport 里的旧顺序已经和收藏夹对不上了，直接按最终顺序重建
+        playMutex.withLock {
+            // 等待锁期间来源/队列可能已被别的 play 换掉：放弃这次，等下一次夹变更再对齐
+            if (queueManager.sourceFolderId != folderId || queue != old) return false
+            val pos = _state.value.positionMs
+            val wasPlaying = _state.value.isPlaying
+            val imageFormat = prefs.imageFormat.first()
+            queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title, folderId)
+            _state.update { it.copy(isPlaying = wasPlaying, positionMs = pos) }
+            try {
+                transport.setMediaItems(
+                    plan.final.map { track -> playUrlPipeline.buildItem(track, imageFormat) },
+                    plan.playingFinalIdx,
+                    pos,
+                )
+                transport.prepare()
+                if (wasPlaying) transport.play()
+            } catch (e: Exception) {
+                // 重建失败只影响 transport，队列真相已在 QueueManager；下次起播自然对齐
+                Log.w("TingBiliPlay", "syncFolderQueue rebuild transport failed", e)
+            }
+        }
+        return true
+    }
+
+    /**
+     * 来源夹被清空/删除：先落历史，再停声、清 transport 与队列。
+     * 队列无剩余项时进入 ended（Media3 对「删掉在播项且无后继」的规范行为）。
+     */
+    private suspend fun stopAndClearQueue() {
+        runCatching { historyTracker.flush() }
+        transport.pause()
+        try {
+            transport.setMediaItems(emptyList(), 0, 0L)
+        } catch (e: Exception) {
+            Log.w("TingBiliPlay", "clear transport failed", e)
+        }
+        queueManager.clearQueue()
+        _state.update {
+            it.copy(
+                queue = emptyList(),
+                currentIndex = -1,
+                currentTrack = null,
+                sourceTitle = null,
+                sourceFolderId = null,
+                playOrder = PlayOrder.FORWARD,
+                shuffleEnabled = false,
+                isPlaying = false,
+                isLoading = false,
+                positionMs = 0L,
+                bufferedPositionMs = 0L,
+                durationMs = 0L,
+                errorMessage = null,
+            )
+        }
+    }
+
+    /**
+     * 切换当前播放列表的正/倒序：只反转这条队列，当前在播项与进度保持不变。
+     * 收藏夹/BV 的来源顺序不受影响。
+     */
+    suspend fun setPlayOrder(order: PlayOrder) = playMutex.withLock {
+        if (order == queueManager.playOrder) return
+        // 切顺序前先对表，避免用 500ms 前的缓存位置重建
+        syncPositionFromPlayer(force = true)
+        val pos = _state.value.positionMs
+        val playing = _state.value.isPlaying
+        queueManager.setPlayOrder(order)
+        if (queue.isEmpty()) return
+        rebuildTransport(queueManager.currentIndex, pos, playing)
+    }
+
+    /** 当前播放列表的随机开关（方式由播放设置决定，开关只属于这条队列）。 */
+    suspend fun setShuffleEnabled(enabled: Boolean) = playMutex.withLock {
+        randomMode = prefs.randomPlayMode.first()
+        queueManager.setShuffleEnabled(enabled)
+        applyShuffleToTransport()
+        _state.update { it.copy(shuffleEnabled = enabled) }
+    }
+
+    /** 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。 */
+    fun playAt(index: Int) {
+        if (index !in queue.indices) return
+        if (transport.mediaItemCount == queue.size) {
+            transport.seekTo(index, 0L)
+            transport.play()
+            return
+        }
+        effectiveScope().launch {
+            playMutex.withLock { rebuildTransport(index, 0L, startPlaying = true) }
+        }
+    }
+
+    /** 根据当前队列/顺序/随机开关，把 transport 的 shuffle/repeat 状态对齐。 */
+    private suspend fun applyShuffleToTransport() {
+        val enabled = queueManager.shuffleEnabled
+        val mode = randomMode
+        transport.shuffleModeEnabled = enabled && mode == RandomPlayMode.SHUFFLE
+        val prefRepeat = prefs.repeatMode.first()
+        transport.repeatMode = when {
+            // 纯随机需要「永远有下一首」：交给 repeat all，再由 auto 回调改跳随机项
+            enabled && mode == RandomPlayMode.PURE_RANDOM -> Player.REPEAT_MODE_ALL
+            prefRepeat == PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
+            prefRepeat == PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
+    }
+
+    /**
+     * 用当前队列（已是正/倒序后的顺序）重建 transport，保持当前项与进度。
+     * 用于冷恢复、切正/倒序、章节点播等不能重置队列状态的场景。
+     */
+    private suspend fun rebuildTransport(
+        startIndex: Int = currentIndex,
+        startPositionMs: Long = _state.value.positionMs,
+        startPlaying: Boolean = _state.value.isPlaying,
+    ) {
+        val q = queue
+        if (q.isEmpty()) return
+        // 冷启动时 Service 可能还没起；先拉起前台服务再等 controller 就绪（幂等）
+        ContextCompat.startForegroundService(
+            appContext,
+            Intent(appContext, TingBiliPlaybackService::class.java),
+        )
+        if (!transport.awaitReady()) return
+        val safe = startIndex.coerceIn(0, q.lastIndex)
+        val pos = startPositionMs.coerceIn(
+            0L,
+            q[safe].durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE,
+        )
+        randomMode = prefs.randomPlayMode.first()
+        val imageFormat = prefs.imageFormat.first()
+        transport.setMediaItems(
+            q.map { track -> playUrlPipeline.buildItem(track, imageFormat) },
+            safe,
+            pos,
+        )
+        applyShuffleToTransport()
+        val speed = _state.value.speed
+        if (speed != 1f) transport.setPlaybackSpeed(speed)
+        transport.prepare()
+        if (startPlaying) transport.play()
+        attachPlayerListener()
+        historyTracker.start(clock())
+        eventHandler.resetRetry()
+        positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
+        queueManager.moveCurrentTo(safe)
+        _state.update {
+            it.copy(
+                currentIndex = safe,
+                currentTrack = q[safe],
+                positionMs = pos,
+                bufferedPositionMs = 0L,
+                durationMs = q[safe].durationMs,
+                isPlaying = startPlaying,
+            )
+        }
+    }
+
+    /** 纯随机：从当前列表随机取一首（可重复），手动/自动切歌都走这里。 */
+    private fun jumpToRandom(excludeCurrent: Boolean) {
+        val q = queue
+        if (q.isEmpty()) return
+        val candidates = q.indices.filter { !excludeCurrent || it != currentIndex }
+        if (candidates.isEmpty()) return
+        val target = candidates.random()
+        if (transport.mediaItemCount == q.size) {
+            transport.seekTo(target, 0L)
+            transport.play()
+        } else {
+            effectiveScope().launch {
+                playMutex.withLock { rebuildTransport(target, 0L, startPlaying = true) }
+            }
+        }
     }
 
     /**
@@ -480,10 +728,15 @@ class PlayerManager @Inject constructor(
         index: Int,
         sourceTitle: String? = null,
         startPositionMs: Long? = null,
+        /** 队列来源收藏夹 id：非空时队列会跟随该夹实时同步（[syncFolderQueue]） */
+        sourceFolderId: Long? = null,
     ) {
         if (tracks.isEmpty()) return
         // 防重入：正在加载时忽略新的播放请求
         if (!playMutex.tryLock()) return
+        // 旧状态留作失败回滚：解析失败时不能让界面停在「新标题 + 旧声音/旧进度」
+        var previous: PlaybackState? = null
+        var wasPlaying = false
         try {
             _state.update { it.copy(isLoading = true, errorMessage = null) }
             // 先拉起前台服务：后台保活 + 通知栏的前提；幂等，重复调用无副作用。
@@ -491,52 +744,69 @@ class PlayerManager @Inject constructor(
                 appContext,
                 Intent(appContext, TingBiliPlaybackService::class.java)
             )
+            // 冷启动时 MediaController 可能还没连上：这期间 setMediaItems 会被静默丢弃，
+            // 表现就是「切了歌还在放上一集」。先等连接就绪，超时直接失败，不制造混合态。
+            if (!transport.awaitReady()) {
+                _state.update { it.copy(isLoading = false, errorMessage = "播放服务未就绪，请重试") }
+                return
+            }
             val safeIndex = index.coerceIn(0, tracks.lastIndex)
 
+            // 解析直链要几秒，先把旧声停掉：否则界面已换成新曲目，耳朵里还是上一集。
+            wasPlaying = transport.isPlaying
+            if (wasPlaying) pause()
+            previous = _state.value
+
+            // 先改队列来源再乐观更新：后面解析 cid / 读图片格式会挂起，
+            // 期间历史 tick 若看到“新曲目 + 旧收藏夹”会把新曲写成旧来源。
+            val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
+            queueManager.setSource(resolvedSourceTitle, sourceFolderId)
+
             // 乐观更新：URL 逐个解析很慢，先让播放页/mini-player 立刻显示队列归属。
+            // 进度与时长一并换成新曲目的，避免「新标题配旧进度」。
             _state.update {
                 it.copy(
                     queue = tracks,
                     currentIndex = safeIndex,
                     currentTrack = tracks.getOrNull(safeIndex),
-                    sourceTitle = sourceTitle?.takeIf { title -> title.isNotBlank() },
+                    sourceTitle = resolvedSourceTitle,
+                    sourceFolderId = sourceFolderId,
+                    playOrder = PlayOrder.FORWARD,
+                    shuffleEnabled = false,
                     isPlaying = false,
+                    positionMs = startPositionMs?.coerceAtLeast(0L) ?: 0L,
+                    bufferedPositionMs = 0L,
+                    durationMs = tracks[safeIndex].durationMs,
                 )
             }
 
             // 搜索结果不带 cid（cid=0），先用 view() 解析出真实分P
             val resolved = tracks.map { t -> if (t.cid == 0L) playUrlPipeline.resolveCid(t) else t }
 
-            // playurl 批量解析（缓存命中即用、未命中并发补，见 resolveUrls）；失败项跳过。
-            // 冷启动/重装恢复时缓存命中则 0 网络解析、秒开。
-            val urlMap = playUrlPipeline.resolveUrls(resolved)
+            // 直链不再在这里批量解析：item 存惰性 URI，播到哪一集才解析哪一集。
+            // 这样 67 P 的视频不会一起打接口触发风控，也能立刻起播。
             val imageFormat = prefs.imageFormat.first()
-            val items = resolved.mapNotNull { track ->
-                urlMap[track]?.let { track to it }
-            }
-            if (items.isEmpty()) {
-                _state.update { it.copy(isPlaying = false, isLoading = false, errorMessage = "暂无可播放音源") }
-                return
-            }
-
-            // 目标曲目若不可播，取其后第一个可播项，否则第一个可播项
-            val startIndex = items.indexOfFirst { it.first == resolved[safeIndex] }
-                .takeIf { it >= 0 }
-                ?: items.indexOfFirst { it.first == resolved.getOrNull(safeIndex) }
-                    .takeIf { it >= 0 }
-                ?: 0
-            val playableTracks = items.map { it.first }
+            val startIndex = safeIndex
+            val playableTracks = resolved
             val resolvedStartPosition = startPositionMs
                 ?.coerceAtLeast(0L)
                 ?.coerceAtMost(playableTracks[startIndex].durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
                 ?: 0L
 
             // 持久化队列与起点，供下次冷启动恢复（Room 单行原子快照 + DataStore 进度）
-            val resolvedSourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
-            queueManager.setActiveQueue(playableTracks, startIndex, resolvedSourceTitle)
+            queueManager.setActiveQueue(
+                playableTracks,
+                startIndex,
+                resolvedSourceTitle,
+                sourceFolderId,
+                playOrder = PlayOrder.FORWARD,
+                shuffleEnabled = false,
+            )
             persistPosition(resolvedStartPosition)
+            // 新队列：顺序模式默认正序、随机开关默认关；把 transport 的旧随机状态清掉
+            transport.shuffleModeEnabled = false
             transport.setMediaItems(
-                items.map { (track, url) -> playUrlPipeline.buildItem(track, url, imageFormat) },
+                playableTracks.map { track -> playUrlPipeline.buildItem(track, imageFormat) },
                 startIndex,
                 resolvedStartPosition,
             )
@@ -562,6 +832,9 @@ class PlayerManager @Inject constructor(
                     currentIndex = startIndex,
                     currentTrack = playableTracks[startIndex],
                     sourceTitle = resolvedSourceTitle,
+                    sourceFolderId = sourceFolderId,
+                    playOrder = PlayOrder.FORWARD,
+                    shuffleEnabled = false,
                     isPlaying = true,
                     isLoading = false,
                     positionMs = resolvedStartPosition,
@@ -575,10 +848,10 @@ class PlayerManager @Inject constructor(
             if (startPositionMs != null) {
                 persistPosition(resolvedStartPosition)
             } else {
-                // Resume track at saved history if exists（只在该 BV 最近播放的同一分 P 上续播）
+                // 自动续播：优先当前来源（收藏夹/BV）的历史；没有就取该分 P 最近一条
                 val startTrack = playableTracks[startIndex]
-                val saved = historyDao.get(startTrack.bvid)
-                if (saved != null && saved.cid == startTrack.cid && saved.positionMs > 0L) {
+                val saved = savedHistoryFor(startTrack, sourceFolderId)
+                if (saved != null && saved.positionMs > 0L) {
                     transport.seekTo(saved.positionMs)
                     _state.update { it.copy(positionMs = saved.positionMs) }
                     persistPosition(saved.positionMs)
@@ -588,11 +861,10 @@ class PlayerManager @Inject constructor(
             historyTracker.start(clock())
             attachPlayerListener()
             eventHandler.resetRetry()
-            scheduleProactiveRefresh()
             // 刚起播：位置以 startPosition/历史落点为准，抑制采样直到播放器跟上
             positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
         } catch (e: Exception) {
-            _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "播放失败") }
+            revertToPrevious(previous, wasPlaying, e.message ?: "播放失败")
         } finally {
             // 确保加载态在异常或正常路径都收敛；若 play 已将 isLoading 置为 false 则保持
             if (_state.value.isLoading) {
@@ -602,6 +874,50 @@ class PlayerManager @Inject constructor(
         }
     }
 
+    /**
+     * 起播时的续播位置：
+     * 1. 优先当前来源（收藏夹/BV）且就是这一集的记录；
+     * 2. 否则取该分 P 跨来源最近一条（同一集从别处听过也能续上）。
+     */
+    private suspend fun savedHistoryFor(
+        track: Track,
+        sourceFolderId: Long?,
+    ): HistoryEntity? {
+        val source = try {
+            if (sourceFolderId != null) {
+                historyDao.getSource(HistoryEntity.SOURCE_FOLDER, sourceFolderId.toString())
+            } else {
+                historyDao.getSource(HistoryEntity.SOURCE_BV, track.bvid)
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (source != null && source.bvid == track.bvid && source.cid == track.cid) return source
+        return try {
+            historyDao.getLatestForTrack(track.bvid, track.cid)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 起播失败：回到上一首的界面态并恢复原播放。
+     * 两样都必须还原——否则会留下「界面是新曲目、声音和进度还是上一集」的错位状态。
+     */
+    private fun revertToPrevious(previous: PlaybackState?, wasPlaying: Boolean, message: String) {
+        if (previous == null) {
+            _state.update { it.copy(isPlaying = false, isLoading = false, errorMessage = message) }
+            return
+        }
+        // 起播前已经把 QueueManager 的来源改成新队列；回滚时一并对齐，避免历史写入错来源
+        queueManager.setSource(previous.sourceTitle, previous.sourceFolderId)
+        _state.value = previous.copy(
+            isLoading = false,
+            isPlaying = wasPlaying,
+            errorMessage = message,
+        )
+        if (wasPlaying) runCatching { transport.play() }
+    }
 
     fun pause() {
         // 先对表再停：暂停落点必须以播放器为准。不能只看 isPlaying——
@@ -634,13 +950,12 @@ class PlayerManager @Inject constructor(
     fun resume() {
         // 起播前先对表：冷恢复分支拿的就是这个位置，宁可信播放器也不信被冻结过的缓存
         syncPositionFromPlayer()
-        // 若队列已恢复但尚未 prepare（冷启动后），走 play() 重建 MediaItem 并 seek 到保存进度
+        // 队列已恢复但 transport 尚未 prepare（冷启动后）：按当前顺序/随机状态重建并回原进度
         if (queue.isNotEmpty() && (transport.mediaItemCount == 0 || transport.currentMediaItemIndex !in queue.indices)) {
             val idx = currentIndex.coerceIn(0, queue.lastIndex)
             val pos = _state.value.positionMs
-            val sourceTitle = _state.value.sourceTitle
             effectiveScope().launch {
-                play(queue, idx, sourceTitle, pos)
+                playMutex.withLock { rebuildTransport(idx, pos, startPlaying = true) }
             }
             return
         }
@@ -713,20 +1028,36 @@ class PlayerManager @Inject constructor(
 
     fun next() {
         if (queue.isEmpty()) return
-        val nextIdx = (currentIndex + 1) % queue.size
-        // fire and forget — callers in compose scope
-        effectiveScope().launch { play(queue, nextIdx) }
+        if (queueManager.shuffleEnabled && randomMode == RandomPlayMode.PURE_RANDOM) {
+            jumpToRandom(excludeCurrent = true)
+            return
+        }
+        if (transport.mediaItemCount != queue.size) {
+            val nextIdx = (currentIndex + 1) % queue.size
+            effectiveScope().launch {
+                playMutex.withLock { rebuildTransport(nextIdx, 0L, startPlaying = true) }
+            }
+            return
+        }
+        transport.seekToNextMediaItem()
+        transport.play()
     }
 
     fun previous() {
         if (queue.isEmpty()) return
-        val prevIdx = if (currentIndex - 1 < 0) queue.lastIndex else currentIndex - 1
-        effectiveScope().launch { play(queue, prevIdx) }
+        if (transport.mediaItemCount != queue.size) {
+            val prevIdx = if (currentIndex - 1 < 0) queue.lastIndex else currentIndex - 1
+            effectiveScope().launch {
+                playMutex.withLock { rebuildTransport(prevIdx, 0L, startPlaying = true) }
+            }
+            return
+        }
+        transport.seekToPreviousMediaItem()
+        transport.play()
     }
 
     fun release() {
         historyTracker.release()
-        urlRefreshJob?.cancel(); urlRefreshJob = null
         sleepTimer.release()
         audioPolicy.release()
         eventHandler.release()
@@ -737,7 +1068,27 @@ class PlayerManager @Inject constructor(
 
     private val eventListener = object : PlaybackEventHandler.Listener {
         override fun queueSnapshot(): List<Track> = queueManager.queue
-        override fun onTransition(index: Int) {
+        override fun onTransition(index: Int, reason: Int) {
+            // 纯随机：自动连播先落到顺序下一首，立即改跳随机项（手动下一首走 next()）
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
+                randomRedirectTarget == -1 &&
+                queueManager.shuffleEnabled &&
+                randomMode == RandomPlayMode.PURE_RANDOM &&
+                queue.size > 1 &&
+                !_state.value.sleepEndOfChapter
+            ) {
+                val target = queue.indices.filter { it != index }.random()
+                if (target != index) {
+                    // 先把上一集在章尾的进度落到历史，再改跳
+                    effectiveScope().launch { runCatching { historyTracker.flush() } }
+                    randomRedirectTarget = target
+                    transport.pause()
+                    transport.seekTo(target, 0L)
+                    transport.play()
+                    return
+                }
+            }
+            randomRedirectTarget = -1
             queueManager.moveCurrentTo(index)
             _state.update {
                 it.copy(
@@ -750,7 +1101,6 @@ class PlayerManager @Inject constructor(
             }
             // 切歌即时刷一次历史：节流 10s 下，播完一切就落盘，不用等下一 tick
             effectiveScope().launch { historyTracker.flush() }
-            scheduleProactiveRefresh()
         }
         override fun onPlayingChanged(isPlaying: Boolean) {
             _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
@@ -786,46 +1136,41 @@ class PlayerManager @Inject constructor(
             val track = _state.value.currentTrack
                 ?: return PlaybackEventHandler.RecoverResult.Failed("音源失效")
             val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
-            // 解析失败（null/空）与旧 Result.Error 同义：报刷新失败，下次错误再重试
-            val newUrl = playUrlPipeline.refreshUrl(track)
-                ?: return PlaybackEventHandler.RecoverResult.Failed("音源刷新失败")
-            val imageFormat = prefs.imageFormat.first()
-            val newItem = playUrlPipeline.buildItem(track, newUrl, imageFormat)
             val idx = currentIndex
             if (idx !in queue.indices) {
                 return PlaybackEventHandler.RecoverResult.Failed("刷新失败")
             }
-            transport.replaceMediaItem(idx, newItem)
+            // 惰性直链：失效旧档缓存，换惰性 item 再 prepare，DataSource 打开时按当前偏好重新解析
+            val imageFormat = prefs.imageFormat.first()
+            runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
+            transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, imageFormat))
             transport.prepare()
             transport.seekTo(pos)
             transport.play()
             _state.update { it.copy(isLoading = true) }
-            scheduleProactiveRefresh()
             return PlaybackEventHandler.RecoverResult.Recovered
         }
     }
     /**
-     * 音质切换：按当前偏好重解析本集直链并原位替换（沿用 onRetryRecover 的不断播 swap 模式）。
-     * 解析走 PlayUrlPipeline.refreshUrl（直连网络、回写缓存），偏好已由调用方先落盘。
-     * 成功返回 true；无在播/解析失败返回 false（调用方保留旧声、Toast 提示）。
+     * 音质切换：偏好已由调用方先落盘；换回惰性 item 并 prepare，
+     * DataSource 打开时按新偏好重新解析直链（沿用 onRetryRecover 的不断播 swap 模式）。
+     * 无在播返回 false；正常返回 true。
      */
     suspend fun refreshCurrentUrl(): Boolean {
         val track = _state.value.currentTrack ?: return false
         val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
-        val newUrl = playUrlPipeline.refreshUrl(track) ?: return false
         val idx = currentIndex
         if (idx !in queue.indices) return false
-        transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, newUrl, prefs.imageFormat.first()))
+        // 旧档直链可能还是"新鲜"缓存，必须失效，否则换音质后仍复用旧 URL
+        runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
+        transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, prefs.imageFormat.first()))
         transport.prepare()
         transport.seekTo(pos)
         if (_state.value.isPlaying) transport.play()
-        scheduleProactiveRefresh()
         return true
     }
 
-    private var urlRefreshJob: Job? = null
     private companion object {
-        const val PROACTIVE_REFRESH_MS = 90 * 60 * 1000L // 90min，B站 URL 约 2h 过期，提前刷新
         /** 冻结后重同步的冷却：seek 会重建 AudioTrack，别让它连续触发 */
         const val REALIGN_COOLDOWN_MS = 60_000L
         /** 位置对表死区：小于它不写回，避免 tick 抖动带来无意义重组 */
@@ -836,22 +1181,6 @@ class PlayerManager @Inject constructor(
         const val REALIGN_DEEP_SLEEP_MS = 60_000L
         /** 状态位置与播放器位置差超过它才算真失步 */
         const val REALIGN_MISMATCH_MS = 1_000L
-    }
-
-    private fun scheduleProactiveRefresh() {
-        urlRefreshJob?.cancel()
-        urlRefreshJob = effectiveScope().launch {
-            delay(PROACTIVE_REFRESH_MS)
-            val track = _state.value.currentTrack ?: return@launch
-            if (!transport.isPlaying) return@launch
-            val pos = transport.currentPosition
-            // 解析失败（null/空）沿用旧 URI：下次错误时再重试
-            val newUrl = playUrlPipeline.refreshUrl(track)
-            if (!newUrl.isNullOrBlank() && currentIndex in queue.indices) {
-                        val newItem = playUrlPipeline.buildItem(track, newUrl, prefs.imageFormat.first())
-                        transport.replaceMediaItem(currentIndex, newItem)
-                    }
-        }
     }
 
     private var listenerAttached = false

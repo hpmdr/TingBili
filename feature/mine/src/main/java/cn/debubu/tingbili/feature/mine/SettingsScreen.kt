@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +50,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.core.data.model.RandomPlayMode
 
 /** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码开关 / 默认音质入口）。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,9 +66,11 @@ fun SettingsScreen(
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
+    val randomPlayMode by vm.randomPlayMode.collectAsStateWithLifecycle()
     val sleepFinishChapter by vm.sleepFinishChapter.collectAsStateWithLifecycle()
     var showStepSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
+    var showRandomModeSheet by remember { mutableStateOf(false) }
 
     TingBiliScaffold(
         topBar = {
@@ -108,6 +112,18 @@ fun SettingsScreen(
                         subtitle = "全屏与迷你字幕同步缩放",
                         value = subtitleScaleLabel(subtitleScale),
                         onClick = { showSubtitleSheet = true },
+                    )
+                    SettingDivider()
+                    SettingRow(
+                        icon = Icons.Filled.Shuffle,
+                        accent = SettingAccent.BLUE,
+                        title = "随机播放方式",
+                        subtitle = "洗牌：每轮每集一次；纯随机：下一首可能重复",
+                        value = when (randomPlayMode) {
+                            RandomPlayMode.SHUFFLE -> "洗牌"
+                            RandomPlayMode.PURE_RANDOM -> "纯随机"
+                        },
+                        onClick = { showRandomModeSheet = true },
                     )
                 }
             }
@@ -191,6 +207,30 @@ fun SettingsScreen(
                 showSubtitleSheet = false
             },
             onDismiss = { showSubtitleSheet = false },
+        )
+    }
+    if (showRandomModeSheet) {
+        TingBiliChoiceSheet(
+            title = "随机播放方式",
+            subtitle = "只影响播放列表里打开「随机」后的选曲方式。",
+            options = listOf(
+                TingBiliChoiceOption(
+                    RandomPlayMode.SHUFFLE,
+                    "洗牌播放",
+                    "把当前列表按随机顺序打散，每轮每集最多播一次",
+                ),
+                TingBiliChoiceOption(
+                    RandomPlayMode.PURE_RANDOM,
+                    "纯随机",
+                    "每次下一首都从当前列表随机选，可能重复播同一集",
+                ),
+            ),
+            selected = randomPlayMode,
+            onApply = {
+                vm.setRandomPlayMode(it)
+                showRandomModeSheet = false
+            },
+            onDismiss = { showRandomModeSheet = false },
         )
     }
 }

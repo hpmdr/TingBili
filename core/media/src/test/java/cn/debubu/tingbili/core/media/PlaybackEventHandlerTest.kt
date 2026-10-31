@@ -46,8 +46,10 @@ class PlaybackEventHandlerTest {
     class FakeCache : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, PlayUrlCacheEntity>()
         override suspend fun getAll(): List<PlayUrlCacheEntity> = map.values.toList()
+        override suspend fun get(key: String): PlayUrlCacheEntity? = map[key]
         override suspend fun putAll(rows: List<PlayUrlCacheEntity>) { rows.forEach { map[it.key] = it } }
         override suspend fun pruneExpired(cutoffMs: Long) {}
+        override suspend fun delete(key: String) { map.remove(key) }
         override suspend fun pruneOverflow(keep: Int) {}
     }
 
@@ -65,7 +67,7 @@ class PlaybackEventHandlerTest {
         var retryStarts = 0
         var recover: PlaybackEventHandler.RecoverResult = PlaybackEventHandler.RecoverResult.Recovered
         override fun queueSnapshot(): List<Track> = queue
-        override fun onTransition(index: Int) { transitions += index }
+        override fun onTransition(index: Int, reason: Int) { transitions += index }
         override fun onPlayingChanged(isPlaying: Boolean) { playingChanges += isPlaying }
         override fun onPlayerStateChanged(buffering: Boolean) { stateChanges += buffering }
         override fun onFatalError(message: String?) { fatals += message }
@@ -83,7 +85,7 @@ class PlaybackEventHandlerTest {
     fun setUp() {
         transport = FakeTransport()
         listener = FakeListener(listOf(track(1), track(2)))
-        handler = PlaybackEventHandler(transport, PlayUrlPipeline(FakeResolvers(), FakeResolvers(), FakeResolvers(), FakeCache()))
+        handler = PlaybackEventHandler(transport, PlayUrlPipeline(FakeResolvers(), FakeResolvers()))
     }
 
     private fun error403() = PlaybackException(

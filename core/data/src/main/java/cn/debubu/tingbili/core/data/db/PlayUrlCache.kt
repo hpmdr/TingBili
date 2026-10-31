@@ -33,12 +33,19 @@ interface PlayUrlCacheDao {
     @Query("SELECT * FROM PlayUrlCacheEntity")
     suspend fun getAll(): List<PlayUrlCacheEntity>
 
+    @Query("SELECT * FROM PlayUrlCacheEntity WHERE `key` = :key")
+    suspend fun get(key: String): PlayUrlCacheEntity?
+
     @Upsert
     suspend fun putAll(rows: List<PlayUrlCacheEntity>)
 
     /** 删过期（调用方每次写入后调一次） */
     @Query("DELETE FROM PlayUrlCacheEntity WHERE fetchedAtMs < :cutoffMs")
     suspend fun pruneExpired(cutoffMs: Long)
+
+    /** 强制失效单条（音质切换 / 403 重试前调用，否则会复用旧档或已过期直链） */
+    @Query("DELETE FROM PlayUrlCacheEntity WHERE `key` = :key")
+    suspend fun delete(key: String)
 
     /** 超上限只留最新的 keep 条 */
     @Query("DELETE FROM PlayUrlCacheEntity WHERE `key` NOT IN (SELECT `key` FROM PlayUrlCacheEntity ORDER BY fetchedAtMs DESC LIMIT :keep)")

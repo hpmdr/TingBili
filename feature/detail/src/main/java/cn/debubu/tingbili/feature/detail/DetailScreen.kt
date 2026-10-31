@@ -1,7 +1,9 @@
 package cn.debubu.tingbili.feature.detail
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,16 +38,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,7 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +73,8 @@ import cn.debubu.tingbili.core.ui.scrollToItemCentered
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.component.FavoriteFolderMultiPickerSheet
+import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.core.ui.playedProgressLabel
@@ -95,7 +104,9 @@ fun DetailScreen(
     val playingTrack by viewModel.playingTrack.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val related by viewModel.related.collectAsStateWithLifecycle()
+    val folders by viewModel.folders.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var showFolderPicker by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // 打开页面不自动定位续播项；点了"继续播放"再滚过去（收藏详情同理）
@@ -173,11 +184,31 @@ fun DetailScreen(
                             onPlayNavigate()
                         },
                         onToggleFavorite = { viewModel.toggleFavorite() },
+                        onLongPressFavorite = { showFolderPicker = true },
                         onPlayPage = { idx -> viewModel.play(s.tracks, idx); onPlayNavigate() }
                     )
                 }
             }
         }
+    }
+
+    val current = state as? DetailUiState.Success
+    if (showFolderPicker && current != null) {
+        FavoriteFolderMultiPickerSheet(
+            title = "收藏到收藏夹",
+            subtitle = current.video.title,
+            tracks = current.tracks,
+            folders = folders.map { FavoriteFolderOption(it.id, it.name, it.isDefault) },
+            onDismiss = { showFolderPicker = false },
+            onConfirm = { tracks, folderIds ->
+                viewModel.addTracksToFolders(folderIds, tracks)
+                showFolderPicker = false
+            },
+            onCreateFolder = { name, tracks ->
+                viewModel.createFolderAndAdd(name, tracks)
+                showFolderPicker = false
+            },
+        )
     }
 }
 
@@ -199,6 +230,7 @@ private fun DetailContent(
     listState: LazyListState,
     onPlayAll: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onLongPressFavorite: () -> Unit,
     onPlayPage: (Int) -> Unit,
     onVideoClick: (String) -> Unit,
     onUpClick: (Long) -> Unit,
@@ -345,19 +377,19 @@ private fun DetailContent(
                         Text(if (tracks.size > 1) "播放全部 (${tracks.size}P)" else "播放")
                     }
                 }
-                OutlinedButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = if (isFavorited) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isFavorited) "已收藏" else "收藏")
-                }
+                FavoriteBvButton(
+                    isFavorited = isFavorited,
+                    onToggle = onToggleFavorite,
+                    onLongPress = onLongPressFavorite,
+                    modifier = Modifier.weight(1f),
+                )
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "长按收藏可挑选分P加入收藏夹",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (video.desc.isNotBlank()) {
             item {
@@ -506,6 +538,62 @@ private fun DetailContent(
         }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/**
+ * 详情页收藏按钮：单击收藏/取消整本 BV，长按挑选分P加入收藏夹。
+ * 不能用 OutlinedButton（按钮内部 clickable 会吞掉长按），这里用 Surface + combinedClickable。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FavoriteBvButton(
+    isFavorited: Boolean,
+    onToggle: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = RoundedCornerShape(20.dp)
+    Surface(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .clip(shape)
+            .combinedClickable(
+                onClickLabel = if (isFavorited) "取消收藏BV" else "收藏BV",
+                onLongClickLabel = "选择分P和收藏夹",
+                onClick = onToggle,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPress()
+                },
+            ),
+        shape = shape,
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (isFavorited) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (isFavorited) "已收藏BV" else "收藏BV",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+            )
+        }
     }
 }
 

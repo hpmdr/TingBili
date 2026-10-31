@@ -1,4 +1,4 @@
-package cn.debubu.tingbili.feature.history
+﻿package cn.debubu.tingbili.feature.history
 
 import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
@@ -93,6 +93,7 @@ class HistoryViewModelTest {
 
     class FakePlayUrlCacheDao : cn.debubu.tingbili.core.data.db.PlayUrlCacheDao {
         val map = mutableMapOf<String, cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>()
+        override suspend fun get(key: String): cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity? = map[key]
         override suspend fun getAll(): List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity> = map.values.toList()
         override suspend fun putAll(rows: List<cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity>) {
             rows.forEach { map[it.key] = it }
@@ -100,6 +101,7 @@ class HistoryViewModelTest {
         override suspend fun pruneExpired(cutoffMs: Long) {
             map.entries.removeIf { it.value.fetchedAtMs < cutoffMs }
         }
+        override suspend fun delete(key: String) { map.remove(key) }
         override suspend fun pruneOverflow(keep: Int) {
             map.values.sortedByDescending { it.fetchedAtMs }.drop(keep).map { it.key }.forEach { map.remove(it) }
         }
@@ -120,25 +122,64 @@ class HistoryViewModelTest {
     class FakeHistoryDao : HistoryDao {
         private val flow = MutableStateFlow<List<HistoryEntity>>(emptyList())
         private val map = mutableMapOf<String, HistoryEntity>()
+        private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
         override suspend fun save(e: HistoryEntity) {
-            map[e.bvid] = e
+            map[key(e)] = e
             flow.value = map.values.sortedByDescending { it.updatedAt }
         }
-        override suspend fun get(bvid: String): HistoryEntity? = map[bvid]
+        override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? =
+            map["$sourceType:$sourceId"]
+        override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? =
+            map.values.filter { it.bvid == bvid && it.cid == cid }.maxByOrNull { it.updatedAt }
         override suspend fun getAll(): List<HistoryEntity> = map.values.toList()
         override fun observeAll(): Flow<List<HistoryEntity>> = flow
         override fun observeTotalListenMs(): Flow<Long> = flowOf(0L)
         override fun observeByBvid(bvid: String): Flow<List<HistoryEntity>> = flow.map { list -> list.filter { it.bvid == bvid } }
         override fun observeByBvids(bvids: List<String>): Flow<List<HistoryEntity>> = flow.map { list -> list.filter { it.bvid in bvids } }
         override fun observeTodayCount(todayStart: Long): Flow<Int> = flow.map { list -> list.count { it.updatedAt >= todayStart } }
-        override suspend fun delete(bvid: String) {
-            map.remove(bvid)
+        override suspend fun deleteSource(sourceType: Int, sourceId: String) {
+            map.remove("$sourceType:$sourceId")
             flow.value = map.values.sortedByDescending { it.updatedAt }
         }
         override suspend fun clearAll() {
             map.clear()
             flow.value = emptyList()
         }
+    }
+
+    class FakeFavoritesRepository : cn.debubu.tingbili.core.data.repository.FavoritesRepository {
+        val folders = mutableMapOf<Long, cn.debubu.tingbili.core.data.db.FavoriteFolderEntity>()
+        val tracks = mutableMapOf<Long, List<cn.debubu.tingbili.core.data.db.FavoriteTrackEntity>>()
+
+        override fun observeFolderSummaries(): Flow<List<cn.debubu.tingbili.core.data.db.FavoriteFolderSummary>> = flowOf(emptyList())
+        override fun observeFolders(): Flow<List<cn.debubu.tingbili.core.data.db.FavoriteFolderEntity>> = flowOf(folders.values.toList())
+        override fun observeFolder(id: Long): Flow<cn.debubu.tingbili.core.data.db.FavoriteFolderEntity?> = flowOf(folders[id])
+        override suspend fun getFolder(id: Long): cn.debubu.tingbili.core.data.db.FavoriteFolderEntity? = folders[id]
+        override fun observeTracks(folderId: Long): Flow<List<cn.debubu.tingbili.core.data.db.FavoriteTrackEntity>> = flowOf(tracks[folderId].orEmpty())
+        override suspend fun getTracks(folderId: Long): List<cn.debubu.tingbili.core.data.db.FavoriteTrackEntity> = tracks[folderId].orEmpty()
+        override fun observeBvFavorites(): Flow<List<cn.debubu.tingbili.core.data.db.BvFavoriteEntity>> = flowOf(emptyList())
+        override fun observeBvFavorite(bvid: String): Flow<cn.debubu.tingbili.core.data.db.BvFavoriteEntity?> = flowOf(null)
+        override fun observeBvPages(bvid: String): Flow<List<cn.debubu.tingbili.core.data.db.BvFavoritePageEntity>> = flowOf(emptyList())
+        override fun observeFolderIdsContaining(bvid: String, cid: Long): Flow<Set<Long>> = flowOf(emptySet())
+        override fun observeTrackInFolder(folderId: Long, bvid: String, cid: Long): Flow<Boolean> = flowOf(false)
+        override fun observeIsBvFavorited(bvid: String): Flow<Boolean> = flowOf(false)
+        override suspend fun ensureDefaultFolder(): Long = 1L
+        override suspend fun createFolder(name: String): Long = 2L
+        override suspend fun renameFolder(id: Long, name: String) {}
+        override suspend fun deleteFolder(id: Long): Boolean = true
+        override suspend fun reorderFolders(orderedIds: List<Long>) {}
+        override suspend fun addTracksToFolders(
+            folderIds: Set<Long>,
+            tracks: List<Track>,
+        ): cn.debubu.tingbili.core.data.model.AddTracksResult =
+            cn.debubu.tingbili.core.data.model.AddTracksResult(tracks.size, 0)
+        override suspend fun removeTrack(folderId: Long, bvid: String, cid: Long) {}
+        override suspend fun toggleDefaultTrack(track: Track): Boolean = true
+        override suspend fun toggleTrackInFolder(folderId: Long, track: Track): Boolean = true
+        override suspend fun addBvFavorite(snapshot: cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot) {}
+        override suspend fun removeBvFavorite(bvid: String) {}
+        override suspend fun refreshBvFavorite(snapshot: cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot) {}
+        override suspend fun hasAnyFavorite(): Boolean = false
     }
 
     class FakeBiliApi : BiliApi {
@@ -162,7 +203,7 @@ class HistoryViewModelTest {
             viewCalls++
             return viewResult
         }
-        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?): PlayUrlDto {
+        override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto {
             return PlayUrlDto(
                 code = 0,
                 message = "",
@@ -175,7 +216,7 @@ class HistoryViewModelTest {
         }
         override suspend fun related(bvid: String): RelatedDto = RelatedDto()
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-        override suspend fun favFolders(pn: Int, ps: Int, upMid: Long) =
+        override suspend fun favFoldersAll(upMid: Long) =
             cn.debubu.tingbili.data.bilibili.dto.FavFolderDto(code = 0)
         override suspend fun favMedias(
             mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String
@@ -189,6 +230,7 @@ class HistoryViewModelTest {
     private lateinit var fakePlayer: FakePlayerHandle
     private lateinit var fakeDao: FakeHistoryDao
     private lateinit var fakeApi: FakeBiliApi
+    private lateinit var fakeFavorites: FakeFavoritesRepository
     private lateinit var repo: BiliRepository
     private lateinit var prefs: PreferencesRepository
     private lateinit var playerManager: PlayerManager
@@ -199,6 +241,7 @@ class HistoryViewModelTest {
         fakePlayer = FakePlayerHandle()
         fakeDao = FakeHistoryDao()
         fakeApi = FakeBiliApi()
+        fakeFavorites = FakeFavoritesRepository()
         repo = BiliRepository(fakeApi)
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.preferencesDataStoreFile("test_history_prefs_${System.nanoTime()}")
@@ -223,13 +266,12 @@ class HistoryViewModelTest {
     fun `resume seeks to saved position`() = runTest(dispatcher) {
         try {
             fakeDao.save(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
-            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
             // brief's History(bvid,cid) maps to HistoryEntity
             vm.resume(HistoryEntity("BV1", 1, 12345, System.currentTimeMillis()))
             runCurrent()
-            // seekToPos 是 Long?：字面量必须带 L，否则只能走 assertEquals(Object,Object)，
-            // 变成 Integer 与 Long 比较，必然不等。
-            assertEquals(12345L, fakePlayer.seekToPos)
+            // 起播直接带 startPositionMs，Fake transport 的 setMediaItems 会落到 currentPosition
+            assertEquals(12345L, fakePlayer.currentPosition)
             // also verify play was called with correct index (cid 1 -> idx 0)
             assertEquals(0, fakePlayer.startIndex)
         } finally {
@@ -240,8 +282,122 @@ class HistoryViewModelTest {
     }
 
     @Test
+    fun `resume folder restores folder queue and source`() = runTest(dispatcher) {
+        try {
+            val folderId = 7L
+            fakeFavorites.folders[folderId] =
+                cn.debubu.tingbili.core.data.db.FavoriteFolderEntity(id = folderId, name = "胖宝宝")
+            fakeFavorites.tracks[folderId] = listOf(
+                cn.debubu.tingbili.core.data.db.FavoriteTrackEntity(
+                    folderId = folderId,
+                    bvid = "BV1",
+                    cid = 1,
+                    title = "P1",
+                    author = "a",
+                    durationMs = 1000,
+                    videoTitle = "T",
+                    pageIndex = 1,
+                    order = 0,
+                ),
+                cn.debubu.tingbili.core.data.db.FavoriteTrackEntity(
+                    folderId = folderId,
+                    bvid = "BV1",
+                    cid = 2,
+                    title = "P2",
+                    author = "a",
+                    durationMs = 2000,
+                    videoTitle = "T",
+                    pageIndex = 2,
+                    order = 1,
+                ),
+            )
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
+            vm.resume(
+                HistoryEntity(
+                    bvid = "BV1",
+                    cid = 2,
+                    positionMs = 1500,
+                    sourceType = HistoryEntity.SOURCE_FOLDER,
+                    sourceId = "7",
+                    sourceTitle = "胖宝宝",
+                )
+            )
+            runCurrent()
+            assertEquals(1, fakePlayer.startIndex)
+            assertEquals(1500L, fakePlayer.currentPosition)
+            assertEquals(2, fakePlayer.mediaItems.size)
+            assertEquals(7L, playerManager.state.value.sourceFolderId)
+        } finally {
+            playerManager.release()
+        }
+    }
+
+    @Test
+    fun `resume folder falls back to BV when folder deleted`() = runTest(dispatcher) {
+        try {
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
+            vm.resume(
+                HistoryEntity(
+                    bvid = "BV1",
+                    cid = 2,
+                    positionMs = 1500,
+                    sourceType = HistoryEntity.SOURCE_FOLDER,
+                    sourceId = "7",
+                    sourceTitle = "已删除的夹",
+                )
+            )
+            runCurrent()
+            assertEquals(1, fakePlayer.startIndex)
+            assertEquals("播放历史", playerManager.state.value.sourceTitle)
+            assertEquals(null, playerManager.state.value.sourceFolderId)
+            assertEquals("原收藏夹已删除，已按 BV 续播", vm.message.value)
+        } finally {
+            playerManager.release()
+        }
+    }
+
+    @Test
+    fun `resume folder falls back to BV when part removed`() = runTest(dispatcher) {
+        try {
+            val folderId = 7L
+            fakeFavorites.folders[folderId] =
+                cn.debubu.tingbili.core.data.db.FavoriteFolderEntity(id = folderId, name = "胖宝宝")
+            fakeFavorites.tracks[folderId] = listOf(
+                cn.debubu.tingbili.core.data.db.FavoriteTrackEntity(
+                    folderId = folderId,
+                    bvid = "BV1",
+                    cid = 1,
+                    title = "P1",
+                    author = "a",
+                    durationMs = 1000,
+                    videoTitle = "T",
+                    pageIndex = 1,
+                    order = 0,
+                ),
+            )
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
+            vm.resume(
+                HistoryEntity(
+                    bvid = "BV1",
+                    cid = 2,
+                    positionMs = 1500,
+                    sourceType = HistoryEntity.SOURCE_FOLDER,
+                    sourceId = "7",
+                    sourceTitle = "胖宝宝",
+                )
+            )
+            runCurrent()
+            assertEquals(1, fakePlayer.startIndex)
+            assertEquals("播放历史", playerManager.state.value.sourceTitle)
+            assertEquals("该集已移出收藏夹，已按 BV 续播", vm.message.value)
+        } finally {
+            playerManager.release()
+        }
+    }
+
+    @Test
     fun `video info loads lazily on prefetch, not on history emit`() = runTest(dispatcher) {
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
+        val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
         fakeDao.save(HistoryEntity("BV1", 1, 1000, 1L))
         fakeDao.save(HistoryEntity("BV2", 2, 2000, 2L))
         runCurrent()
@@ -261,7 +417,7 @@ class HistoryViewModelTest {
 
     @Test
     fun `history flow emits saved entities`() = runTest(dispatcher) {
-        val vm = HistoryViewModel(fakeDao, playerManager, repo)
+        val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
         fakeDao.save(HistoryEntity("BV1", 1, 1000, 1L))
         fakeDao.save(HistoryEntity("BV2", 2, 2000, 2L))
         runCurrent()
@@ -272,7 +428,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `resume falls back to index 0 when cid not found`() = runTest(dispatcher) {
+    fun `resume reports invalid cid instead of playing the wrong part`() = runTest(dispatcher) {
         try {
             // dao contains cid 999 which is not in view pages (1,2)
             fakeDao.save(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
@@ -285,12 +441,12 @@ class HistoryViewModelTest {
                     duration = 60
                 )
             )
-            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
             vm.resume(HistoryEntity("BV1", 999, 54321, System.currentTimeMillis()))
             runCurrent()
-            // should play at idx 0 and seek to 54321
-            assertEquals(0, fakePlayer.startIndex)
-            assertEquals(54321L, fakePlayer.seekToPos)
+            // 不再默默从 P1 开始播
+            assertEquals(false, fakePlayer.playCalled)
+            assertEquals("该分 P 已失效", vm.message.value)
         } finally {
             playerManager.release()
         }
@@ -300,7 +456,7 @@ class HistoryViewModelTest {
     fun `resume does nothing when view returns error`() = runTest(dispatcher) {
         try {
             fakeApi.viewResult = ViewDto(code = -404, message = "not found", data = null)
-            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
             vm.resume(HistoryEntity("BV_NOT_EXIST", 1, 9999, System.currentTimeMillis()))
             runCurrent()
             assertNull(fakePlayer.seekToPos)
@@ -313,11 +469,11 @@ class HistoryViewModelTest {
     fun `resume chooses correct index for second part`() = runTest(dispatcher) {
         try {
             fakeDao.save(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
-            val vm = HistoryViewModel(fakeDao, playerManager, repo)
+            val vm = HistoryViewModel(fakeDao, playerManager, repo, fakeFavorites)
             vm.resume(HistoryEntity("BV1", 2, 7777, System.currentTimeMillis()))
             runCurrent()
             assertEquals(1, fakePlayer.startIndex)
-            assertEquals(7777L, fakePlayer.seekToPos)
+            assertEquals(7777L, fakePlayer.currentPosition)
         } finally {
             playerManager.release()
         }

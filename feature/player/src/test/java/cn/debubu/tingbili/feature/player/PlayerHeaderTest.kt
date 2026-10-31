@@ -37,18 +37,34 @@ class PlayerHeaderTest {
     }
 
     @Test
-    fun `chapter prefixes current episode when index known`() {
-        assertEquals("第 1 P · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 1)))
+    fun `chapter prefixes current episode with P number`() {
+        assertEquals(
+            "P1 · M　1-30",
+            playerChapterLabel(track(title = "M　1-30", videoTitle = "民调局异闻录", pageIndex = 1)),
+        )
     }
 
     @Test
     fun `chapter prefixes even when total count is default`() {
         // 整单播放时队列 track 的 pageCount 常是默认值，只认序号
-        assertEquals("第 3 P · M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 3, pageCount = 1)))
+        assertEquals(
+            "P3 · M　1-30",
+            playerChapterLabel(track(title = "M　1-30", pageIndex = 3, pageCount = 1)),
+        )
     }
 
     @Test
-    fun `chapter has no prefix for single or unknown index`() {
+    fun `chapter hides P1 for single part video`() {
+        // 单 P：BV 标题与分 P 同名，不显示 P1（与迷你播放器/收藏列表一致）
+        assertEquals("M　1-30", playerChapterLabel(track(title = "M　1-30", pageIndex = 1)))
+        assertEquals(
+            "M　1-30",
+            playerChapterLabel(track(title = "M　1-30", videoTitle = "M　1-30", pageIndex = 1)),
+        )
+    }
+
+    @Test
+    fun `chapter has no prefix for unknown index`() {
         assertEquals("M　1-30", playerChapterLabel(track(title = "M　1-30")))
         assertEquals("未播放", playerChapterLabel(null))
         assertEquals("未播放", playerChapterLabel(track(title = "")))

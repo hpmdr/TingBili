@@ -28,6 +28,7 @@ android {
 dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:data"))
+    implementation(project(":core:bili-ui"))
     implementation(project(":data:bilibili"))
     implementation(project(":core:media"))
     implementation("androidx.media3:media3-datasource:${libs.versions.media3.get()}")
