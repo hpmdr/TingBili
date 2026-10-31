@@ -136,6 +136,21 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `parseCookieHeader survives real world header`() {
+        // 真机粘的整段 Cookie 请求头：值里有 | ( ) ' % { } 和 JWT，不能把解析带偏
+        val raw = "buvid3=BE89B546-ABCD; rpdid=|(u))lJ)RR|J0J'u~muJYl))u; " +
+            "default_sites=%5B%22CN%22%2C%22OVERSEAS%22%5D; " +
+            "bili_ticket=eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjF9.sig; bili_ticket_expires=1793621502; " +
+            "SESSDATA=dffb8a6f%2C1808916914%2Ca2bee%2Aa1CjDt; bili_jct=12365498223c6e8e102617a0099262e0; " +
+            "DedeUserID=32454802; sid=7pdropal"
+        val ok = BiliSession.parseCookieHeader(raw)
+        assertEquals("dffb8a6f%2C1808916914%2Ca2bee%2Aa1CjDt", ok?.sessdata)
+        assertEquals("12365498223c6e8e102617a0099262e0", ok?.biliJct)
+        assertEquals(32454802L, ok?.uid)
+        assertEquals("7pdropal", ok?.extras?.get("sid"))
+    }
+
+    @Test
     fun `loginWithCookies fills uid from nav when DedeUserID missing`() = runTest {
         server.enqueue(MockResponse().setBody(
             """{"code":0,"message":"ok","data":{"isLogin":true,"mid":32454802,"uname":"测试用户","face":"https://f/x.jpg"}}"""
