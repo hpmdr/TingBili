@@ -692,9 +692,9 @@ private fun CookieContent(vm: LoginViewModel) {
     }
     val verifying = cookie is CookieUi.Verifying
 
-    ModeHeader("Cookie 导入", "从已登录的浏览器整段复制 Cookie，粘贴后自动验证")
+    ModeHeader("Cookie 导入", "在已登录的 bilibili.com 网页上，从任意一个请求里复制 Cookie")
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        HelperText("1. F12 → Network → 任意 bilibili.com 请求")
+        HelperText("1. F12 → Network → 刷新页面，点任意一个 bilibili.com 请求")
         HelperText("2. Request Headers → Cookie → 右键 Copy value")
         HelperText("3. 整段粘贴到下面即可，不需要逐条抄")
     }
@@ -716,7 +716,7 @@ private fun CookieContent(vm: LoginViewModel) {
                 },
             ) { Text("粘贴") }
         },
-        supportingText = { Text("SESSDATA 是 HttpOnly，document.cookie 里没有；也可在 Application → Cookies 单独复制") },
+        supportingText = { Text("SESSDATA 是 HttpOnly，document.cookie 里没有，只能从请求头或 Application → Cookies 里取") },
     )
     if (cookie is CookieUi.Failed) {
         ErrorNotice((cookie as CookieUi.Failed).message)
