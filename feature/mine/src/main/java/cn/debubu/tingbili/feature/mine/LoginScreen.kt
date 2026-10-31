@@ -692,11 +692,11 @@ private fun CookieContent(vm: LoginViewModel) {
     }
     val verifying = cookie is CookieUi.Verifying
 
-    ModeHeader("Cookie 导入", "在已登录的 bilibili.com 网页上，从任意一个请求里复制 Cookie")
+    ModeHeader("Cookie 导入", "在电脑上登录 bilibili.com，从任意一个请求里复制 Cookie")
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        HelperText("1. F12 → Network → 刷新页面，点任意一个 bilibili.com 请求")
-        HelperText("2. Request Headers → Cookie → 右键 Copy value")
-        HelperText("3. 整段粘贴到下面即可，不需要逐条抄")
+        HelperText("1. 电脑打开 bilibili.com 并登录")
+        HelperText("2. 按 F12 → Network（网络）→ 刷新页面，点任意一条请求")
+        HelperText("3. 在「请求标头」里找到 Cookie，右键 → 复制值")
     }
     OutlinedTextField(
         value = text,
@@ -716,7 +716,7 @@ private fun CookieContent(vm: LoginViewModel) {
                 },
             ) { Text("粘贴") }
         },
-        supportingText = { Text("SESSDATA 是 HttpOnly，document.cookie 里没有，只能从请求头或 Application → Cookies 里取") },
+        supportingText = { Text("整段粘贴，不要只复制其中几项，少一项就会登录失败") },
     )
     if (cookie is CookieUi.Failed) {
         ErrorNotice((cookie as CookieUi.Failed).message)
@@ -729,7 +729,7 @@ private fun CookieContent(vm: LoginViewModel) {
             vm.loginWithCookies(text)
         },
     )
-    HelperText("必填 SESSDATA，bili_jct / DedeUserID 有就一起带上。手机上没开发者工具，在电脑复制后发到手机粘贴")
+    HelperText("手机上取不到，需要在电脑上复制后发到手机粘贴")
 }
 
 /** ZXing 生成二维码位图；失败返回 null（调用方展示刷新）。 */

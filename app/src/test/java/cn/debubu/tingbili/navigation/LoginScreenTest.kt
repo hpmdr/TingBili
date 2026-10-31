@@ -68,18 +68,17 @@ class LoginScreenTest {
         }
         composeTestRule.onNodeWithText("Cookie").performClick()
         composeTestRule.onNodeWithText("Cookie 导入").performScrollTo().assertIsDisplayed()
-        // 一次性整段复制：Network 面板右键 Cookie → Copy value
+        // 普通用户能看懂的复制路径：电脑登录 → F12 → 任意请求 → 右键 Copy value
         composeTestRule.onNodeWithText("任意一个请求", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
-        composeTestRule.onNodeWithText("Copy value", substring = true)
+        composeTestRule.onNodeWithText("复制值", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
-        // SESSDATA 是 HttpOnly，document.cookie 拿不到，指引必须指向 Application 面板
-        composeTestRule.onNodeWithText("Application", substring = true)
+        composeTestRule.onNodeWithText("整段粘贴", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
-        composeTestRule.onNodeWithText("HttpOnly", substring = true)
+        composeTestRule.onNodeWithText("手机上取不到", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
     }
