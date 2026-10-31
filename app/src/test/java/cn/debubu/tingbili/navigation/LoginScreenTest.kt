@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
@@ -40,9 +41,9 @@ class LoginScreenTest {
         composeTestRule.setContent {
             LoginScreen(onBack = {}, onSuccess = {}, vm = viewModel(), autoStartQr = false)
         }
-        composeTestRule.onNodeWithText("Cookie 导入").performClick()
-        composeTestRule.onNodeWithText("保存并验证").performClick()
-        composeTestRule.onNodeWithText("请先粘贴 Cookie").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Cookie").performClick()
+        composeTestRule.onNodeWithText("保存并验证").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("请先粘贴 Cookie").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -50,12 +51,29 @@ class LoginScreenTest {
         composeTestRule.setContent {
             LoginScreen(onBack = {}, onSuccess = {}, vm = viewModel(), autoStartQr = false)
         }
-        composeTestRule.onNodeWithText("Cookie 导入").performClick()
+        composeTestRule.onNodeWithText("Cookie").performClick()
         composeTestRule.onNodeWithText("SESSDATA=xxx; bili_jct=yyy; DedeUserID=zzz")
             .performTextInput("hello world")
-        composeTestRule.onNodeWithText("保存并验证").performClick()
+        composeTestRule.onNodeWithText("保存并验证").performScrollTo().performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithText("没找到 SESSDATA / DedeUserID，请粘贴完整 Cookie")
+        composeTestRule.onNodeWithText("没找到 SESSDATA", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `cookie tab explains sessdata comes from devtools not document cookie`() {
+        composeTestRule.setContent {
+            LoginScreen(onBack = {}, onSuccess = {}, vm = viewModel(), autoStartQr = false)
+        }
+        composeTestRule.onNodeWithText("Cookie").performClick()
+        composeTestRule.onNodeWithText("Cookie 导入").performScrollTo().assertIsDisplayed()
+        // SESSDATA 是 HttpOnly，document.cookie 拿不到，指引必须指向 Application 面板
+        composeTestRule.onNodeWithText("Application", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("HttpOnly", substring = true)
+            .performScrollTo()
             .assertIsDisplayed()
     }
 }

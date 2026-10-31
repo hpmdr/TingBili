@@ -99,9 +99,14 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `parseCookieHeader requires sessdata and uid`() {
+    fun `parseCookieHeader requires sessdata only`() {
+        // 没有 SESSDATA 一律拒绝（DedeUserID 可以缺，uid 由 nav 补）
         assertNull(BiliSession.parseCookieHeader("bili_jct=J; DedeUserID=42"))
-        assertNull(BiliSession.parseCookieHeader("SESSDATA=S"))
+        val onlySess = BiliSession.parseCookieHeader("SESSDATA=S")
+        assertEquals("S", onlySess?.sessdata)
+        assertEquals(0L, onlySess?.uid)
+        // uid 未知时不能把 DedeUserID=0 发给服务端
+        assertTrue(onlySess?.toCookieHeader()?.contains("DedeUserID") == false)
         val ok = BiliSession.parseCookieHeader(
             "buvid3=OLD; SESSDATA=S1; bili_jct=J1; DedeUserID=7; DedeUserID__ckMd5=C; fingerprint=F"
         )
@@ -110,6 +115,58 @@ class AuthRepositoryTest {
         // 陈旧 buvid/fingerprint 必须丢弃，只白名单回传
         assertTrue(ok?.toCookieHeader()?.contains("buvid3") == false)
         assertTrue(ok?.toCookieHeader()?.contains("DedeUserID__ckMd5=C") == true)
+    }
+
+    @Test
+    fun `parseCookieHeader accepts multiline paste`() {
+        // DevTools 的 Cookies 面板按行复制：换行等价于 ';'
+        val ok = BiliSession.parseCookieHeader("SESSDATA=S1\nbili_jct=J1\r\nDedeUserID=7")
+        assertEquals("S1", ok?.sessdata)
+        assertEquals("J1", ok?.biliJct)
+        assertEquals(7L, ok?.uid)
+    }
+
+    @Test
+    fun `document cookie without sessdata is rejected with hint`() {
+        // 真机抓的 document.cookie：SESSDATA 是 HttpOnly，所以里面根本没有它
+        val raw = "buvid3=BE89B546; b_nut=1791365879; buvid4=A57CC229; DedeUserID=32454802; " +
+            "DedeUserID__ckMd5=5c8df11e00a231ac; bili_jct=12365498223c6e8e102617a0099262e0; sid=7pdropal"
+        assertNull(BiliSession.parseCookieHeader(raw))
+        assertEquals(listOf("SESSDATA"), BiliSession.missingFields(raw))
+    }
+
+    @Test
+    fun `loginWithCookies fills uid from nav when DedeUserID missing`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"code":0,"message":"ok","data":{"isLogin":true,"mid":32454802,"uname":"测试用户","face":"https://f/x.jpg"}}"""
+        ))
+        val res = repo.loginWithCookies("SESSDATA=S1; bili_jct=J1")
+        assertTrue(res.isSuccess)
+        assertEquals(32454802L, res.getOrThrow().uid)
+        assertEquals("测试用户", res.getOrThrow().userName)
+        val cookieHeader = server.takeRequest().getHeader("Cookie").orEmpty()
+        assertTrue(cookieHeader.contains("SESSDATA=S1"))
+        assertTrue(!cookieHeader.contains("DedeUserID"))
+    }
+
+    @Test
+    fun `loginWithCookies maps nav not-logged-in to friendly error`() = runTest {
+        // nav 返回 -101（账号未登录）时不能把 B 站原文甩给用户
+        server.enqueue(MockResponse().setBody("""{"code":-101,"message":"账号未登录"}"""))
+        val res = repo.loginWithCookies("SESSDATA=x")
+        assertTrue(res.isFailure)
+        assertEquals("Cookie 无效或已过期", res.exceptionOrNull()?.message)
+        assertTrue(saved.isEmpty())
+    }
+
+    @Test
+    fun `loginWithCookies rejects mismatched DedeUserID`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"code":0,"message":"ok","data":{"isLogin":true,"mid":9,"uname":"别人","face":""}}"""
+        ))
+        val res = repo.loginWithCookies("SESSDATA=S1; DedeUserID=32454802")
+        assertTrue(res.isFailure)
+        assertTrue(saved.isEmpty())
     }
 
     @Test

@@ -116,6 +116,9 @@ open class AuthRepository @Inject constructor(
         runCatching {
             val body = get("$apiBase/x/web-interface/nav", cookieHeader)
             val dto = json.decodeFromString(NavDto.serializer(), body)
+            // -101 = 账号未登录（Cookie 失效/被风控）：按未登录返回，让调用方给统一提示，
+            // 而不是把 B 站原文「账号未登录」甩给用户
+            if (dto.code == -101) return@runCatching NavProfile(0L, "", "", false)
             require(dto.code == 0 && dto.data != null) { dto.message.ifBlank { "nav failed: ${dto.code}" } }
             val d = dto.data
             NavProfile(d.mid, d.uname.orEmpty(), d.face.orEmpty(), d.isLogin)
@@ -148,21 +151,38 @@ open class AuthRepository @Inject constructor(
         return Result.success(session)
     }
 
-    /** Cookie 粘贴登录：解析 → nav 验证 → 落盘 */
+    /**
+     * Cookie 粘贴登录：解析 → nav 验证 → 落盘。
+     * 只要 SESSDATA 就能登（DedeUserID 可缺，uid 从 nav 补）；有 DedeUserID 时与 nav 对账，防混搭/过期。
+     */
     open suspend fun loginWithCookies(raw: String): Result<BiliSession> {
         val parsed = BiliSession.parseCookieHeader(raw)
-            ?: return Result.failure(IllegalArgumentException("没找到 SESSDATA / DedeUserID，请粘贴完整 Cookie"))
-        val nav = fetchNav(parsed.toCookieHeader()).getOrElse { return Result.failure(it) }
-        if (!nav.isLogin || (nav.uid != 0L && nav.uid != parsed.uid)) {
+            ?: return Result.failure(IllegalArgumentException(cookieParseError(raw)))
+        val nav = fetchNav(parsed.toCookieHeader()).getOrElse {
+            return Result.failure(IllegalStateException("Cookie 校验失败，请检查网络后重试（${it.message}）"))
+        }
+        if (!nav.isLogin || (nav.uid != 0L && parsed.uid != 0L && nav.uid != parsed.uid)) {
             return Result.failure(IllegalStateException("Cookie 无效或已过期"))
         }
+        val uid = if (nav.uid != 0L) nav.uid else parsed.uid
+        if (uid <= 0L) return Result.failure(IllegalStateException("没拿到账号 UID，请重新复制 Cookie"))
         val session = parsed.copy(
             userName = nav.userName.ifBlank { parsed.userName },
             face = nav.face.ifBlank { parsed.face },
-            uid = if (nav.uid != 0L) nav.uid else parsed.uid,
+            uid = uid,
         )
         save(session)
         return Result.success(session)
+    }
+
+    /** 解析失败的提示：说清缺哪个字段，别只丢一句「请粘贴完整 Cookie」 */
+    private fun cookieParseError(raw: String): String {
+        val missing = BiliSession.missingFields(raw)
+        return if (missing.isEmpty()) {
+            "Cookie 格式无法识别，请检查是否复制完整"
+        } else {
+            "没找到 ${missing.joinToString(" / ")}，请粘贴完整 Cookie"
+        }
     }
 
     /**
