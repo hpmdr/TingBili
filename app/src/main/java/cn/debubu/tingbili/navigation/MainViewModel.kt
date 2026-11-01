@@ -29,7 +29,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @HiltViewModel
 class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
-    prefs: PreferencesRepository,
+    private val prefs: PreferencesRepository,
     auth: AuthRepository,
     private val scrollTopBus: HomeScrollTopBus,
     private val favoritesRepository: FavoritesRepository,
@@ -45,13 +45,33 @@ class MainViewModel @Inject constructor(
     /** 推荐 tab 双击回顶（事件经单例总线发给首页，见 HomeScrollTopBus） */
     fun requestHomeScrollTop() = scrollTopBus.requestScrollTop()
 
+    /**
+     * 冷启动落地 tab：先读偏好里的「曾经有收藏」标记（一个布尔，微秒级）；
+     * 只有覆盖安装后的首启没有该标记时，才退回查一次 Room 并回填——之后启动不再碰 DB（REVIEW_REPORT B-02）。
+     * 查库超时（慢存储/首次 openDatabase）则不写标记，下次启动重试，避免把 false 写死。
+     */
+    private suspend fun resolveStartTab(): Any {
+        val cached = withTimeoutOrNull(FAVORITE_FLAG_READ_TIMEOUT_MS) { prefs.hasFavoriteEverOrNull() }
+        if (cached != null) return if (cached) FavoritesRoute else HomeRoute
+        val hasFavorite = withTimeoutOrNull(FAVORITE_BACKFILL_TIMEOUT_MS) { favoritesRepository.hasAnyFavorite() }
+        if (hasFavorite != null) prefs.setHasFavoriteEver(hasFavorite)
+        return if (hasFavorite == true) FavoritesRoute else HomeRoute
+    }
+
+    private companion object {
+        /** 读一个布尔，正常情况下 1ms 内返回；给足余量避免 DataStore 首读抖动误判 */
+        const val FAVORITE_FLAG_READ_TIMEOUT_MS = 300L
+
+        /** 仅覆盖安装后的首启会走这里（查一次 Room 并回填），之后不再进入 */
+        const val FAVORITE_BACKFILL_TIMEOUT_MS = 800L
+    }
+
     init {
         // 登录态保活：进程启动时检查一次，需要续期则静默续期；失败忽略，下次启动再试
         viewModelScope.launch { auth.maintainSession() }
         viewModelScope.launch {
             _startTab.value = try {
-                val hasFavorite = withTimeoutOrNull(3_000) { favoritesRepository.hasAnyFavorite() } ?: false
-                if (hasFavorite) FavoritesRoute else HomeRoute
+                resolveStartTab()
             } catch (_: Exception) {
                 HomeRoute
             }

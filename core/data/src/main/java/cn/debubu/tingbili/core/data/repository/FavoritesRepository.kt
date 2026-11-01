@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.core.data.repository
 
+import androidx.annotation.VisibleForTesting
 import androidx.room.withTransaction
 import cn.debubu.tingbili.core.data.db.BvFavoriteEntity
 import cn.debubu.tingbili.core.data.db.BvFavoritePageEntity
@@ -16,6 +17,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+
+/**
+ * 收藏写路径的「曾经有收藏」标记口子：生产实现写 DataStore，单测传 no-op。
+ * 放在仓储层而不是 VM/UI 层，是为了覆盖所有加收藏路径（加入收藏夹/最爱/BV 收藏）。
+ */
+fun interface FavoriteEverRecorder {
+    suspend fun mark()
+}
 
 interface FavoritesRepository {
     fun observeFolderSummaries(): Flow<List<FavoriteFolderSummary>>
@@ -52,7 +61,15 @@ interface FavoritesRepository {
 class DefaultFavoritesRepository @Inject constructor(
     private val db: TingBiliDatabase,
     private val dao: FavoriteDao,
+    private val favoriteEverRecorder: FavoriteEverRecorder,
 ) : FavoritesRepository {
+
+    /** 单测/不关心启动落地 tab 的调用方：标记写 no-op（8 处测试仍用两参构造）。 */
+    @VisibleForTesting
+    constructor(db: TingBiliDatabase, dao: FavoriteDao) : this(
+        db, dao, FavoriteEverRecorder { },
+    ) {
+    }
 
     override fun observeFolderSummaries(): Flow<List<FavoriteFolderSummary>> =
         dao.observeFolderSummaries()
@@ -136,7 +153,7 @@ class DefaultFavoritesRepository @Inject constructor(
         tracks: List<Track>,
     ): AddTracksResult {
         if (folderIds.isEmpty() || tracks.isEmpty()) return AddTracksResult(0, 0)
-        return db.withTransaction {
+        val result = db.withTransaction {
             ensureDefaultFolder()
             var added = 0
             var skipped = 0
@@ -153,6 +170,8 @@ class DefaultFavoritesRepository @Inject constructor(
             }
             AddTracksResult(added = added, skipped = skipped)
         }
+        if (result.added > 0) favoriteEverRecorder.mark()
+        return result
     }
 
     override suspend fun removeTrack(folderId: Long, bvid: String, cid: Long) {
@@ -160,7 +179,7 @@ class DefaultFavoritesRepository @Inject constructor(
     }
 
     override suspend fun toggleDefaultTrack(track: Track): Boolean {
-        return db.withTransaction {
+        val added = db.withTransaction {
             val folderId = ensureDefaultFolder()
             val exists = dao.isTrackInFolder(folderId, track.bvid, track.cid)
             if (exists) {
@@ -172,11 +191,13 @@ class DefaultFavoritesRepository @Inject constructor(
                 true
             }
         }
+        if (added) favoriteEverRecorder.mark()
+        return added
     }
 
     override suspend fun toggleTrackInFolder(folderId: Long, track: Track): Boolean {
         if (folderId == DEFAULT_FOLDER_ID) return toggleDefaultTrack(track)
-        return db.withTransaction {
+        val added = db.withTransaction {
             val exists = dao.isTrackInFolder(folderId, track.bvid, track.cid)
             if (exists) {
                 dao.deleteTrack(folderId, track.bvid, track.cid)
@@ -187,9 +208,12 @@ class DefaultFavoritesRepository @Inject constructor(
                 true
             }
         }
+        if (added) favoriteEverRecorder.mark()
+        return added
     }
 
     override suspend fun addBvFavorite(snapshot: BvFavoriteSnapshot) {
+        favoriteEverRecorder.mark()
         db.withTransaction {
             val now = System.currentTimeMillis()
             val existing = dao.getBvFavorite(snapshot.bvid)

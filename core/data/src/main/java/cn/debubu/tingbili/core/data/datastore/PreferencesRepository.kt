@@ -128,6 +128,13 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
     val cacheMaxMb: Flow<Int> = ds.data.map { (it[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB).coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
 
+    /**
+     * 是否曾经有过收藏：只用于冷启动落地 tab（有收藏进收藏页），由收藏写路径置位。
+     * 启动读一个布尔比首帧查 Room 便宜一个数量级（REVIEW_REPORT B-02）；
+     * 语义是「曾经」，收藏清空后仍为 true（落地收藏页显示空列表，可接受）。
+     */
+    val hasFavoriteEver: Flow<Boolean> = ds.data.map { it[HAS_FAVORITE_EVER] ?: false }
+
     // 进度（高频 10s 写）仍放 DataStore；队列 + 下标 + 合集名已迁 Room（PlayQueueDao，原子快照）。
     // 旧三键只剩 drainLastQueue 一次性搬运用，搬完即删。
     val lastPositionMs: Flow<Long> = ds.data.map { it[LAST_POSITION_MS] ?: 0L }
@@ -252,6 +259,15 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[CACHE_MAX_MB] = clamped }
     }
 
+    /** 启动期读一次「曾经有收藏」标记；null = 从未写过（覆盖安装后的首启，需要回填一次） */
+    suspend fun hasFavoriteEverOrNull(): Boolean? = ds.data.first()[HAS_FAVORITE_EVER]
+
+    suspend fun setHasFavoriteEver(v: Boolean) {
+        ds.edit { it[HAS_FAVORITE_EVER] = v }
+    }
+
+    suspend fun markFavoriteEver() = setHasFavoriteEver(true)
+
     suspend fun setLastPosition(positionMs: Long) {
         ds.edit { it[LAST_POSITION_MS] = positionMs.coerceAtLeast(0L) }
     }
@@ -350,6 +366,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val SEARCH_HISTORY_JSON = stringPreferencesKey("search_history_json")
         const val MAX_SEARCH_HISTORY = 15
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
+        val HAS_FAVORITE_EVER = androidx.datastore.preferences.core.booleanPreferencesKey("has_favorite_ever")
         const val DEFAULT_CACHE_MAX_MB = 500
         /** 构造期读镜像缺失时的兜底上限：只在 DataStore 预热未完成的极端情况下才会用到 */
         const val PRIME_BLOCK_TIMEOUT_MS = 80L
