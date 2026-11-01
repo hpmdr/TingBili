@@ -65,6 +65,8 @@ fun SettingsScreen(
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
+    val offloadActive by vm.offloadEverActive.collectAsStateWithLifecycle()
+    val decoderName by vm.currentDecoderName.collectAsStateWithLifecycle()
     val audioQuality by vm.audioQuality.collectAsStateWithLifecycle()
     val randomPlayMode by vm.randomPlayMode.collectAsStateWithLifecycle()
     val sleepFinishChapter by vm.sleepFinishChapter.collectAsStateWithLifecycle()
@@ -162,6 +164,18 @@ fun SettingsScreen(
                         checked = audioOffload,
                         onCheckedChange = { vm.setAudioOffload(it) },
                     )
+                    // 开关打开但本机始终没接管时给出原因（PERF_MEASUREMENT §11：
+                    // MTK/小米机型的音效链会 veto offload，用户会以为开关坏了）
+                    val showOffloadHint = audioOffload && !offloadActive && decoderName != null
+                    if (showOffloadHint) {
+                        Text(
+                            text = "本机暂未启用 DSP 卸载：系统音效链不支持压缩直通，当前为软件解码（${decoderName}）。" +
+                                "可在系统「声音与振动 → 音效」里关闭音效后重试；开关保持开启，条件满足时自动接管。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                        )
+                    }
                     SettingDivider()
                     SettingRow(
                         icon = Icons.AutoMirrored.Filled.List,

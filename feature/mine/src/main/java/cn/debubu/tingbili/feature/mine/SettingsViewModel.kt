@@ -64,6 +64,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setAudioOffload(v) }
     }
 
+    /**
+     * 本次会话 offload 是否真的接管（来自 core:media 的实时探针）。
+     * 设置页用它区分「开关已开」与「本机生效」——两者在 MTK/小米机型上经常不一致。
+     */
+    val offloadEverActive: StateFlow<Boolean> = cn.debubu.tingbili.core.media.AudioPipelineMonitor.offloadEverActive
+
+    /** 当前实际解码器名（软解时有值，如 c2.android.aac.decoder；offload 生效时通常为 null） */
+    val currentDecoderName: StateFlow<String?> = cn.debubu.tingbili.core.media.AudioPipelineMonitor.decoderName
+
     /** 默认音质偏好（默认标准 132K；未知值回落默认；切换后下一首生效） */
     val audioQuality: StateFlow<Int> = prefs.audioQuality.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_AUDIO_QUALITY
