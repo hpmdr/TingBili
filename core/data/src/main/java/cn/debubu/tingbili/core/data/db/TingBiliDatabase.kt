@@ -15,7 +15,9 @@ import androidx.room.RoomDatabase
         PlayUrlCacheEntity::class,
         PlayQueueSnapshotEntity::class,
     ],
-    version = 15,
+    // v16：HistoryEntity 补 bvid/updatedAt 索引、FavoriteTrackEntity 补 (bvid,cid) 索引（REVIEW_REPORT E-07）。
+    // 单人测试期允许破坏性升级：不写 15→16 迁移，由 fallbackToDestructiveMigration 重建（升级即清库）。
+    version = 16,
     exportSchema = false,
 )
 abstract class TingBiliDatabase : RoomDatabase() {

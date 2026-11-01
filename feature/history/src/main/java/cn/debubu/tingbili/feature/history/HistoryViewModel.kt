@@ -32,14 +32,18 @@ class HistoryViewModel @Inject constructor(
     private val favoritesRepository: FavoritesRepository,
 ) : ViewModel() {
 
-    /** 一个播单（BV / 收藏夹）一行，按最后播放时间倒序 */
+    /**
+     * 一个播单（BV / 收藏夹）一行，按最后播放时间倒序。
+     * 用 WhileSubscribed 而不是 Eagerly：播放中每 10s 会写历史，Eagerly 会让历史页不可见时也全表重查
+     * （REVIEW_REPORT R8/B-04）；离开页面 5s 后停，回来立刻重新订阅。
+     */
     val history: StateFlow<List<HistoryEntity>> =
-        dao.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 当前仍存在的收藏夹 id：null=尚未加载（先按可用展示），决定历史行「收藏夹」跳转是否可用 */
     val folderIds: StateFlow<Set<Long>?> = favoritesRepository.observeFolders()
         .map { folders -> folders.map { it.id }.toSet() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** bvid -> 该视频的 Track 列表（标题/UP主/封面/每P时长），用于列表展示，按 bvid 懒加载缓存 */
     private val _videoInfo = MutableStateFlow<Map<String, List<Track>>>(emptyMap())

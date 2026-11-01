@@ -1,4 +1,4 @@
-﻿package cn.debubu.tingbili.feature.history
+package cn.debubu.tingbili.feature.history
 
 import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
@@ -421,7 +421,9 @@ class HistoryViewModelTest {
         fakeDao.save(HistoryEntity("BV1", 1, 1000, 1L))
         fakeDao.save(HistoryEntity("BV2", 2, 2000, 2L))
         runCurrent()
-        val list = vm.history.first()
+        // WhileSubscribed：首个订阅者进来才开始收上游，StateFlow 会先发一次初始空列表，
+        // 所以用 first { } 等到真正的数据，而不是 first() 拿到初值。
+        val list = vm.history.first { it.size == 2 }
         // observeAll sorts by updatedAt DESC, so BV2 first
         assertEquals(2, list.size)
         assertEquals("BV2", list[0].bvid)

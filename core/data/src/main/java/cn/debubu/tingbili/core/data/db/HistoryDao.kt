@@ -2,6 +2,7 @@ package cn.debubu.tingbili.core.data.db
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -17,7 +18,12 @@ import kotlinx.coroutines.flow.Flow
  * 同一个 BV 从收藏夹播过、又从搜索播过，会有两条记录（夹一条、BV 一条），符合产品语义。
  * 字段顺序把 bvid/cid 放前面、来源字段放后面并带默认值，兼容旧的构造/测试。
  */
-@Entity(primaryKeys = ["sourceType", "sourceId"])
+// 索引：bvid（详情页/收藏判断按 bvid 查）、updatedAt（列表 ORDER BY 排序）。
+// 复合主键只提供 sourceType+sourceId 的前缀索引，bvid/updatedAt 原本都是全表扫（REVIEW_REPORT E-07）。
+@Entity(
+    primaryKeys = ["sourceType", "sourceId"],
+    indices = [Index("bvid"), Index("updatedAt")],
+)
 data class HistoryEntity(
     val bvid: String,
     val cid: Long,

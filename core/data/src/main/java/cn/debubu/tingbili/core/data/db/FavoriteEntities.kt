@@ -30,7 +30,8 @@ data class FavoriteFolderEntity(
             onDelete = ForeignKey.CASCADE,
         )
     ],
-    indices = [Index("folderId")],
+    // (bvid,cid) 供切歌/收藏态查询（WHERE bvid=? AND cid=?）走索引，不再全表扫（REVIEW_REPORT E-07）
+    indices = [Index("folderId"), Index(value = ["bvid", "cid"])],
 )
 data class FavoriteTrackEntity(
     val folderId: Long,
