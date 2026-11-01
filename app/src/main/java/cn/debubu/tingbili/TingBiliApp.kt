@@ -2,6 +2,8 @@ package cn.debubu.tingbili
 
 import android.app.Application
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.StrictMode
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
@@ -22,9 +24,35 @@ class TingBiliApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        enableStrictModeInDebug()
         // DataStore 预热：DI 构造期（SimpleCache / ExoPlayer / Coil ImageLoader）要同步取两个常量，
         // 这里先在 IO 线程把文件读完，构造期只读内存镜像，避免主线程 runBlocking 读盘（REVIEW_REPORT D-08）。
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { prefs.prime() }
+    }
+
+    /**
+     * debug 包打开 StrictMode（REVIEW_REPORT B-06）：主线程磁盘/网络、未关闭的 Cursor/Closeable 全部打日志。
+     * 用 penaltyLog 而不是 penaltyDeath——第三方 SDK 也可能触发，让它变成**可见的噪音**而不是崩溃；
+     * release 包完全跳过，零运行时开销。
+     */
+    private fun enableStrictModeInDebug() {
+        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) return
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+                .build(),
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .detectLeakedClosableObjects()
+                .detectLeakedRegistrationObjects()
+                .penaltyLog()
+                .build(),
+        )
     }
 
     /**
