@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.db.FavoriteFolderEntity
 import cn.debubu.tingbili.core.data.db.FavoriteTrackEntity
-import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.repository.HistoryRepository
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.latestPerTrack
 import cn.debubu.tingbili.core.data.model.toTrack
@@ -40,7 +40,7 @@ data class TrackFocus(val index: Int, val isPlaying: Boolean)
 class FavoriteFolderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repo: FavoritesRepository,
-    private val historyDao: HistoryDao,
+    private val historyRepository: HistoryRepository,
     private val player: PlayerManager,
 ) : ViewModel() {
 
@@ -65,7 +65,7 @@ class FavoriteFolderViewModel @Inject constructor(
         .distinctUntilChanged()
         .flatMapLatest { bvids ->
             if (bvids.isEmpty()) flowOf(emptyList())
-            else historyDao.observeByBvids(bvids)
+            else historyRepository.observeByBvids(bvids)
         }
         .map { list -> list.latestPerTrack() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())

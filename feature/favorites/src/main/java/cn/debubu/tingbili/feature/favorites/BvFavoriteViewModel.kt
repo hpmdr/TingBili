@@ -7,7 +7,7 @@ import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.db.BvFavoriteEntity
 import cn.debubu.tingbili.core.data.db.BvFavoritePageEntity
 import cn.debubu.tingbili.core.data.db.FavoriteFolderEntity
-import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.repository.HistoryRepository
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.latestPerTrack
 import cn.debubu.tingbili.core.data.model.Track
@@ -43,7 +43,7 @@ class BvFavoriteViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val favoritesRepository: FavoritesRepository,
     private val biliRepository: BiliRepository,
-    private val historyDao: HistoryDao,
+    private val historyRepository: HistoryRepository,
     private val player: PlayerManager,
 ) : ViewModel() {
 
@@ -83,7 +83,7 @@ class BvFavoriteViewModel @Inject constructor(
     val pendingIndex: StateFlow<Int?> = _pendingIndex.asStateFlow()
 
     val progress: StateFlow<Map<String, HistoryEntity>> =
-        historyDao.observeByBvid(bvid)
+        historyRepository.observeByBvid(bvid)
             .map { list -> list.latestPerTrack() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 

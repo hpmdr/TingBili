@@ -3,7 +3,7 @@ package cn.debubu.tingbili.feature.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
-import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.repository.HistoryRepository
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
  */
 @HiltViewModel
 class MeViewModel @Inject constructor(
-    historyDao: HistoryDao,
+    private val historyRepository: HistoryRepository,
     private val prefs: PreferencesRepository,
     private val audioCache: SimpleCache,
     private val auth: AuthRepository
@@ -76,7 +76,7 @@ class MeViewModel @Inject constructor(
     }
 
     /** 本地累计收听时长（ms），无需登录 */
-    val totalListenMs: StateFlow<Long> = historyDao.observeTotalListenMs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+    val totalListenMs: StateFlow<Long> = historyRepository.observeTotalListenMs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     /** 今日零点（VM 存续期只算一次，跨天重进页面即刷新；DB 侧 COUNT，不拉全表） */
     private val todayStart: Long = Calendar.getInstance().apply {
@@ -84,7 +84,7 @@ class MeViewModel @Inject constructor(
         set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    val historyTodayCount: StateFlow<Int> = historyDao.observeTodayCount(todayStart)
+    val historyTodayCount: StateFlow<Int> = historyRepository.observeTodayCount(todayStart)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     private val _cacheBytes = MutableStateFlow(0L)

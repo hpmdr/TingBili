@@ -3,7 +3,7 @@ package cn.debubu.tingbili.feature.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
-import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.repository.HistoryRepository
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.toTrack
@@ -26,7 +26,7 @@ import kotlinx.coroutines.sync.withPermit
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
-    private val dao: HistoryDao,
+    private val historyRepository: HistoryRepository,
     private val player: PlayerManager,
     private val repo: BiliRepository,
     private val favoritesRepository: FavoritesRepository,
@@ -38,7 +38,7 @@ class HistoryViewModel @Inject constructor(
      * （REVIEW_REPORT R8/B-04）；离开页面 5s 后停，回来立刻重新订阅。
      */
     val history: StateFlow<List<HistoryEntity>> =
-        dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        historyRepository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 当前仍存在的收藏夹 id：null=尚未加载（先按可用展示），决定历史行「收藏夹」跳转是否可用 */
     val folderIds: StateFlow<Set<Long>?> = favoritesRepository.observeFolders()
@@ -173,12 +173,12 @@ class HistoryViewModel @Inject constructor(
     }
 
     fun clearAll() {
-        viewModelScope.launch { dao.clearAll() }
+        viewModelScope.launch { historyRepository.clearAll() }
     }
 
     /** 删一条播单历史；不会删除收藏夹本身 */
     fun delete(h: HistoryEntity) {
-        viewModelScope.launch { dao.deleteSource(h.sourceType, h.sourceId) }
+        viewModelScope.launch { historyRepository.deleteSource(h.sourceType, h.sourceId) }
     }
 }
 

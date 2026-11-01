@@ -98,7 +98,8 @@ class DetailViewModelTest {
             override fun release() {}
         }
 
-        class FakeHistoryDao : HistoryDao {
+        // 同一个 fake 同时实现 DAO 与仓储：VM 用仓储，PlayerManager 用 DAO，测试里共享状态
+    class FakeHistoryDao : HistoryDao, cn.debubu.tingbili.core.data.repository.HistoryRepository {
             private val flow = MutableStateFlow<List<HistoryEntity>>(emptyList())
             private val map = mutableMapOf<String, HistoryEntity>()
             private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"

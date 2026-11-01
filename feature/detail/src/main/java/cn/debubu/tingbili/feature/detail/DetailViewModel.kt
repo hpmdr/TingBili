@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.db.FavoriteFolderEntity
-import cn.debubu.tingbili.core.data.db.HistoryDao
+import cn.debubu.tingbili.core.data.repository.HistoryRepository
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.db.latestPerTrack
 import cn.debubu.tingbili.core.data.model.Track
@@ -59,7 +59,7 @@ class DetailViewModel @Inject constructor(
     private val repo: BiliRepository,
     private val player: PlayerManager,
     private val favoritesRepository: FavoritesRepository,
-    private val historyDao: HistoryDao
+    private val historyRepository: HistoryRepository
 ) : ViewModel() {
 
     val bvid: String = checkNotNull(savedStateHandle["bvid"])
@@ -94,7 +94,7 @@ class DetailViewModel @Inject constructor(
     val pendingIndex: StateFlow<Int?> = _pendingIndex.asStateFlow()
 
     /** "bvid:cid" -> 播放记录（只订阅本 BV，播放器每秒写全表时不再全量 associateBy） */
-    val progress: StateFlow<Map<String, HistoryEntity>> = historyDao.observeByBvid(bvid)
+    val progress: StateFlow<Map<String, HistoryEntity>> = historyRepository.observeByBvid(bvid)
         .map { list -> list.latestPerTrack() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
