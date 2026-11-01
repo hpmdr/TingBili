@@ -270,7 +270,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
 | F5 | `8805950` / `6635566` / `see git log` | 🔄 部分完成 | F5b/F5c/F5e/F5f 已做（§6.6）；F5a 仓储层（待用户点头）、F5d 颜色 token 未做 |
-| F6 | `see git log` | 🔄 部分完成 | 文档规则回写 + `.gitignore` + Robolectric 配置已做（§6.5）；补 3 个零测试模块的用例、`NavigationTest` 路由集断言未做 |
+| F6 | `215b457` / `see git log` | 🔄 部分完成 | 文档规则回写、`.gitignore`、Robolectric 配置、`feature:space` 6 个新用例（§6.5）；`feature:detail` 用例与 `NavigationTest` 路由集断言未做 |
 
 ### 6.1 F1 实测结果（2026-11-01）
 
@@ -323,6 +323,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 文档规则回写 | `AGENTS.md` / `docs/CONVENTIONS.md` 写入：高频状态只在叶子订阅、提交前门禁三件套与 lint 必须 0、实体必须建索引、破坏性升级策略 | 门禁绿 |
 | `.gitignore` 补漏 | 加 `.kotlin/`、`*.hprof`、`.mimocode/` | `git status` 干净 |
 | Robolectric 一致性（I-05） | `feature:player` 补 `src/test/resources/robolectric.properties`（`sdk=36`），7 个 Robolectric 模块配置齐平 | 全量测试绿 |
+| 零测试模块补测（I-03） 🔄 | `feature:space` 新增 `SpaceViewModelTest`（6 例）：头部信息成功/降级/失败三态、mid 缺失快速失败、排序切换、搜索词 trim。该模块此前 0 测试 | 单测总数 352 → **358**，全绿；`feature:detail` 需要搭 PlayerManager+Repo fake（约 100 行脚手架），留待下一轮 |
 
 ### 6.4 F4 部分结果（2026-11-01）
 
