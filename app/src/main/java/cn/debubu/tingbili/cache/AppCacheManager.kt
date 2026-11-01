@@ -8,9 +8,11 @@ import cn.debubu.tingbili.core.data.db.SubtitleDiskDao
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
 import coil3.SingletonImageLoader
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 /**
@@ -23,6 +25,8 @@ class AppCacheManager @Inject constructor(
     private val subtitleDiskDao: SubtitleDiskDao,
     private val subtitleCache: SubtitleCache,
     @ApplicationContext private val appContext: Context,
+    // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
+    @Named(cn.debubu.tingbili.core.data.di.DISPATCHER_IO) private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : CacheManager {
 
     private fun audioBytes(): Long = try {
@@ -46,7 +50,7 @@ class AppCacheManager @Inject constructor(
         0L to 0
     }
 
-    override suspend fun stats(): CacheStats = withContext(Dispatchers.IO) {
+    override suspend fun stats(): CacheStats = withContext(io) {
         val (subBytes, subCount) = subtitleStats()
         CacheStats(
             audioBytes = audioBytes(),
@@ -56,7 +60,7 @@ class AppCacheManager @Inject constructor(
         )
     }
 
-    override suspend fun clearAudio(excludeKey: String?): Long = withContext(Dispatchers.IO) {
+    override suspend fun clearAudio(excludeKey: String?): Long = withContext(io) {
         val before = audioBytes()
         try {
             audioCache.keys
@@ -67,7 +71,7 @@ class AppCacheManager @Inject constructor(
         (before - audioBytes()).coerceAtLeast(0L)
     }
 
-    override suspend fun clearImages(): Long = withContext(Dispatchers.IO) {
+    override suspend fun clearImages(): Long = withContext(io) {
         val before = imageBytes()
         try {
             val loader = SingletonImageLoader.get(appContext)
@@ -78,7 +82,7 @@ class AppCacheManager @Inject constructor(
         (before - imageBytes()).coerceAtLeast(0L)
     }
 
-    override suspend fun clearSubtitles(): Int = withContext(Dispatchers.IO) {
+    override suspend fun clearSubtitles(): Int = withContext(io) {
         val count = try {
             subtitleDiskDao.rowSizes().size
         } catch (_: Exception) {
@@ -95,7 +99,7 @@ class AppCacheManager @Inject constructor(
         count
     }
 
-    override suspend fun clearAll(excludeAudioKey: String?): CacheStats = withContext(Dispatchers.IO) {
+    override suspend fun clearAll(excludeAudioKey: String?): CacheStats = withContext(io) {
         val freedAudio = clearAudio(excludeAudioKey)
         val freedImage = clearImages()
         val beforeSub = subtitleStats()

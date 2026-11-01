@@ -16,10 +16,12 @@ import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import javax.inject.Named
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
@@ -37,7 +39,9 @@ class HomeViewModel @Inject constructor(
     private val player: PlayerManager,
     private val homeSnapshotDao: HomeSnapshotDao,
     private val scrollTopBus: HomeScrollTopBus,
-    private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+    private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true },
+    // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
+    @Named(cn.debubu.tingbili.core.data.di.DISPATCHER_IO) private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     /** 回顶事件（底栏/Rail 双击推荐时 +1，首页收到即滚到顶） */
@@ -114,7 +118,7 @@ class HomeViewModel @Inject constructor(
 
     init {
         // 初始词 = 上次搜索 > 首个推荐词 > 兜底；快照只在词一致时才当首屏占位
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             val kw = runCatching { prefs.searchHistory.first().firstOrNull() }.getOrNull()
                 ?: homeKeywords.value.firstOrNull()
                 ?: DEFAULT_KEYWORD
@@ -176,7 +180,7 @@ class HomeViewModel @Inject constructor(
     private fun saveSnapshot(keyword: String, tracks: List<Track>) {
         if (tracks.isEmpty()) return
         // 60 条 Track JSON 编码 + Room 写放 IO：回调起于 Paging 加载，滚动中别占主线程
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(io) {
             try {
                 val bounded = tracks.take(MAX_SNAPSHOT_TRACKS)
                 homeSnapshotDao.save(

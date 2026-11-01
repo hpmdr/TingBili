@@ -1,7 +1,9 @@
 package cn.debubu.tingbili.data.bilibili.auth
 
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +42,8 @@ data class NavProfile(val uid: Long, val userName: String, val face: String, val
 open class AuthRepository @Inject constructor(
     private val json: Json,
     private val store: AuthStore,
+    // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
+    @Named(cn.debubu.tingbili.core.data.di.DISPATCHER_IO) private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     internal var passportBase: String = "https://passport.bilibili.com"
     internal var apiBase: String = "https://api.bilibili.com"
@@ -57,7 +61,7 @@ open class AuthRepository @Inject constructor(
 
     // ── 扫码 ─────────────────────────────────────────────
 
-    open suspend fun generateQr(): Result<QrData> = withContext(Dispatchers.IO) {
+    open suspend fun generateQr(): Result<QrData> = withContext(io) {
         runCatching {
             val body = get("$passportBase/x/passport-login/web/qrcode/generate")
             val dto = json.decodeFromString(QrGenerateDto.serializer(), body)
@@ -66,7 +70,7 @@ open class AuthRepository @Inject constructor(
         }
     }
 
-    open suspend fun pollQr(qrcodeKey: String): QrStatus = withContext(Dispatchers.IO) {
+    open suspend fun pollQr(qrcodeKey: String): QrStatus = withContext(io) {
         try {
             val body = get("$passportBase/x/passport-login/web/qrcode/poll?qrcode_key=$qrcodeKey")
             val dto = json.decodeFromString(QrPollDto.serializer(), body)
@@ -90,7 +94,7 @@ open class AuthRepository @Inject constructor(
      * 带着跳转地址逐跳跟随（最多 5 跳），收集整条链的 Set-Cookie。
      * 扫码成功与 Cookie 粘贴后都要经 nav 验证才落盘。
      */
-    suspend fun exchangeCookies(redirectUrl: String): Map<String, String> = withContext(Dispatchers.IO) {
+    suspend fun exchangeCookies(redirectUrl: String): Map<String, String> = withContext(io) {
         val cookies = mutableMapOf<String, String>()
         var url = redirectUrl
         repeat(MAX_REDIRECT_HOPS) {
@@ -112,7 +116,7 @@ open class AuthRepository @Inject constructor(
         cookies
     }
 
-    suspend fun fetchNav(cookieHeader: String): Result<NavProfile> = withContext(Dispatchers.IO) {
+    suspend fun fetchNav(cookieHeader: String): Result<NavProfile> = withContext(io) {
         runCatching {
             val body = get("$apiBase/x/web-interface/nav", cookieHeader)
             val dto = json.decodeFromString(NavDto.serializer(), body)
@@ -202,7 +206,7 @@ open class AuthRepository @Inject constructor(
         }
     }
 
-    private suspend fun refreshSession(current: BiliSession): BiliSession? = withContext(Dispatchers.IO) {
+    private suspend fun refreshSession(current: BiliSession): BiliSession? = withContext(io) {
         if (!needsRefresh(current)) return@withContext current
         val csrf = current.biliJct
         if (csrf.isBlank()) return@withContext null
@@ -265,7 +269,7 @@ open class AuthRepository @Inject constructor(
 
     data class GeeResult(val validate: String, val seccode: String, val challenge: String)
 
-    open suspend fun fetchGeeTicket(): Result<GeeTicket> = withContext(Dispatchers.IO) {
+    open suspend fun fetchGeeTicket(): Result<GeeTicket> = withContext(io) {
         runCatching {
             val body = get("$passportBase/x/passport-login/captcha?source=main_web")
             val dto = json.decodeFromString(CaptchaDto.serializer(), body)
@@ -278,7 +282,7 @@ open class AuthRepository @Inject constructor(
 
     open suspend fun sendSms(
         cid: Int, tel: String, ticket: GeeTicket, result: GeeResult,
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<String> = withContext(io) {
         runCatching {
             val form = "cid=$cid&tel=$tel&source=main_web" +
                 "&token=${ticket.token}&challenge=${result.challenge}" +
@@ -296,7 +300,7 @@ open class AuthRepository @Inject constructor(
      * 短信登录：成功返回 despite code==0；data.status==2 表示撞风控（需二次验证，
      * 该链路最后一步 oauth 要 app 签名，Web 路径走不通，直接报 message 让用户换扫码/Cookie）。
      */
-    open suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> = withContext(Dispatchers.IO) {
+    open suspend fun smsLogin(cid: Int, tel: String, code: String, captchaKey: String): Result<BiliSession> = withContext(io) {
         val body = try {
             val form = "cid=$cid&tel=$tel&code=$code&source=main_web&captcha_key=$captchaKey&keep=true"
             post("$passportBase/x/passport-login/web/login/sms", form, null)
@@ -308,7 +312,7 @@ open class AuthRepository @Inject constructor(
 
     // ── 密码登录（Web：web/key 取 RSA 公钥加密 hash+密码，极验票据必填，同 biu） ──
 
-    suspend fun fetchWebKey(): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+    suspend fun fetchWebKey(): Result<Pair<String, String>> = withContext(io) {
         runCatching {
             val body = get("$passportBase/x/passport-login/web/key")
             val dto = json.decodeFromString(WebKeyDto.serializer(), body)
@@ -337,7 +341,7 @@ open class AuthRepository @Inject constructor(
         return java.util.Base64.getEncoder().encodeToString(encrypted)
     }
 
-    suspend fun passwordLogin(username: String, password: String, ticket: GeeTicket, result: GeeResult): Result<BiliSession> = withContext(Dispatchers.IO) {
+    suspend fun passwordLogin(username: String, password: String, ticket: GeeTicket, result: GeeResult): Result<BiliSession> = withContext(io) {
         val (hash, key) = fetchWebKey().getOrElse { return@withContext Result.failure(it) }
         val encrypted = try {
             rsaEncrypt(key, hash + password)

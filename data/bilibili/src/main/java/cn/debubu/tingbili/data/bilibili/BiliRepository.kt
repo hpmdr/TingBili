@@ -18,6 +18,7 @@ import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +28,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
+import javax.inject.Named
 
 class BiliRepository @Inject constructor(
     private val api: BiliApi,
@@ -35,6 +37,8 @@ class BiliRepository @Inject constructor(
     // 默认值只为手写构造的单元测试兜底，Hilt 注入时仍走 AppDataModule 的单例。
     private val httpClient: OkHttpClient = OkHttpClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
+    // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
+    @Named(cn.debubu.tingbili.core.data.di.DISPATCHER_IO) private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val searchMutex = Mutex()
     private var lastSearchAtMs = 0L
@@ -302,7 +306,7 @@ class BiliRepository @Inject constructor(
      * 同上，但区分「失败」与「空」：HTTP 非 2xx / 异常 / 解析失败走 Error（UI 给重试），
      * 空正文走 Success(empty)（UI 按无字幕处理）。CDN 抽风是已知问题，吞掉就没法重试。
      */
-    suspend fun loadSubtitleLinesResult(url: String): Result<List<LyricLine>> = withContext(Dispatchers.IO) {
+    suspend fun loadSubtitleLinesResult(url: String): Result<List<LyricLine>> = withContext(io) {
         try {
             httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
                 if (!response.isSuccessful) return@use Result.Error("字幕下载失败：${response.code}")
