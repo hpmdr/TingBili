@@ -280,12 +280,22 @@ fun PlayerScreen(
 
         trackUi.errorMessage?.let { errorMsg ->
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = errorMsg,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-            )
+            // 错误态不能只有一行红字：给显式重试入口（REVIEW_REPORT A-05）。
+            // 重试用 playAt 重走一遍「解析音源 → prepare」，与点播同一个入口，避免出现第二套恢复逻辑。
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = errorMsg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(4.dp))
+                TextButton(
+                    onClick = { vm.playAt(trackUi.currentIndex) },
+                    enabled = trackUi.queue.isNotEmpty() && !trackUi.isLoading,
+                ) { Text("重试") }
+            }
         }
 
         Spacer(Modifier.height(12.dp))
