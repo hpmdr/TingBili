@@ -270,7 +270,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
 | F5 | — | ⏳ | |
-| F6 | — | ⏳ | |
+| F6 | `see git log` | 🔄 部分完成 | 文档规则回写 + `.gitignore` + Robolectric 配置已做（§6.5）；补 3 个零测试模块的用例、`NavigationTest` 路由集断言未做 |
 
 ### 6.1 F1 实测结果（2026-11-01）
 
@@ -307,6 +307,14 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
 | F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
 
+### 6.5 F6 部分结果（2026-11-01）
+
+| 项 | 改法 | 验收 |
+|---|---|---|
+| 文档规则回写 | `AGENTS.md` / `docs/CONVENTIONS.md` 写入：高频状态只在叶子订阅、提交前门禁三件套与 lint 必须 0、实体必须建索引、破坏性升级策略 | 门禁绿 |
+| `.gitignore` 补漏 | 加 `.kotlin/`、`*.hprof`、`.mimocode/` | `git status` 干净 |
+| Robolectric 一致性（I-05） | `feature:player` 补 `src/test/resources/robolectric.properties`（`sdk=36`），7 个 Robolectric 模块配置齐平 | 全量测试绿 |
+
 ### 6.4 F4 部分结果（2026-11-01）
 
 | 子项 | 改法 | 验收 |
@@ -314,5 +322,6 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F4b 索引与订阅（E-07 / B-04 / P2） ✅ | `HistoryEntity` 补 `Index("bvid")`、`Index("updatedAt")`；`FavoriteTrackEntity` 补 `Index(value=["bvid","cid"])`；DB 15 → **16**（测试期允许破坏性升级，不写迁移）；`HistoryViewModel` 的 history/folderIds 从 `Eagerly` 改 `WhileSubscribed(5_000)` | 全量测试绿（含改过的 `HistoryViewModelTest`：WhileSubscribed 下首订阅会先拿初值，断言改 `first { it.size == 2 }`）；真机查询耗时待验 |
 | F4a 播放页/平板壳重组（B-03 / C-14 / P1） ✅ | `PlayerScreen` 顶层去掉 `progUi`（1Hz）；新增 `ProgressBarSection` / `PlayerAuxBarSection` / `SleepTimerSheetSection` 三个叶子各自订阅；歌词跳转改 `vm.currentPositionMs()` 读瞬时值；`MainTabsScaffold` 把 2Hz `player.state` 下沉到 `TabletMiniPlayer` 子组件 | 构建/lint/352 单测绿；**重组计数需真机 Layout Inspector 复核** |
 | F4c 稳定性与派生（C-13/C-04/C-01/C-02） 🔄 | 日期格式化 4 处 `SimpleDateFormat` → 静态 `DateTimeFormatter`（线程安全、无每次构造开销）；`MainActivity` 的 `inMainTabs`/`showMiniPlayer` 改 `remember(destination)`（原来每次重组都遍历 hierarchy + hasRoute） | 剩 `@Immutable`/稳定性配置与编译器报告、网格 key 去 index 未做 |
+| F4c 编译器报告 | 尝试在 5 个 Compose 模块加 `composeCompiler { reportsDestination = ... }`，构建通过但**没有产出报告文件**（AGP 9 内置 Kotlin + 该插件组合下疑似未生效），已回滚该配置，不留无效代码 | 待单独验证：换 `kotlinOptions.freeCompilerArgs` 的 `reportsDestination` 写法或在 `gradle.properties` 开 Compose 编译器统计 |
 
 > 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
