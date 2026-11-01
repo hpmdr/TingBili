@@ -283,7 +283,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 单测 | CI 只跑 19/50 文件、137/346 用例 | 13 模块全跑：**352 用例 0 失败** | `build/test-results/**/TEST-*.xml` 聚合 |
 | CI 门禁 | 无 lint；测试回退语义永不触发 | 加 `testDebugUnitTest --continue` + `lintDebug` + 失败上传报告；超时 30→45min | `.github/workflows/ci.yml` |
 | 构建 | `parallel=false`、无缓存、daemon 30s 自杀、无效属性 | `parallel=true` + `caching=true` + daemon 3h；删 `nonTransitiveRResources` 与 `suppressUnsupportedCompileSdk` | `gradle.properties`；本次构建 340 tasks / 38 from cache |
-| R8 | 无行号、mapping 不归档 | `-keepattributes SourceFile,LineNumberTable`；release 上传 `mapping.txt`（90 天） | `proguard-rules.pro`、`release.yml` |
+| R8 | 无行号、mapping 不归档、压缩路径不进 CI | `-keepattributes SourceFile,LineNumberTable`（合并配置已验证生效）；release 上传 `mapping.txt`（90 天）；**CI 增加 `:app:assemblePerfDebug` 冒烟** | `proguard-rules.pro`、`release.yml`、`ci.yml`；本地实测 perfDebug 出包 6.69MB |
 | 文档 | 三份文档三套版本口径、与代码冲突 | CONVENTIONS / DEVELOPMENT / AGENTS 已止血（版本以 toml 为准、SDK 37、历史模型、登录现状、破坏性迁移新决策） | `git show 2a714cc -- docs AGENTS.md` |
 
 > 遗留（不在 F1 范围）：`feature:search` / `feature:playlist` 的本地 `build/` 残留会让测试计数多出 5 个旧用例，已删除本地目录（build/ 不入库）。
