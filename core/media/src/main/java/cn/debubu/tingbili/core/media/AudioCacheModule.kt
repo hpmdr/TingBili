@@ -12,8 +12,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.io.File
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 /**
  * 音频缓存：全局单例，基于 SimpleCache。
@@ -34,11 +32,8 @@ object AudioCacheModule {
         @ApplicationContext context: Context,
         prefs: PreferencesRepository,
     ): SimpleCache {
-        val maxMb = try {
-            runBlocking { prefs.cacheMaxMb.first() }
-        } catch (_: Exception) {
-            PreferencesRepository.DEFAULT_CACHE_MAX_MB
-        }
+        // 构造期常量：镜像优先（Application.onCreate 已预热），缺失才 80ms 有界兜底，不再无条件主线程读盘
+        val maxMb = prefs.cacheMaxMbNow()
         val cacheDir = File(context.cacheDir, "audio").apply { mkdirs() }
         val evictor = LeastRecentlyUsedCacheEvictor(maxMb.toLong() * 1024 * 1024)
         val dbProvider = StandaloneDatabaseProvider(context)

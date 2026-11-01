@@ -15,8 +15,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import android.util.Log
 import dagger.Module
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.components.ServiceComponent
@@ -79,8 +78,8 @@ object ServicePlayerModule {
         // 解码器经 PreferHardwareAudioDecoderSelector 重排：有硬解优先硬解，
     // 失败自动回落软解（ExoPlayer 按序尝试，兜底逻辑不变）。
     // DSP offload 创建时下发初始值；运行时由 TingBiliPlaybackService 监听开关实时重下发（下一首生效）。
-    // DataStore 首读走磁盘（约数十毫秒），随 Service 创建一次性同步读；开关实时生效，下一首用新值。
-    val offloadOn = runBlocking { prefs.audioOffload.first() }
+    // 构造期常量：镜像优先（Application.onCreate 已预热），缺失才 80ms 有界兜底；开关实时生效，下一首用新值。
+    val offloadOn = prefs.audioOffloadNow()
     // 可观测性：release 包验证 offload 意愿是否落到 ExoPlayer（logcat 搜 TingBiliAudio）
     Log.i("TingBiliAudio", "audioOffload pref=$offloadOn")
     val offload = if (offloadOn) {

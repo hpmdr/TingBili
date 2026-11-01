@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.core.media
 
+import android.app.PendingIntent
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -93,7 +94,20 @@ class TingBiliPlaybackService : MediaSessionService() {
                 }
             })
         }
-        mediaSession = MediaSession.Builder(this, player).build()
+        // 点通知/锁屏卡片的「应用」区域要能回到 App：不设 sessionActivity 时默认 contentIntent 是 null（G-13）。
+        // 用 getLaunchIntentForPackage 而不是直接引用 MainActivity，避免 core:media 反向依赖 app 模块。
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val sessionActivity = launchIntent?.let {
+            PendingIntent.getActivity(
+                this,
+                0,
+                it,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
+        mediaSession = MediaSession.Builder(this, player)
+            .apply { sessionActivity?.let { setSessionActivity(it) } }
+            .build()
     }
 
     /**

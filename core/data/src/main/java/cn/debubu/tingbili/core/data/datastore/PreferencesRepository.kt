@@ -15,7 +15,10 @@ import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -38,6 +41,39 @@ data class CachedPlayUrl(
 }
 
 class PreferencesRepository(private val ds: DataStore<Preferences>) {
+
+    /**
+     * 「构造期常量」的内存镜像：音频缓存上限、DSP offload 开关。
+     *
+     * DI 构造 ExoPlayer / SimpleCache / Coil ImageLoader 时必须同步拿到这两个值，而 DataStore 首读
+     * 要打开文件 + 解析。原来在构造期 runBlocking 读盘，冷启动/首次起播会卡主线程几十毫秒
+     * （REVIEW_REPORT D-08）。现在 Application.onCreate 就在 IO 线程 prime() 预热；构造期优先读镜像，
+     * 镜像未就绪时只做 80ms 有界兜底，读失败落默认值。
+     */
+    @Volatile
+    private var cacheMaxMbMirror: Int? = null
+
+    @Volatile
+    private var audioOffloadMirror: Boolean? = null
+
+    /** 进程启动时调一次（IO 线程）：把构造期常量先读进内存镜像。 */
+    suspend fun prime() {
+        runCatching { ds.data.first() }.onSuccess { p ->
+            cacheMaxMbMirror = (p[CACHE_MAX_MB] ?: DEFAULT_CACHE_MAX_MB)
+                .coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB)
+            audioOffloadMirror = p[AUDIO_OFFLOAD] ?: true
+        }
+    }
+
+    /** 构造期同步取音频缓存上限（MB）：镜像优先，未就绪才做有界阻塞兜底。 */
+    fun cacheMaxMbNow(): Int = cacheMaxMbMirror ?: runBlocking {
+        withTimeoutOrNull(PRIME_BLOCK_TIMEOUT_MS) { cacheMaxMb.first() }
+    }?.also { cacheMaxMbMirror = it } ?: DEFAULT_CACHE_MAX_MB
+
+    /** 构造期同步取 DSP offload 开关：镜像优先，未就绪才做有界阻塞兜底。 */
+    fun audioOffloadNow(): Boolean = audioOffloadMirror ?: runBlocking {
+        withTimeoutOrNull(PRIME_BLOCK_TIMEOUT_MS) { audioOffload.first() }
+    }?.also { audioOffloadMirror = it } ?: true
 
     val stepSec: Flow<Int> = ds.data.map { it[STEP_SEC] ?: 15 }
     val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
@@ -211,7 +247,9 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     }
 
     suspend fun setCacheMaxMb(v: Int) {
-        ds.edit { it[CACHE_MAX_MB] = v.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB) }
+        val clamped = v.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB)
+        cacheMaxMbMirror = clamped
+        ds.edit { it[CACHE_MAX_MB] = clamped }
     }
 
     suspend fun setLastPosition(positionMs: Long) {
@@ -223,6 +261,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
      * 新写入一律走 Room，此函数在旧数据搬空后即为 no-op；下个版本可删。
      */
     suspend fun setAudioOffload(v: Boolean) {
+        audioOffloadMirror = v
         ds.edit { it[AUDIO_OFFLOAD] = v }
     }
 
@@ -312,6 +351,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         const val MAX_SEARCH_HISTORY = 15
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
         const val DEFAULT_CACHE_MAX_MB = 500
+        /** 构造期读镜像缺失时的兜底上限：只在 DataStore 预热未完成的极端情况下才会用到 */
+        const val PRIME_BLOCK_TIMEOUT_MS = 80L
         val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
         const val MIN_CACHE_MAX_MB = 100
         const val MAX_CACHE_MAX_MB = 2048

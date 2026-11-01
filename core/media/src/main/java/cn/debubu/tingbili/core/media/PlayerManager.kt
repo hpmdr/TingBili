@@ -1,10 +1,8 @@
-﻿package cn.debubu.tingbili.core.media
+package cn.debubu.tingbili.core.media
 
 import android.content.Context
-import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
@@ -661,11 +659,8 @@ class PlayerManager @Inject constructor(
     ) {
         val q = queue
         if (q.isEmpty()) return
-        // 冷启动时 Service 可能还没起；先拉起前台服务再等 controller 就绪（幂等）
-        ContextCompat.startForegroundService(
-            appContext,
-            Intent(appContext, TingBiliPlaybackService::class.java),
-        )
+        // 不手动拉起前台服务：awaitReady 内部 connect() 会绑定并创建 Service；
+        // Media3 在真正开始播放时才 startForeground，提前起服务会让「5s 内没 startForeground」变成被杀的理由（G-12）。
         if (!transport.awaitReady()) return
         val safe = startIndex.coerceIn(0, q.lastIndex)
         val pos = startPositionMs.coerceIn(
@@ -739,11 +734,7 @@ class PlayerManager @Inject constructor(
         var wasPlaying = false
         try {
             _state.update { it.copy(isLoading = true, errorMessage = null) }
-            // 先拉起前台服务：后台保活 + 通知栏的前提；幂等，重复调用无副作用。
-            ContextCompat.startForegroundService(
-                appContext,
-                Intent(appContext, TingBiliPlaybackService::class.java)
-            )
+            // 不手动拉起前台服务（同 rebuildTransport）：awaitReady 内部 connect() 会创建 Service。
             // 冷启动时 MediaController 可能还没连上：这期间 setMediaItems 会被静默丢弃，
             // 表现就是「切了歌还在放上一集」。先等连接就绪，超时直接失败，不制造混合态。
             if (!transport.awaitReady()) {

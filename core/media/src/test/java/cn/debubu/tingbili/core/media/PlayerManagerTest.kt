@@ -637,14 +637,17 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `play starts foreground playback service`() = runTest {
+    fun `play does not start foreground service manually`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val appContext = ApplicationProvider.getApplicationContext<Context>()
         playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        // 前台服务由 Media3 在真正开始播放时拉起并 startForeground；手动提前起服务会让
+        // 「起了服务但 5s 内没 startForeground」成为系统杀进程的理由（REVIEW_REPORT G-12）。
+        // 这里锁住新契约：play() 不再手动 startForegroundService。
         val started = org.robolectric.Shadows.shadowOf(appContext as android.app.Application)
             .peekNextStartedService()
-        assertTrue(started?.component?.className?.endsWith("TingBiliPlaybackService") == true)
+        assertEquals(null, started)
         playerManager.release()
     }
 
