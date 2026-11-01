@@ -267,8 +267,8 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F0 | `bf2918f` | ✅ | 基线：debug APK 85.0 MB / perfDebug 6.53 MB / 活跃模块 352 个用例 / lint 105 条（80 Error，其中 78 条 media3 `@UnstableApi`） |
 | F1 | `2a714cc` | ✅ | 见 §6.1 |
 | F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
-| F3 | `9cee8c6` | 🔄 部分完成 | F3a WebView / F3b 备份已完成（§6.3）；F3c 触控目标、F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
-| F4 | — | ⏳ | |
+| F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
+| F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
 | F5 | — | ⏳ | |
 | F6 | — | ⏳ | |
 
@@ -303,8 +303,16 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 |---|---|---|
 | F3a 极验 WebView（F-07 / P1） | `MIXED_CONTENT_ALWAYS_ALLOW` → `COMPATIBILITY_MODE`；`allowFileAccess/allowContentAccess=false`；`shouldOverrideUrlLoading` 只放行 `*.bilibili.com`；JS 桥改为一次性消费（成功后丢弃后续消息） | 构建绿、lint 0；**真机登录待验**（极验流程对 UA/混合内容敏感，必须实测扫码/短信登录一次） |
 | F3b 备份策略（F-06 / P2） | `allowBackup=false` + `fullBackupContent=false` + 新增 `res/xml/data_extraction_rules.xml`（云备份与 D2D 全量排除） | lint 的 `DataExtractionRules` 告警消除；`adb shell bmgr` 无可备份数据 |
-| F3c 触控目标（H-02 / P1） | **未做** | 需改 4 处 UI（进度条 22dp 容器、Me 34dp、Home 28dp、mini 40dp），要真机验触控 |
+| F3c 触控目标（H-02 / H-01） ✅ | 播放页进度条触控区 22dp → **48dp**（线仍画在顶部 5dp，视觉不变，多出高度由下方歌词 weight 吸收）；Me 页明暗切换 34dp → **48dp** 点击区（视觉圆仍 34dp）+ 补 `contentDescription`；mini 播放键 40 → 48dp；首页搜索历史删除键 28 → 48dp | 构建/lint/单测绿；**触控与视觉需真机复核** |
 | F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
 | F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
+
+### 6.4 F4 部分结果（2026-11-01）
+
+| 子项 | 改法 | 验收 |
+|---|---|---|
+| F4b 索引与订阅（E-07 / B-04 / P2） ✅ | `HistoryEntity` 补 `Index("bvid")`、`Index("updatedAt")`；`FavoriteTrackEntity` 补 `Index(value=["bvid","cid"])`；DB 15 → **16**（测试期允许破坏性升级，不写迁移）；`HistoryViewModel` 的 history/folderIds 从 `Eagerly` 改 `WhileSubscribed(5_000)` | 全量测试绿（含改过的 `HistoryViewModelTest`：WhileSubscribed 下首订阅会先拿初值，断言改 `first { it.size == 2 }`）；真机查询耗时待验 |
+| F4a 播放页/平板壳重组（B-03 / C-14 / P1） | **未做** | 下一轮：`PlayerScreen` 顶层 `progUi`/`lyricUi` 下沉、`MainTabsScaffold` 复用 `MiniPlayerOverlay` |
+| F4c 稳定性与派生（C-13/C-04/C-01/C-02） | **未做** | 下一轮：`@Immutable`/稳定性配置 + 编译器报告、`derivedStateOf`、SDF remember、网格 key 去 index |
 
 > 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
