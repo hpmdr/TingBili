@@ -230,3 +230,44 @@ ro.soc.manufacturer= Mediatek
 | 给 Coil 内存缓存设上限 | 压前台峰值内存（§9.1） |
 | 设置页提示 offload 未生效 | 当前被 MiSound 效果链阻塞（§9.3），提示用户可关系统音效 |
 | 不做 | 无法通过应用代码让 AAC 走「硬解」（硬件路径不存在）；也无法绕过 ROM 对 offload 的 veto |
+
+## 11. 跨机型对照：高通能 offload、MTK 不能（2026-11-01 19:20）
+
+### 11.1 用户侧观察
+
+- 另一台**红米高通机型**：即使开着杜比全景声，也能 DSP offload；
+- **多台红米联发科机型**（含本机 D8300、另一台 D9400+）：全部无法 offload，只能软解。
+
+### 11.2 本机更细的证据（`dumpsys media.audio_flinger`）
+
+我们播放会话（session 15497）上挂着**一个效果**：
+
+```
+Effect ID 18979
+  UUID: 40f66c8b-5aa5-4345-8919-53ec431aaa98
+  name: Music Listener
+  implementor: Dolby Laboratories
+  flags: 00C00290 (conn. mode: insert, insert pref: last, ..., offloadable)  ← 框架层标了 offloadable
+  Session State: 15497 ... enabled = y
+```
+
+全局（session 0）另有：`Effect ID 43: implementor: MiSound Audio Effect`。
+
+配置文件层面：`/vendor/etc/audio_effects.xml` **确实声明了** `<library name="proxy" path="libeffectproxy.so"/>`（Android 的「可 offload 效果」代理机制），也就是说框架具备「效果跑在 DSP 里、同时 offload」的能力。
+
+但 HAL 实际下发的是：`EFFECT_CMD_OFFLOAD offload=0` → `setOffloaded_l offloaded 0`，即**效果链自报不支持压缩直通**。
+
+### 11.3 为什么高通可以、联发科不行（机制推断）
+
+| 环节 | 高通机型（可 offload） | 本机 MTK 机型（不可） |
+|---|---|---|
+| 效果位置 | Dolby 处理跑在 **ADSP**，通过 effectProxy 代理 | MiSound/Dolby 监听器实现在 **AP 侧**（`libmisoundfx.so` / `libswdap.so`） |
+| EFFECT_CMD_OFFLOAD 回应 | 声明支持 → HAL 允许压缩直通 | 返回 0 → HAL 关闭 offload |
+| 结果 | 效果 + offload 并存 | 只能 PCM 直通 + CPU 软解 |
+
+> 关键点：**「原声」只关掉音频处理，不卸载效果模块**。只要模块挂在播放流上且不支持 offload，HAL 就禁 offload —— 这解释了为什么关杜比/选原声都无效。
+
+### 11.4 对 TingBili 的结论
+
+- 这是 **ROM/平台效果链实现差异**，不是芯片没有 DSP（两家都有），也不是应用可配置项；
+- 应用侧唯一能做的是**检测 + 告知**：`ExoPlayer.AudioOffloadListener` 若在一首歌内始终没有 `onOffloadedPlayback(true)`，说明本机 offload 不可用，可在设置页显示一行说明（避免用户误以为开关无效）。
