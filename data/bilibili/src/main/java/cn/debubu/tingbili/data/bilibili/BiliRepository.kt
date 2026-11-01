@@ -287,10 +287,18 @@ class BiliRepository @Inject constructor(
         Result.Error(e.message ?: "toview failed", e)
     }
 
-    suspend fun getBiliHistory(max: Long = 0L, viewAt: Long = 0L, ps: Int = 20): Result<List<BiliSpaceVideo>> = try {
+    /**
+     * B 站历史（游标分页）：首屏 max=0/viewAt=0，上拉用上一页最后一条的 oid/viewAt。
+     * 返回 DTO 而不是映射后的列表——调用方需要游标才能翻页；feature 层经此统一出口，不直连 BiliApi（REVIEW_REPORT D-01）。
+     */
+    suspend fun getBiliHistory(
+        max: Long = 0L,
+        viewAt: Long = 0L,
+        ps: Int = 20,
+    ): Result<cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto> = try {
         val dto = api.historyCursor(ps = ps, max = max, viewAt = viewAt)
         if (dto.code != 0) Result.Error(dto.message.ifBlank { "history failed: code ${dto.code}" })
-        else Result.Success(dto.toSpaceVideos())
+        else Result.Success(dto)
     } catch (e: Exception) {
         Result.Error(e.message ?: "history failed", e)
     }

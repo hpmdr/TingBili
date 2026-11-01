@@ -34,7 +34,8 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class BiliHistoryViewModel @Inject constructor(
-    private val api: cn.debubu.tingbili.data.bilibili.BiliApi,
+    // 走仓储而不是直连 BiliApi（REVIEW_REPORT D-01）
+    private val repo: cn.debubu.tingbili.data.bilibili.BiliRepository,
     val auth: AuthRepository,
 ) : ViewModel() {
     val session = auth.sessionFlow
@@ -55,11 +56,10 @@ class BiliHistoryViewModel @Inject constructor(
         _loading.value = true
         _error.value = null
         viewModelScope.launch {
-            try {
-                val dto = api.historyCursor(ps = 20, max = 0L, viewAt = 0L)
-                if (dto.code != 0) {
-                    _error.value = dto.message.ifBlank { "加载失败" }
-                } else {
+            when (val r = repo.getBiliHistory(ps = 20, max = 0L, viewAt = 0L)) {
+                is cn.debubu.tingbili.core.data.Result.Error -> _error.value = r.msg ?: "加载失败"
+                is cn.debubu.tingbili.core.data.Result.Success -> {
+                    val dto = r.data
                     val items = dto.data?.list.orEmpty()
                     _list.value = dto.toSpaceVideosCompat()
                     if (items.isNotEmpty()) {
@@ -68,8 +68,6 @@ class BiliHistoryViewModel @Inject constructor(
                     }
                     _hasMore.value = items.size >= 20
                 }
-            } catch (e: Exception) {
-                _error.value = e.message ?: "加载失败"
             }
             _loading.value = false
         }
@@ -79,9 +77,10 @@ class BiliHistoryViewModel @Inject constructor(
         if (!_hasMore.value || _loadingMore.value) return
         _loadingMore.value = true
         viewModelScope.launch {
-            try {
-                val dto = api.historyCursor(ps = 20, max = nextMax, viewAt = nextViewAt)
-                if (dto.code == 0) {
+            when (val r = repo.getBiliHistory(ps = 20, max = nextMax, viewAt = nextViewAt)) {
+                is cn.debubu.tingbili.core.data.Result.Error -> Unit
+                is cn.debubu.tingbili.core.data.Result.Success -> {
+                    val dto = r.data
                     val items = dto.data?.list.orEmpty()
                     _list.value = _list.value + dto.toSpaceVideosCompat()
                     if (items.isNotEmpty()) {
@@ -90,7 +89,6 @@ class BiliHistoryViewModel @Inject constructor(
                     }
                     _hasMore.value = items.size >= 20
                 }
-            } catch (_: Exception) {
             }
             _loadingMore.value = false
         }

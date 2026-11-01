@@ -7,7 +7,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import cn.debubu.tingbili.core.data.Result
-import cn.debubu.tingbili.core.data.db.HomeSnapshotDao
+import cn.debubu.tingbili.core.data.repository.HomeSnapshotRepository
 import cn.debubu.tingbili.core.data.db.HomeSnapshotEntity
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.Track
@@ -37,7 +37,7 @@ class HomeViewModel @Inject constructor(
     private val repo: BiliRepository,
     private val prefs: PreferencesRepository,
     private val player: PlayerManager,
-    private val homeSnapshotDao: HomeSnapshotDao,
+    private val homeSnapshotRepository: HomeSnapshotRepository,
     private val scrollTopBus: HomeScrollTopBus,
     private val json: Json = Json { ignoreUnknownKeys = true; coerceInputValues = true },
     // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
@@ -123,7 +123,7 @@ class HomeViewModel @Inject constructor(
                 ?: homeKeywords.value.firstOrNull()
                 ?: DEFAULT_KEYWORD
             try {
-                val entity = homeSnapshotDao.get()
+                val entity = homeSnapshotRepository.get()
                 if (entity != null) {
                     val snapKeyword = runCatching {
                         json.decodeFromString<List<String>>(entity.keywordsJson).firstOrNull()
@@ -183,7 +183,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch(io) {
             try {
                 val bounded = tracks.take(MAX_SNAPSHOT_TRACKS)
-                homeSnapshotDao.save(
+                homeSnapshotRepository.save(
                     HomeSnapshotEntity(
                         // 复用字段存词表（单元素）：读取时用它校验快照是不是当前词的内容
                         keywordsJson = json.encodeToString<List<String>>(listOf(keyword)),
