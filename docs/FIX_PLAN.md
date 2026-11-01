@@ -324,7 +324,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | `.gitignore` 补漏 | 加 `.kotlin/`、`*.hprof`、`.mimocode/` | `git status` 干净 |
 | Robolectric 一致性（I-05） | `feature:player` 补 `src/test/resources/robolectric.properties`（`sdk=36`），7 个 Robolectric 模块配置齐平 | 全量测试绿 |
 | 路由覆盖守卫（I-04） ✅ | 新增 `RouteCoverageTest`：① 把 `NavigationTest` 没覆盖的 8 条路由（MainTabs/Home/Appearance/Player/UpSpace/VideoDetail/FavoriteFolder/BvFavorite）放进一个真实 Nav 图逐条 navigate 断言；② 元测试扫描 `Routes.kt` 的 `@Serializable` 路由，要求在测试源码里都能找到——「改路由必须同步改测试」从口头约定变成门禁 | 单测 358 → **360**，全绿 |
-| 零测试模块补测（I-03） 🔄 | `feature:space` 新增 `SpaceViewModelTest`（6 例）：头部信息成功/降级/失败三态、mid 缺失快速失败、排序切换、搜索词 trim；`feature:detail` 新增 `DetailViewModelTest`（3 例）：加载成功把分P映射成 Track（含 pageCount/pageIndex）、失败暴露可重试错误、失败后重试恢复（fake 脚手架与 feature:history 同源） | 单测 352 → **363**，全绿；仅剩 `core:bili-ui`（纯 UI 组件，需 Compose UI 测试，未做） |
+| 零测试模块补测（I-03） ✅ | `feature:space` 新增 `SpaceViewModelTest`（6 例）：头部信息成功/降级/失败三态、mid 缺失快速失败、排序切换、搜索词 trim；`feature:detail` 新增 `DetailViewModelTest`（3 例）：加载成功把分P映射成 Track（含 pageCount/pageIndex）、失败暴露可重试错误、失败后重试恢复（fake 脚手架与 feature:history 同源） | `core:bili-ui` 新增 `BiliAccountUiTest`（3 例）：时长格式化、错误重试回调、未登录门回调 | 单测 352 → **366**，全绿；**四个零测试模块全部补齐** |
 
 ### 6.4 F4 部分结果（2026-11-01）
 
