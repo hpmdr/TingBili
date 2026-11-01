@@ -6,10 +6,19 @@
         <service
             android:name="cn.debubu.tingbili.core.media.TingBiliPlaybackService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- 硬件媒体键（耳机/蓝牙）：服务未起时由 media3 收到 MEDIA_BUTTON 再拉起服务 -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -97,12 +97,14 @@ class TingBiliPlaybackService : MediaSessionService() {
         // 通知渠道显式定义（REVIEW_REPORT A-03）：渠道名/说明/重要级可控，用户能在通知设置里单独识别；
         // 旧渠道（Media3 默认 default_channel_id，名字是 App 名）清掉，避免设置里出现两条。
         ensureNotificationChannel()
-        setMediaNotificationProvider(
-            androidx.media3.session.DefaultMediaNotificationProvider.Builder(this)
-                .setChannelId(CHANNEL_ID)
-                .setChannelName(R.string.playback_notification_channel)
-                .build(),
-        )
+        val notificationProvider = androidx.media3.session.DefaultMediaNotificationProvider.Builder(this)
+            .setChannelId(CHANNEL_ID)
+            .setChannelName(R.string.playback_notification_channel)
+            .build()
+        // 单色品牌图标（1.11 的 Builder 没有该参数，只能建完再设）：默认是 Media3 播放三角，
+        // 状态栏/锁屏里认不出是谁在播，且彩色自适应图标会被系统抹成一团。
+        notificationProvider.setSmallIcon(R.drawable.ic_notification_playback)
+        setMediaNotificationProvider(notificationProvider)
         // 点通知/锁屏卡片的「应用」区域要能回到 App：不设 sessionActivity 时默认 contentIntent 是 null（G-13）。
         // 用 getLaunchIntentForPackage 而不是直接引用 MainActivity，避免 core:media 反向依赖 app 模块。
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -116,6 +118,7 @@ class TingBiliPlaybackService : MediaSessionService() {
         }
         mediaSession = MediaSession.Builder(this, player)
             .apply { sessionActivity?.let { setSessionActivity(it) } }
+            .setCallback(TRUSTED_CONTROLLERS_ONLY)
             .build()
     }
 
@@ -144,6 +147,23 @@ class TingBiliPlaybackService : MediaSessionService() {
             }
         }
     }
+
+    /**
+     * 服务需要 exported=true（系统 UI/蓝牙/车机要绑定），但不能对任意 App 开放会话能力：
+     * 只接受本应用进程与系统信任的媒体控制器（SystemUI/蓝牙/车机），其余拒绝。
+     */
+    private val TRUSTED_CONTROLLERS_ONLY = object : MediaSession.Callback {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            if (isTrustedController(controller)) return super.onConnect(session, controller)
+            return MediaSession.ConnectionResult.reject()
+        }
+    }
+
+    private fun isTrustedController(controller: MediaSession.ControllerInfo): Boolean =
+        controller.packageName == packageName || controller.isTrusted
 
     /** 常驻但不响铃（IMPORTANCE_LOW）：媒体控制要可见，但不能在播放时弹提示音 */
     private fun ensureNotificationChannel() {

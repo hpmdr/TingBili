@@ -47,6 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -90,6 +94,9 @@ class MainActivity : ComponentActivity() {
     // 否则媒体通知、锁屏卡片、耳机线控会静默消失，用户只会觉得「播放坏了」。
     private var notificationDenied by mutableStateOf(false)
 
+    /** 每进程只提示一次：播放开始时若通知被关，弹一次说明就够，反复弹会烦人 */
+    private var notificationHintShown = false
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) notificationDenied = true
@@ -120,6 +127,24 @@ class MainActivity : ComponentActivity() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        // 用户可能没在申请时拒绝，而是事后去系统设置关掉通知；播放开始时补一次检查（A-03 最佳实践）。
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                playerManager.state
+                    .map { it.isPlaying }
+                    .distinctUntilChanged()
+                    .filter { it }
+                    .collect {
+                        if (notificationHintShown) return@collect
+                        val enabled = androidx.core.app.NotificationManagerCompat.from(this@MainActivity)
+                            .areNotificationsEnabled()
+                        if (!enabled) {
+                            notificationHintShown = true
+                            notificationDenied = true
+                        }
+                    }
             }
         }
         enableEdgeToEdge()

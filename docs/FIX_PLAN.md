@@ -425,3 +425,16 @@ debug 包 StrictMode 抓到应用自身的一处主线程磁盘读：
 - `pm revoke POST_NOTIFICATIONS` 后重启 → 系统权限框；点「拒绝」→ 应用弹出上述说明对话框（uiautomator 抓到标题与两个按钮）。
 - 点「去设置」→ 焦点落到 `Settings$AppNotificationSettingsActivity`（本应用通知页）。
 - `pm grant` 恢复后重启 → 不再弹框，正常落到首屏。
+
+### 7.5 通知最佳实践落地（2026-11-01，A-03 扩展）
+
+设计文档见 `docs/NOTIFICATION_DESIGN.md`。这一批在 A-03 之外补了 4 项（都是 Android/Media3 官方指南要求、原实现缺失的）：
+
+| 项 | 问题 | 做法 | 验证 |
+|---|---|---|---|
+| 通知小图标 | 用 Media3 默认播放三角，状态栏/锁屏认不出是谁 | 单色 vector `ic_notification_playback` + `notificationProvider.setSmallIcon`（1.11 的 Builder 无此参数，只能建完再设） | 通知 `icon id` 从 `0x7f060055` → `0x7f06000a` |
+| 服务可绑定性 | `exported="false"`，系统 UI/蓝牙/车机/媒体恢复绑不上 | 改 `exported="true"`，同时用 `MediaSession.Callback.onConnect` 白名单：自家包名或 `ControllerInfo.isTrusted`，其余 `ConnectionResult.reject()` | 自家控制器播放正常；`isTrusted` 系统控制器放行 |
+| 硬件媒体键 | 未声明 `MediaButtonReceiver`，服务未起时按键无人接 | `core:media` manifest 声明 media3 receiver（`MEDIA_BUTTON`） | `input keyevent MEDIA_PAUSE/PLAY`（App 后台）→ 状态 `PAUSED→PLAYING`，logcat 见系统把按键路由到本会话 |
+| 事后关通知 | 只在申请时被拒才提示，用户去设置关掉后静默无通知 | 播放开始时检查 `areNotificationsEnabled()`，每进程提示一次（复用 A-03 对话框） | `pm revoke` 后起播：播放正常且弹说明 |
+
+> 未做（记录在 NOTIFICATION_DESIGN §2 P2）：`onPlaybackResumption`（车机/重启媒体恢复，需要持久化队列+云端校验）、自定义通知按钮（Media3 默认三键已够）。P1「通知点击直达播放页」留待下一批。
