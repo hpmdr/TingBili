@@ -97,3 +97,51 @@ adb logcat -c   # 开始前清一次，出问题好抓
 - `docs/REVIEW_REPORT.md` §9.3 把「真机验证」一行移除或标注已完成
 
 失败项按以下格式记：`[批次-编号] 现象 + logcat 关键行 + 复现步骤`，直接进 `docs/FIX_PLAN.md` 新开一批修复。
+
+---
+
+## 结果记录（2026-11-01 14:24–14:35 实测，设备 2311DRK48C / HyperOS / 480dpi）
+
+包：`app-debug.apk`（含全部 F1–F6 改动）→ 另测 `app-perfDebug.apk`（R8）。日志用 `adb logcat`，状态用 `uiautomator dump` 控件树判定。
+
+### 通过 10 项
+
+| # | 项目 | 实测证据 |
+|---|---|---|
+| 1.1 | 起播 | 详情页点「播放全部」→ `media_session state=PLAYING position=8900`，播放页显示 `0:08 / 4:00`，无崩溃 |
+| 1.2 | 回桌面继续播 | `KEYCODE_HOME` 后 4s：焦点 `com.miui.home`，`state=PLAYING position=23724`（进度连续，未断） |
+| 1.3 | 媒体通知 | `dumpsys notification`：`pkg=cn.debubu.tingbili id=1001 channel=default_channel_id category=transport actions=3 flags=NO_CLEAR`，标题=曲名、副标题=UP 名 |
+| 1.4 | 通知跳回（sessionActivity） | 通知栏窗口无法被 uiautomator dump（MIUI 限制），改用会话证据：`media_session` 中 `launchIntent=PendingIntent{...startActivity...}` 已存在——G-13 修复生效；**点击链路仍需人工点一次** |
+| 1.5 | force-stop 后重进 | 杀进程 → 重进：不自动播（`state=NONE`），点 mini 播放键 → `state=PLAYING position=123906`，无崩溃 |
+| 1.6 | 恢复上次进度 | 详情页显示「继续播放 P1」「上次听到 2:10 / 4:00」；历史页「P1 · 001… · 皓晨音乐」「共 1 条播放记录」 |
+| 2.1 | 有收藏时落地收藏 tab | 收藏 1 个 BV 后 force-stop 冷启动 → 直接落「我的最爱」，显示「默认收藏夹 · 2026-11-01」 |
+| 2.2 | 无收藏时落首页 | 首次安装（DB v16 破坏性升级清库）后冷启动 → 落「首页」，首屏 feed 正常 |
+| 5.3 | 触控目标 48dp | mini 播放键 clickable bounds `144×144 px` ÷ 3（480dpi）= **48dp**；mini 条高 70dp |
+| 5.4 | 200% 字体 | `font_scale=2.0` 重启：mini 条高 70dp → **82dp**（`heightIn` 生效），文本未裁切；恢复 1.0 |
+
+### 性能与 R8
+
+| # | 项目 | 实测证据 |
+|---|---|---|
+| 6.3 | 滚动流畅度 | 连续三次滑动：`Total frames 424`，`Janky frames 3 (0.71%)`，50th 9ms / 90th 17ms / 95th 18ms / 99th 20ms |
+| 8 | R8 包 | `app-perfDebug.apk` 6.69MB 覆盖安装 → 启动、feed、详情、起播全正常（`state=PLAYING position=136603`）；logcat 无 `ClassNotFound/NoSuchMethod/NoClassDefFound`（仅高通系统 `BoostFramework` 噪音） |
+
+### 未验证 / 无法验证
+
+| # | 项目 | 原因 |
+|---|---|---|
+| 3.1–3.4 | 极验登录（扫码/滑块） | **验证会丢失你的登录态**：当前已登录（UID 32454802），要触发 WebView 登录页必须先退出登录并重新扫码。未擅自登出。**建议你下次登录时顺手验一次**：二维码是否正常显示、滑块能否拖动通过 |
+| 1.4 点击跳转 | 通知点击回 App | MIUI 通知栏窗口 uiautomator 无法 dump，无法定位控件；已用 `launchIntent` 存在作为替代证据 |
+| 4.1–4.2 | 备份排除 | 需 `bmgr` 触发云备份，HyperOS 上有系统侧限制；`allowBackup=false` + `data_extraction_rules` 已静态确认，建议在「设置→备份」里人工看一眼 |
+| 6.1–6.2 | Layout Inspector 重组计数 | 需要 Android Studio 挂在调试进程上，adb 无法取重组次数；已用滚动掉帧（0.71%）作为性能替代证据 |
+| 7.1–7.3 | 登录页转屏 | 应用锁 `portrait`（F3d 待拍板），本就无法转屏；与 F3d 决策绑定 |
+| 1.7 | 息屏 10 分钟 | 未做（会触发锁屏，若设了密码我无法解锁，风险由你承担）。可用「后台播放 4 分钟」结果近似 |
+
+### 新发现（StrictMode 抓到的真实问题，见 FIX_PLAN F7）
+
+`adb logcat | Select-String 'StrictMode policy violation'` 在 debug 包抓到两类：
+
+- **系统噪音（无需处理）**：`com.mediatek.scnmodule.ScnModule`、`com.qualcomm.qti.Performance` 等 ROM 注入代码在主线程读文件——这正是当初给 StrictMode 选 `penaltyLog` 而不是 `penaltyDeath` 的原因，否则非崩不可。
+- **应用自身（需修）**：`~duration=786 ms DiskReadViolation`，栈为 `EncryptedAuthStore.prefs_delegate$lambda$0(EncryptedAuthStore.kt:29)` → `MasterKey.getOrCreate` → `AndroidKeyStoreSpi` → **主线程读 Keystore 约 786ms**。触发点是 `AuthRepository` 构造期同步 `store.load()`（启动路径）。
+
+> 这条不是「理论上可能」，是实测数字。冷启动时主线程被阻塞近 0.8s，属于首帧/ANR 风险，建议按 F7 处理（改后台预取 + 内存镜像，与 DataStore 的 prime 同一套思路），**但涉及登录态读取，改完必须验一次登录能否保持**。

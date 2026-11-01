@@ -348,3 +348,37 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F4c 编译器报告 | 尝试在 5 个 Compose 模块加 `composeCompiler { reportsDestination = ... }`，构建通过但**没有产出报告文件**（AGP 9 内置 Kotlin + 该插件组合下疑似未生效），已回滚该配置，不留无效代码 | 待单独验证：换 `kotlinOptions.freeCompilerArgs` 的 `reportsDestination` 写法或在 `gradle.properties` 开 Compose 编译器统计 |
 
 > 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
+
+---
+
+## 7. 真机验证（2026-11-01，设备 2311DRK48C）
+
+清单与逐项证据见 `docs/DEVICE_VERIFICATION.md`「结果记录」。结论：**通过 10 项 / 待人工 4 项**。
+
+| 批 | 验的是什么 | 结果 |
+|---|---|---|
+| F2 播放服务 | 起播、回桌面续播、通知、force-stop 重连、恢复进度 | ✅ 全部通过（`state=PLAYING` 连续、`launchIntent` 已设、重连后从 2:03 续播） |
+| F2b 启动落地 | 有收藏→收藏 tab；无收藏→首页 | ✅ 均符合预期 |
+| F3c 触控 48dp | mini 播放键 | ✅ 144px ÷ 3 = 48dp |
+| F5e 大字体 | 200% 字体下 mini 条 | ✅ 70dp → 82dp，文本不裁切 |
+| F4b 索引/订阅 | 历史页数据、滚动掉帧 | ✅ 历史记录正确；滚动 424 帧仅 3 帧掉帧（0.71%） |
+| J-10 R8 | 压缩包能否正常跑 | ✅ 6.69MB 包启动/播放全通，无类缺失 |
+| F3a 极验登录 | WebView 改造 | ⏸ 需退出登录才能验（会丢你的登录态），未擅自做 |
+| F3b 备份排除 / F4a 重组计数 / F3e 沉浸式 / F3d 转屏 | — | ⏸ adb 无法取（Studio 或系统设置才能看），或依赖 F3d 拍板 |
+
+### 7.1 新发现：主线程读 Keystore 786ms（F7，P1）
+
+debug 包 StrictMode 抓到应用自身的一处主线程磁盘读：
+
+```
+~duration=786 ms: DiskReadViolation
+  at java.security.KeyStore.containsAlias
+  at androidx.security.crypto.MasterKeys.getOrCreate
+  at cn.debubu.tingbili.di.EncryptedAuthStore.prefs_delegate$lambda$0(EncryptedAuthStore.kt:29)
+  at cn.debubu.tingbili.core.data.repository.AuthRepository.<init>
+```
+
+- **根因**：`AuthRepository` 构造期同步 `store.load()`，`EncryptedAuthStore` 的 `SharedPreferences by lazy` 首次访问要建 `MasterKey`（Keystore IPC）。
+- **影响**：冷启动主线程阻塞约 0.8s（首帧与输入响应延迟），属 D-08 同族但路径不同（D-08 修的是 DataStore，这条是加密存储）。
+- **修复方向**：与 DataStore 的 prime 同思路——Application 在 IO 线程预取，仓储只读内存镜像；读取侧保留有界兜底。**但登录态读取改动敏感，改完必须验「冷启动仍保持登录」（本次已登录，可直接验）**。
+- **为何这次没顺手改**：会触碰登录态的初始化顺序，属于需要「改 + 上机验证」成对完成的改动；等你确认后我再做（约 30 分钟含验证）。
