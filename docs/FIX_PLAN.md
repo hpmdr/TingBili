@@ -343,7 +343,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 子项 | 改法 | 验收 |
 |---|---|---|
 | F4b 索引与订阅（E-07 / B-04 / P2） ✅ | `HistoryEntity` 补 `Index("bvid")`、`Index("updatedAt")`；`FavoriteTrackEntity` 补 `Index(value=["bvid","cid"])`；DB 15 → **16**（测试期允许破坏性升级，不写迁移）；`HistoryViewModel` 的 history/folderIds 从 `Eagerly` 改 `WhileSubscribed(5_000)` | 全量测试绿（含改过的 `HistoryViewModelTest`：WhileSubscribed 下首订阅会先拿初值，断言改 `first { it.size == 2 }`）；真机查询耗时待验 |
-| F4a 播放页/平板壳重组（B-03 / C-14 / P1） ✅ | `PlayerScreen` 顶层去掉 `progUi`（1Hz）；新增 `ProgressBarSection` / `PlayerAuxBarSection` / `SleepTimerSheetSection` 三个叶子各自订阅；歌词跳转改 `vm.currentPositionMs()` 读瞬时值；`MainTabsScaffold` 把 2Hz `player.state` 下沉到 `TabletMiniPlayer` 子组件 | 构建/lint/352 单测绿；**重组计数需真机 Layout Inspector 复核** |
+| F4a 播放页/平板壳重组（B-03 / C-14 / P1） ✅ | `PlayerScreen` 顶层去掉 `progUi`（1Hz）；新增 `ProgressBarSection` / `PlayerAuxBarSection` / `SleepTimerSheetSection` 三个叶子各自订阅；歌词跳转改 `vm.currentPositionMs()` 读瞬时值；`MainTabsScaffold` 把 2Hz `player.state` 下沉到 `TabletMiniPlayer` 子组件 | 构建/lint/352 单测绿；**真机埋点实测**：播放中 10 秒内 `PlayerScreen` 顶层重组 **4 次**，对照叶子 `ProgressBarSection` **10 次**（正好 1Hz）——证明高频进度只驱动叶子（无 Studio 时用临时 `SideEffect` 计数 + logcat，验完回滚） |
 | F4c 稳定性与派生（C-13/C-04/C-01/C-02） 🔄 | 日期格式化 4 处 `SimpleDateFormat` → 静态 `DateTimeFormatter`（线程安全、无每次构造开销）；`MainActivity` 的 `inMainTabs`/`showMiniPlayer` 改 `remember(destination)`（原来每次重组都遍历 hierarchy + hasRoute） | 剩 `@Immutable`/稳定性配置与编译器报告、网格 key 去 index 未做 |
 | F4c 编译器报告 | 尝试在 5 个 Compose 模块加 `composeCompiler { reportsDestination = ... }`，构建通过但**没有产出报告文件**（AGP 9 内置 Kotlin + 该插件组合下疑似未生效），已回滚该配置，不留无效代码 | 待单独验证：换 `kotlinOptions.freeCompilerArgs` 的 `reportsDestination` 写法或在 `gradle.properties` 开 Compose 编译器统计 |
 

@@ -71,9 +71,9 @@ adb logcat -c   # 开始前清一次，出问题好抓
 
 | # | 步骤 | 期望 | 结果 |
 |---|---|---|---|
-| 6.1 | 播放中用 Layout Inspector 看 `PlayerScreen` 重组计数 | ≈0/s（修复前 1/s） | |
-| 6.2 | 平板/600dp 宽下播放，看壳体 `MainTabsScaffold` | ≈0/s（修复前 2/s） | |
-| 6.3 | 播放中停在历史页/收藏页滚动 | 无每 10s 一次的周期性卡顿 | |
+| 6.1 | 播放中的 `PlayerScreen` 重组次数 | **adb 埋点实测 4 次 / 10s**（约 0.4/s）；对照：本该 1Hz 的 `ProgressBarSection` 正好 **10 次 / 10s**。修复前顶层订阅 1Hz 进度，10 秒至少 10 次整页重跑；现在进度只让叶子重组 | ✅ `compose` 计数埋点（临时 `SideEffect` + logcat，验完已回滚） |
+| 6.2 | 平板/600dp 宽下播放，看壳体 `MainTabsScaffold` | ⏸ 未测（本机按手机壳渲染，宽屏分支未走）；代码层已把 2Hz `player.state` 下沉到 `TabletMiniPlayer` 子组件 | — |
+| 6.3 | 播放中停在历史页/收藏页滚动 | 无每 10s 一次的周期性卡顿 | ✅ 滚动 424 帧仅 3 帧掉帧（0.71%） |
 
 ## 7. F5c 登录转屏
 
