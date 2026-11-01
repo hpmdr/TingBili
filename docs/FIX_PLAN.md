@@ -323,6 +323,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 文档规则回写 | `AGENTS.md` / `docs/CONVENTIONS.md` 写入：高频状态只在叶子订阅、提交前门禁三件套与 lint 必须 0、实体必须建索引、破坏性升级策略 | 门禁绿 |
 | `.gitignore` 补漏 | 加 `.kotlin/`、`*.hprof`、`.mimocode/` | `git status` 干净 |
 | Robolectric 一致性（I-05） | `feature:player` 补 `src/test/resources/robolectric.properties`（`sdk=36`），7 个 Robolectric 模块配置齐平 | 全量测试绿 |
+| 路由覆盖守卫（I-04） ✅ | 新增 `RouteCoverageTest`：① 把 `NavigationTest` 没覆盖的 8 条路由（MainTabs/Home/Appearance/Player/UpSpace/VideoDetail/FavoriteFolder/BvFavorite）放进一个真实 Nav 图逐条 navigate 断言；② 元测试扫描 `Routes.kt` 的 `@Serializable` 路由，要求在测试源码里都能找到——「改路由必须同步改测试」从口头约定变成门禁 | 单测 358 → **360**，全绿 |
 | 零测试模块补测（I-03） 🔄 | `feature:space` 新增 `SpaceViewModelTest`（6 例）：头部信息成功/降级/失败三态、mid 缺失快速失败、排序切换、搜索词 trim。该模块此前 0 测试 | 单测总数 352 → **358**，全绿；`feature:detail` 需要搭 PlayerManager+Repo fake（约 100 行脚手架），留待下一轮 |
 
 ### 6.4 F4 部分结果（2026-11-01）
