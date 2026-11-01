@@ -26,6 +26,19 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 
 `perfDebug` 存在的意义是「不碰发版签名也能测 R8 路径」，CI 只跑冒烟（`lintDebug` 之外的一步），**不要用它跑功能验证**。
 
+**本机可能在忙别的（游戏 / 会议 / 渲染），构建要限流**：
+
+```bash
+# 限并发（覆盖 gradle.properties 的 parallel=true），编译线程数降到 2
+./gradlew assembleDebug --max-workers=2 --console=plain
+# 起完构建把 JVM 降到 BelowNormal，别跟游戏抢 CPU
+Get-Process java -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = 'BelowNormal' }
+```
+
+- 日常用 **daemon**（保留 JVM），不要为了「干净」反复 `--no-daemon`：每次 fork 一个 JVM 的 CPU 抖动比增量构建更大。
+- 攒着改一起验证，**不要一步一构建**；纯文档/单模块改动只跑目标任务，别动全量。
+- 跑之前说一句「要构建，约 N 秒」，跑完再说结果——用户在游戏时尤其如此。
+
 ## 地图
 
 - 模块清单以 `settings.gradle.kts` 为准（`app` + `core:*` + `data:bilibili` + `feature:*`）。
