@@ -35,7 +35,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
-    implementation("androidx.media3:media3-datasource:${libs.versions.media3.get()}")
+    implementation(libs.media3.datasource)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")

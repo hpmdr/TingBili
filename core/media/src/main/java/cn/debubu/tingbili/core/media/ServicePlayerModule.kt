@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.core.media
 
 import android.content.Context
+import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -62,7 +63,7 @@ object ServicePlayerModule {
                 if (bvid == null || cid == null) {
                     throw java.io.IOException("${AudioUrlResolver.RESOLVE_FAILED_MARK}：缺少 bvid/cid")
                 }
-                spec.withUri(android.net.Uri.parse(audioUrls.resolveBlocking(bvid, cid)))
+                spec.withUri(audioUrls.resolveBlocking(bvid, cid).toUri())
             } else {
                 spec
             }

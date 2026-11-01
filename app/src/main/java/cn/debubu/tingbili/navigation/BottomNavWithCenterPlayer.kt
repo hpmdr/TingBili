@@ -107,8 +107,8 @@ fun MainBottomNav(
 fun MiniPlayerOverlay(
     navController: NavController,
     visibility: MiniPlayerVisibility,
-    viewModel: MainViewModel = hiltViewModel(),
     modifier: Modifier = Modifier,
+    viewModel: MainViewModel = hiltViewModel(),
 ) {
     ImageFormatScope(viewModel) {
         MiniPlayerSlot(

@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 25
@@ -59,8 +59,20 @@ jobs:
       # feature 模块的测试编译错误就这样长期溜过。
       - name: Compile all unit-test sources (fail fast on stale tests)
         run: ./gradlew compileDebugUnitTestKotlin --no-daemon --stacktrace
-      - name: Unit tests (single module, avoid OOM)
-        run: ./gradlew :core:data:testDebugUnitTest :core:media:testDebugUnitTest --no-daemon --stacktrace || ./gradlew testDebugUnitTest --no-daemon --stacktrace
+      # 全量执行：原来只跑 core:data/core:media，再用 "A B || 全量" 兜底——兜底永不触发，
+      # app/data:bilibili/core:ui/feature:* 共 31 个测试文件（含 NavigationTest 17 例）从不执行。
+      # --continue 保证一个模块失败也把其余模块跑完，失败报告才完整。
+      - name: Unit tests (all modules)
+        run: ./gradlew testDebugUnitTest --no-daemon --continue --stacktrace
+      # lint 之前完全没进 CI：assembleDebug 不触发 lint，只有打 tag 的 assembleRelease 隐式跑 lintVitalRelease。
+      - name: Lint
+        run: ./gradlew lintDebug --no-daemon --stacktrace
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/**"
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4

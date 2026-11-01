@@ -1,6 +1,5 @@
 package cn.debubu.tingbili.feature.mine
 
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -157,14 +156,10 @@ private fun ThemeColorSettings(
 ) {
     val context = LocalContext.current
     val darkTheme = LocalDarkTheme.current
-    val themePrimary = MaterialTheme.colorScheme.primary
-    val systemColor = remember(context, darkTheme, themePrimary) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val scheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            scheme.primary
-        } else {
-            themePrimary
-        }
+    // minSdk 31 起动态取色恒可用，无需再判断 SDK_INT（lint ObsoleteSdkInt）
+    val systemColor = remember(context, darkTheme) {
+        val scheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        scheme.primary
     }
     var showCustomSheet by remember { mutableStateOf(false) }
 

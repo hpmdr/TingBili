@@ -493,9 +493,11 @@ private fun themeModeLabel(mode: cn.debubu.tingbili.core.data.model.ThemeMode): 
 
 // ── 关于对话框 ────────────────────────────────────────
 
-@Composable
+// 纯格式化函数，不该标 @Composable（会触发 lint NonObservableLocale，也让 read 出现在组合期）
 private fun formatCacheGb(bytes: Long): String = when {
     bytes <= 0L -> "0 MB"
-    bytes >= 1024L * 1024L * 1024L -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-    else -> String.format("%.0f MB", bytes / (1024.0 * 1024.0))
+    bytes >= 1024L * 1024L * 1024L -> String.format(
+        java.util.Locale.ROOT, "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0)
+    )
+    else -> String.format(java.util.Locale.ROOT, "%.0f MB", bytes / (1024.0 * 1024.0))
 }

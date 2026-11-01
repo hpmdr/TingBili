@@ -81,7 +81,7 @@ fun FavoriteTrackRow(
             }
         } else {
             Text(
-                text = String.format(Locale.getDefault(), "%02d", index + 1),
+                text = String.format(Locale.ROOT, "%02d", index + 1),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal,
                 color = if (focused) MaterialTheme.colorScheme.onPrimaryContainer

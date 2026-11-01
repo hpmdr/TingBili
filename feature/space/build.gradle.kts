@@ -42,7 +42,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.material.icons.extended)
     implementation(libs.paging.compose)
-    implementation("androidx.paging:paging-runtime:${libs.versions.paging.get()}")
+    implementation(libs.paging.runtime)
 }
 
 kotlin {

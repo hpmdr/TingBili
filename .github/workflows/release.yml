@@ -16,7 +16,7 @@ permissions:
 jobs:
   build-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,6 +83,14 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon --stacktrace
+      # R8 混淆映射：不归档就没法还原用户崩溃栈。76MB 左右，只在发版时存。
+      - name: Upload R8 mapping
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping-${{ github.ref_name }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          retention-days: 90
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

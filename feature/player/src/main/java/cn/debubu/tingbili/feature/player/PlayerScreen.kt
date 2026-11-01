@@ -1101,7 +1101,7 @@ private fun formatMs(ms: Long): String {
 /** 睡眠定时辅助栏文案：倒计时 mm:ss / 播完本章 / 定时 */
 private fun sleepLabel(remainSec: Int?, endOfChapter: Boolean): String = when {
     endOfChapter -> "本章止"
-    remainSec != null -> String.format("%d:%02d", remainSec / 60, remainSec % 60)
+    remainSec != null -> String.format(java.util.Locale.ROOT, "%d:%02d", remainSec / 60, remainSec % 60)
     else -> "定时"
 }
 
@@ -1196,11 +1196,11 @@ private fun MiniLyricCard(
     currentIndex: Int,
     status: SubtitleLoadState,
     onCardClick: () -> Unit,
+    modifier: Modifier = Modifier,
     label: String? = null,
     trackCount: Int = 0,
     onSwitchTrack: () -> Unit = {},
     fontScale: Float = 1f,
-    modifier: Modifier = Modifier,
 ) {
     // 窗口固定"上 2 下 6"：锚点取窗口首行（= currentIndex-2）。
     // 之前锚当前行本身，内容超出视口时会被滚动尾部钳制，字体放大后上方上下文只剩半行。
@@ -1958,7 +1958,7 @@ private fun ChapterRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = String.format(java.util.Locale.getDefault(), "%02d", index + 1),
+            text = String.format(java.util.Locale.ROOT, "%02d", index + 1),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer

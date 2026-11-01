@@ -46,7 +46,7 @@ dependencies {
     implementation(libs.material.icons.extended)
     implementation(libs.navigation.compose)
     implementation(libs.paging.compose)
-    implementation("androidx.paging:paging-runtime:${libs.versions.paging.get()}")
+    implementation(libs.paging.runtime)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.hilt.android)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- media3 的 @UnstableApi 是本项目刻意接受的租约：音频 offload / 解码器选择等能力只存在于
+         unstable API。官方支持的做法是项目级 opt-in（见 lint 提示），比在 7 个文件里逐个加
+         @OptIn 更好维护；真正新增的非 media3 实验 API 仍会被拦下。 -->
+    <issue id="UnsafeOptInUsageError">
+        <option name="opt-in" value="androidx.media3.common.util.UnstableApi"/>
+    </issue>
+
+    <!-- 依赖升版本走独立流程（REVIEW_REPORT §F/J 已单列），不进日常 lint 噪声 -->
+    <issue id="NewerVersionAvailable" severity="ignore"/>
+</lint>

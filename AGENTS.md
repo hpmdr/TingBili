@@ -38,6 +38,6 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 - 单人开发：直接提交 `master`，不走分支、不开 PR，一次改动一个提交。提交信息 `feat/fix/docs/test/refactor/chore(范围): 简述`。提交前门禁绿 + 相关单测绿 + `git status` 干净（`gradlew` 可执行位 100755 别提交成 100644，否则 Linux CI 跑不了）。
 - `feature` 之间禁止互相依赖，复用下沉到 `core`。UI 用 `collectAsStateWithLifecycle()` 收 `StateFlow`；错误用 `Result.Error` / `UiState` 表达，不要把堆栈抛到界面。
 - 导航：路由只定义在 `Routes.kt`，`AppRootNavHost` 是唯一入口；改路由必须同步改 `NavigationTest`。
-- Room 升级必须手写 `Migration`，禁止破坏性迁移。改动最小化，收尾前跑通构建和相关测试。
+- Room：**单人测试期允许破坏性升级**（抬 DB 版本 + `fallbackToDestructiveMigration`，升级即清库；没有其他用户），对外发版前再补手写 `Migration`；新增/修改实体必须补索引。改动最小化，收尾前跑通构建和相关测试。
 - 需求不确定时多问用户：先给建议方案和利弊，等用户拍板再动手，不要自行定需求、定范围、定交互。
 - 真机验证 UI 一律用 `adb shell uiautomator dump` 拿控件树（class/text/clickable/bounds）：定位元素按 bounds 中心点操作；**了解屏幕内容（当前页面、加载/空态/转圈、文案）一律读控件树**，`pull` 到本地再解析（端上 grep 中文不可靠）。`screencap` 截图又慢又没时效性，**仅在用户明确要看视觉效果时**提供，**禁止**用截图做常规状态验证、猜布局、猜坐标点击。（2026-10-14 教训：多次用截图验状态又慢又卡，已纠正）

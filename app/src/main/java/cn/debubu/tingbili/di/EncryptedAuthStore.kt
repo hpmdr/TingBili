@@ -2,6 +2,7 @@ package cn.debubu.tingbili.di
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
@@ -51,22 +52,22 @@ class EncryptedAuthStore @Inject constructor(
     }
 
     override fun save(session: BiliSession?) {
-        val e = prefs.edit()
-        if (session == null) {
-            e.clear()
-        } else {
-            e.putString(KEY_SESSDATA, session.sessdata)
-            e.putString(KEY_JCT, session.biliJct)
-            e.putLong(KEY_UID, session.uid)
-            e.putString(KEY_UNAME, session.userName)
-            e.putString(KEY_FACE, session.face)
-            e.putString(KEY_REFRESH, session.refreshToken)
-            e.putString(
-                KEY_EXTRAS,
-                Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), session.extras),
-            )
+        prefs.edit {
+            if (session == null) {
+                clear()
+            } else {
+                putString(KEY_SESSDATA, session.sessdata)
+                putString(KEY_JCT, session.biliJct)
+                putLong(KEY_UID, session.uid)
+                putString(KEY_UNAME, session.userName)
+                putString(KEY_FACE, session.face)
+                putString(KEY_REFRESH, session.refreshToken)
+                putString(
+                    KEY_EXTRAS,
+                    Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), session.extras),
+                )
+            }
         }
-        e.apply()
     }
 
     companion object {

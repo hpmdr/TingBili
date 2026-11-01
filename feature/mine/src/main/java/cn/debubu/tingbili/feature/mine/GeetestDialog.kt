@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.feature.mine
 
+import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -33,6 +34,8 @@ import org.json.JSONObject
  * 只把 flutter 桥换成 Android addJavascriptInterface，其余一字不改。
  * 成功回传 validate/seccode/challenge；关闭/失败走 onCancel。
  */
+// 极验滑块页本身由 JS 驱动，必须开 JS；加固方案见 docs/FIX_PLAN.md F3a（域名白名单 + bridge token + 混合内容降级）
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun GeetestDialog(
     gt: String,

@@ -5,9 +5,9 @@
 
 ## 1. 工具链
 
-- `gradle/libs.versions.toml`：Kotlin 2.4.20、AGP 9.4.0、Compose BOM 2026.08.00、Navigation 2.9.8、Hilt 2.60.1、Room 2.8.4、Media3 1.10.1、Paging 3.3.6。升版本只改这里。
-- `gradle.properties`：`Xmx2g`、`parallel=false`、`configureondemand=true`。Agent 单次构建加 `--no-daemon`，避免僵尸 Daemon。
-- `compileSdk 36 / minSdk 31 / targetSdk 36`，`jvmTarget 17`。改这些是正式 PR，不是修构建的手段。
+- 版本以 `gradle/libs.versions.toml` 为唯一事实源（本文件不再抄版本号，避免两处跑偏）。升版本只改 toml。
+- `gradle.properties`：`Xmx2g`、`parallel=true`、`caching=true`、`daemon.idletimeout=3h`、`configureondemand=false`（为将来开配置缓存留路）。Agent 单次构建加 `--no-daemon`。
+- `compileSdk 37 / minSdk 31 / targetSdk 37`，`jvmTarget 17`（构建用 JDK 25）。改这些是正式 PR，不是修构建的手段。
 
 ## 2. 模块
 
@@ -22,13 +22,13 @@
 ## 4. 导航（B 方案）
 
 Tab（`MainTabsRoute`：首页/听单/历史/设置，带底栏）与全屏页（搜索/播放/详情，无底栏）分离。
-路由唯一在 `Routes.kt`（全 `@Serializable`）；宿主唯一 `AppRootNavHost`；`isMainTabRoute()` 控制底栏；手机 `BottomNavWithCenterPlayer`、平板 `MainTabsScaffold`（NavigationSuite）。旧 `AppNavHost(innerPadding)` 已废弃。
+路由唯一在 `Routes.kt`（全 `@Serializable`）；宿主唯一 `AppRootNavHost`；`isMainTabDestination()` 控制底栏（`isMainTabRoute`/`mainTabRouteOf` 已废弃）；手机 `BottomNavWithCenterPlayer`、平板 `MainTabsScaffold`（NavigationSuite）。旧 `AppNavHost(innerPadding)` 已废弃。
 
 ## 5. 播放 / 数据
 
-- 唯一真相源 `PlayerManager.state: StateFlow<PlaybackState>`，UI 不碰 ExoPlayer。经 `PlaybackConnection（MediaController → 播放 Service）` 间接驱动，ExoPlayer 归 Service 所有。历史键 `bvid`（一个 BV 一条，`cid` 只记最近播放的分 P）、约 10s 节流；冷启动只恢复、不自动播。
-- `Track` 去重键 `bvid+cid`；`BV → List<Track>` 走 `ViewDto.toTracks()`。Room `exportSchema=false`，升级手写 `Migration`。DataStore（`PreferencesRepository`）新增键要读写成对、给默认、做钳制。字幕只走 `SubtitleParser + LyricState`。
-- 网络出口统一 `BiliRepository`，`feature` 不直调 `BiliApi`。MVP 无登录。不打 buvid / wbi 日志。
+- 唯一真相源 `PlayerManager.state: StateFlow<PlaybackState>`，UI 不碰 ExoPlayer。经 `PlaybackConnection（MediaController → 播放 Service）` 间接驱动，ExoPlayer 归 Service 所有。历史一条 = 一个播单（主键 `sourceType + sourceId`，BV 播单与收藏夹播单各一条）、约 10s 节流；冷启动只恢复、不自动播。
+- `Track` 去重键 `bvid+cid`；`BV → List<Track>` 走 `ViewDto.toTracks()`。Room `exportSchema=false`；**单人测试期允许破坏性升级**（`fallbackToDestructiveMigration`，DB 版本升即清库），对外发版前再补手写 `Migration`。改动实体必须同步补索引（查询/排序用到的列）。DataStore（`PreferencesRepository`）新增键要读写成对、给默认、做钳制。字幕只走 `SubtitleParser + LyricState`。
+- 网络出口统一 `BiliRepository`，`feature` 不直调 `BiliApi`（现存违例见 `docs/REVIEW_REPORT.md` D-01，F5 修）。已实现登录（扫码/短信/密码/极验/Cookie）。不打 buvid / wbi 日志。
 
 ## 6. 界面 / 测试 / Git
 

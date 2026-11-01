@@ -1,6 +1,5 @@
 package cn.debubu.tingbili.core.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +34,8 @@ fun TingBiliTheme(
     // 十几次 blend/contentColor 全是纯计算：HSV 拖动每帧都重算，remember 按输入缓存
     val scheme = remember(themeMode, darkTheme, customThemeColorArgb, darkAmoled) {
         when {
-            themeMode == ThemeMode.SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            // minSdk 31 起动态取色恒可用，SDK_INT 判断是死代码（lint ObsoleteSdkInt）
+            themeMode == ThemeMode.SYSTEM -> {
                 val dynamic = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
                 if (darkTheme && darkAmoled) applyAmoledBlack(dynamic) else dynamic
             }

@@ -24,7 +24,7 @@ android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.
 - 另一台电脑：装 JDK 25 + SDK（`platforms;android-37.0`、`build-tools;36.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.8.0 由 wrapper 自动下载）。
 - debug 签名已统一为仓库内 `app/debug.keystore`，多台电脑编出的测试包签名一致，同一部测试机换电脑装包无需卸载重装。release 签名严禁入库。
 
-国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`），`gradle.properties` 限制 `Xmx2g` + `daemon.idletimeout 30s` + `stop`，避免 IDE 侧 NodeService 阻塞。
+国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`）；`gradle.properties` 限 `Xmx2g`、开 `parallel` 与构建缓存，daemon 保留 3 小时（CI 用 `--no-daemon`）。
 
 ## 模块
 
@@ -39,6 +39,7 @@ feature:home (Paging3 搜索列表 + 自适应网格；推荐 = 默认词自动�
 feature:favorites (我的最爱/手动收藏夹/BV 收藏缓存 + B站收藏只读页)
 feature:history (history flow + resume)
 feature:player (LyricState + SubtitleParser + full-screen)
+feature:detail (视频详情：分P/简介/相关推荐 + 一键成辑)
 feature:mine (我的 + B站历史 + 设置/登录)
 feature:space (UP 主主页：头像/粉丝/签名 + 投稿列表，pubdate/click/stow 三种排序)
 ```
@@ -47,4 +48,4 @@ feature:space (UP 主主页：头像/粉丝/签名 + 投稿列表，pubdate/clic
 
 - 团队约定细节看 `docs/CONVENTIONS.md`。
 - 导航路由只定义在 `app/.../navigation/Routes.kt`，改路由必须同步改 `NavigationTest`。
-- Room 升级必须手写 `Migration`，禁止破坏性迁移。
+- **单人测试期允许破坏性升级**：改实体直接抬 DB 版本 + `fallbackToDestructiveMigration`，升级即清库（没有其他用户）；对外发版前再补手写 `Migration`。新增/修改实体必须补索引。

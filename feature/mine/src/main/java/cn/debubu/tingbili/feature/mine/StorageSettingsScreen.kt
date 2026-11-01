@@ -321,5 +321,5 @@ private fun CacheClearRow(
 internal fun formatCacheSize(bytes: Long): String = when {
     bytes <= 0L -> "0MB"
     bytes < 1024L * 1024L -> "${bytes / 1024L}KB"
-    else -> String.format("%.1fMB", bytes / (1024.0 * 1024.0))
+    else -> String.format(java.util.Locale.ROOT, "%.1fMB", bytes / (1024.0 * 1024.0))
 }

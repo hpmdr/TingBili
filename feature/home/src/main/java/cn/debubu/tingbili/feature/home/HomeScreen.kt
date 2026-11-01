@@ -354,8 +354,8 @@ private fun HomeSearchEntry(
     onSubmit: () -> Unit,
     onClearInput: () -> Unit,
     focusRequester: FocusRequester,
-    onTitleDoubleClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTitleDoubleClick: () -> Unit = {}
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
