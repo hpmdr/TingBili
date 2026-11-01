@@ -269,7 +269,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
 | F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
-| F5 | `8805950` / `6635566` / `see git log` | 🔄 部分完成 | F5b/F5c/F5e/F5f 已做（§6.6）；F5a 仓储层（待用户点头）、F5d 颜色 token 未做 |
+| F5 | `8805950` / `6635566` / `ecde9e8` / `f0c95d4` | 🔄 部分完成 | F5a/F5b/F5c/F5e/F5f 已做（§6.6/§6.7）；仅 F5d 颜色 token 未做（需真机复核） |
 | F6 | `215b457` / `see git log` | 🔄 部分完成 | 文档规则回写、`.gitignore`、Robolectric 配置、`feature:space` 6 个新用例（§6.5）；`feature:detail` 用例与 `NavigationTest` 路由集断言未做 |
 
 ### 6.1 F1 实测结果（2026-11-01）
@@ -306,6 +306,18 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3c 触控目标（H-02 / H-01） ✅ | 播放页进度条触控区 22dp → **48dp**（线仍画在顶部 5dp，视觉不变，多出高度由下方歌词 weight 吸收）；Me 页明暗切换 34dp → **48dp** 点击区（视觉圆仍 34dp）+ 补 `contentDescription`；mini 播放键 40 → 48dp；首页搜索历史删除键 28 → 48dp | 构建/lint/单测绿；**触控与视觉需真机复核** |
 | F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
 | F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
+
+### 6.7 F5a 仓储层（2026-11-01，D-01 / P1）
+
+| 改动 | 内容 | 验收 |
+|---|---|---|
+| 新增 `HistoryRepository` | `core:data` 新增接口 + `DefaultHistoryRepository`（7 个方法：observeAll/observeByBvid/observeByBvids/observeTotalListenMs/observeTodayCount/clearAll/deleteSource）+ Hilt `@Binds` | 构建/lint/366 单测绿 |
+| 5 个 feature 改依赖仓储 | `HistoryViewModel`、`DetailViewModel`、`BvFavoriteViewModel`、`FavoriteFolderViewModel`、`MeViewModel` 不再注入 `HistoryDao` | `feature/*/src/main` 中 `HistoryDao|FavoriteDao|HomeSnapshotDao|BiliApi` 命中为 **0**（仅剩一句注释） |
+| 新增 `HomeSnapshotRepository` | `HomeViewModel` 改依赖仓储（get/observe/save/clear） | 同上 |
+| B 站历史走统一出口 | `BiliHistoryViewModel` 不再直连 `BiliApi`；`BiliRepository.getBiliHistory` 由「返回映射后的列表」改为「返回 DTO（带游标）」——原方法此前无人调用，且列表版丢掉了翻页游标，属顺手修正的死代码 | 加载/上拉分页逻辑不变，改用 `Result` 分支 |
+| 测试适配 | 两个 fake 改为「同时实现 DAO 与仓储接口」（`FakeHistoryDao`、`FakeHomeSnapshotDao`），VM 用仓储、`PlayerManager` 仍用 DAO，共享同一份内存状态，测试断言零改动 | 全量 366 用例绿 |
+
+> 副作用发现：`BiliRepository.getBiliHistory` 原本就存在但无人调用，且返回类型丢掉了游标——如果不是这次收口，它会一直是一段「看起来能用、其实翻不了页」的死代码。
 
 ### 6.6 F5 部分结果（2026-11-01）
 

@@ -856,7 +856,7 @@
 | **F-07** WebView 混合内容 + 桥无校验 | 违规 | ✅ 已修 | `9cee8c6`；**真机登录待验** |
 | **H-02** 触控目标 <48dp（4 处） | 违规 | ✅ 已修 | `63a04e6`；真机触控待验 |
 | **C-13** 稳定性注解/编译器报告缺失 | 部分合规 | ⏸ 未做（有理由） | strong skipping 已兜底；编译器报告在 AGP9 内置 Kotlin 下未产出，盲加注解风险大于收益（详见 FIX_PLAN §6.4） |
-| **D-01** feature VM 直连 DAO/`BiliApi` | 违规 | ⏸ 未做（等拍板） | 需改 7 个 VM + 10 多个测试，属结构性重构，F5a |
+| **D-01** feature VM 直连 DAO/`BiliApi` | 违规 | ✅ 已修 | `ecde9e8` + `f0c95d4`；新增 `HistoryRepository`/`HomeSnapshotRepository`，5 个 VM 改依赖仓储，`BiliHistoryViewModel` 改走 `BiliRepository`；feature 主源码 DAO/Api 直连命中 0 |
 | **E-07** 历史/收藏索引缺失（P2 但影响 P1 现象） | 违规 | ✅ 已修 | `4d48250`；真机 SQL 耗时待测 |
 
 ### 9.3 仍然开放的事项（及原因）
