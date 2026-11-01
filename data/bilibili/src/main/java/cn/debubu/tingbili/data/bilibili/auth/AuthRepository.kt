@@ -3,8 +3,13 @@ package cn.debubu.tingbili.data.bilibili.auth
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,8 +61,35 @@ open class AuthRepository @Inject constructor(
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    private val _sessionFlow = MutableStateFlow(store.load())
+    private val _sessionFlow = MutableStateFlow<BiliSession?>(null)
     val sessionFlow: StateFlow<BiliSession?> = _sessionFlow.asStateFlow()
+
+    // F7：构造期不再同步读加密存储。首次建 MasterKey 实测 ≈786ms 主线程磁盘读（见 FIX_PLAN §7.1），
+    // 改为后台加载：UI 收集 sessionFlow 自动刷新；网络拦截器用 awaitSession() 有界等待，避免首批请求丢 Cookie。
+    private val sessionTouched = AtomicBoolean(false)
+    private val loaded = CompletableDeferred<BiliSession?>()
+    private val loadScope = CoroutineScope(SupervisorJob() + io)
+
+    init {
+        loadScope.launch {
+            val restored = runCatching { store.load() }.getOrNull()
+            // 加载期间可能已经登录/登出（save 的结果更权威），不要用启动读盘结果覆盖
+            if (!sessionTouched.get()) _sessionFlow.value = restored
+            loaded.complete(restored)
+        }
+    }
+
+    /** 已读到内存的会话（不阻塞）；未加载完返回 null */
+    fun sessionNow(): BiliSession? = _sessionFlow.value
+
+    /**
+     * 等待启动期会话加载完成，然后返回**当前**会话（供后台线程使用）。
+     * 注意返回 _sessionFlow 的现值而不是加载结果：加载期间可能已经登录/登出，后者更权威。
+     */
+    suspend fun awaitSession(): BiliSession? {
+        if (!loaded.isCompleted) loaded.await()
+        return _sessionFlow.value
+    }
 
     // ── 扫码 ─────────────────────────────────────────────
 
@@ -400,8 +432,10 @@ open class AuthRepository @Inject constructor(
     }
 
     fun save(session: BiliSession?) {
+        sessionTouched.set(true)
         store.save(session)
         _sessionFlow.value = session
+        if (!loaded.isCompleted) loaded.complete(session)
     }
 
     // ── 内部 ─────────────────────────────────────────────

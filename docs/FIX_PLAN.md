@@ -382,3 +382,28 @@ debug 包 StrictMode 抓到应用自身的一处主线程磁盘读：
 - **影响**：冷启动主线程阻塞约 0.8s（首帧与输入响应延迟），属 D-08 同族但路径不同（D-08 修的是 DataStore，这条是加密存储）。
 - **修复方向**：与 DataStore 的 prime 同思路——Application 在 IO 线程预取，仓储只读内存镜像；读取侧保留有界兜底。**但登录态读取改动敏感，改完必须验「冷启动仍保持登录」（本次已登录，可直接验）**。
 - **为何这次没顺手改**：会触碰登录态的初始化顺序，属于需要「改 + 上机验证」成对完成的改动；等你确认后我再做（约 30 分钟含验证）。
+
+### 7.2 F7 修复结果（2026-11-01，同日验证）
+
+| 改动 | 内容 |
+|---|---|
+| `AuthRepository` 构造期不再读盘 | `_sessionFlow` 初值改为 `null`，会话在 `loadScope`（注入的 IO 调度器）里异步加载；加 `sessionTouched` 标志防止「加载结果覆盖登录/登出」的竞态；`awaitSession()` 返回**加载完成后的现值**而不是加载结果 |
+| `EncryptedAuthStore` 加内存镜像 | `prime()` 供后台预热；`load()` 首次读盘后进内存；`save()` 同步更新镜像，登出后不会读到旧会话 |
+| `CookieHeaderProvider` 有界等待 | 冷启动首帧会话还在加载时，在 OkHttp 线程（非主线程）最多等 1.5s；已加载则零开销 |
+
+**验证**：
+
+- 826 个单测（`data:bilibili` 85 个）全绿；改的过程中真抓到一个测试回归——`logout drops session part` 因 `awaitSession()` 返回了启动期加载结果而失败，改成返回现值后通过。
+- 真机 `logcat | grep StrictMode`：`EncryptedAuthStore.kt:29 → MasterKey.getOrCreate → Keystore` 的 **786ms DiskReadViolation 消失**。
+- 同一日志暴露下一处（F8，已记录未修）：`AudioCacheModule.kt:37` 的 `context.cacheDir` → `mkdirs/exists` 主线程 64ms。
+
+### 7.3 F8（新记录，未修）：音频缓存目录创建在主线程 64ms
+
+```
+~duration=64 ms: DiskReadViolation
+  at java.io.File.exists / File.mkdirs
+  at android.app.ContextImpl.getCacheDir
+  at cn.debubu.tingbili.core.media.AudioCacheModule.provideAudioCache(AudioCacheModule.kt:37)
+```
+
+比 F7 轻一个数量级（64ms ≈ 4 帧），同属「DI 构造期碰磁盘」。修法有两种：Application 在 IO 线程预建目录（治标，能干掉 mkdir 部分），或把 `SimpleCache` 改成懒加载/后台建（治本，但要改播放服务起播时序）。**暂不动**：当前播放链路刚在真机验过，为 64ms 改动起播时序不划算；记在这里等下次动播放初始化时一起处理。

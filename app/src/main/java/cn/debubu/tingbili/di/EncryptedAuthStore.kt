@@ -32,7 +32,24 @@ class EncryptedAuthStore @Inject constructor(
         )
     }
 
-    override fun load(): BiliSession? = try {
+    // 内存镜像（F7）：构造期同步读盘会阻塞主线程，实测首次建 MasterKey ≈786ms。
+    // 改成「随便谁先读一次 → 之后全走内存」，并暴露 prime() 供 Application 在 IO 线程预热。
+    @Volatile private var cached: BiliSession? = null
+    @Volatile private var loaded = false
+
+    /** IO 线程预热：把建 MasterKey + 解密读盘从主线程挪走（F7，见 docs/FIX_PLAN.md §7.1） */
+    fun prime() {
+        if (loaded) return
+        cached = readSession()
+        loaded = true
+    }
+
+    override fun load(): BiliSession? {
+        if (loaded) return cached
+        return readSession().also { cached = it; loaded = true }
+    }
+
+    private fun readSession(): BiliSession? = try {
         val sessdata = prefs.getString(KEY_SESSDATA, null).orEmpty()
         val uid = prefs.getLong(KEY_UID, 0L)
         if (sessdata.isBlank() || uid <= 0L) return null
@@ -52,6 +69,8 @@ class EncryptedAuthStore @Inject constructor(
     }
 
     override fun save(session: BiliSession?) {
+        cached = session
+        loaded = true
         prefs.edit {
             if (session == null) {
                 clear()
