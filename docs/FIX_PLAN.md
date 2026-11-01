@@ -266,11 +266,11 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 |---|---|---|---|
 | F0 | `bf2918f` | ✅ | 基线：debug APK 85.0 MB / perfDebug 6.53 MB / 活跃模块 352 个用例 / lint 105 条（80 Error，其中 78 条 media3 `@UnstableApi`） |
 | F1 | `2a714cc` | ✅ | 见 §6.1 |
-| F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
-| F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
-| F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
-| F5 | `8805950` / `6635566` / `ecde9e8` / `f0c95d4` | 🔄 部分完成 | F5a/F5b/F5c/F5e/F5f 已做（§6.6/§6.7）；仅 F5d 颜色 token 未做（需真机复核） |
-| F6 | `215b457` / `see git log` | 🔄 部分完成 | 文档规则回写、`.gitignore`、Robolectric 配置、`feature:space` 6 个新用例（§6.5）；`feature:detail` 用例与 `NavigationTest` 路由集断言未做 |
+| F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；**真机已验证**（§7：起播/后台续播/通知/force-stop 重连/落地 tab） |
+| F3 | `9cee8c6` / `63a04e6` | 🔄 主要完成 | F3a/F3b/F3c 完成并真机验（§6.3/§7）；F3d **已决策保留竖屏**；F3e 沉浸式收敛记为已知债（需逐页真机看） |
+| F4 | `4d48250` / `e36502a` | 🔄 主要完成 | F4a 重组下沉 + F4b 索引/订阅完成（§6.4）并真机验（滚动 0.71% 掉帧）；F4c 仅缺「编译器报告驱动的稳定性注解」（工具链不可得，已记录） |
+| F5 | `8805950` / `6635566` / `ecde9e8` / `f0c95d4` / `ae522ea` | ✅ 完成 | F5a/F5b/F5c/F5e/F5f 完成（§6.6/§6.7）；F5d 颜色核查完成（§7.6：79 处→8 处真修，其余为刻意固定） |
+| F6 | `215b457` / `8a80952` / `535bee5` / `d7a0382` / `e2a421c` | ✅ 完成 | 文档规则回写、`.gitignore`、Robolectric 配置、space/detail/bili-ui 三模块补测、路由覆盖 21/21 + 元测试守卫（§6.5） |
 
 ### 6.1 F1 实测结果（2026-11-01）
 
@@ -304,7 +304,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3a 极验 WebView（F-07 / P1） | `MIXED_CONTENT_ALWAYS_ALLOW` → `COMPATIBILITY_MODE`；`allowFileAccess/allowContentAccess=false`；`shouldOverrideUrlLoading` 只放行 `*.bilibili.com`；JS 桥改为一次性消费（成功后丢弃后续消息） | 构建绿、lint 0；**真机登录待验**（极验流程对 UA/混合内容敏感，必须实测扫码/短信登录一次） |
 | F3b 备份策略（F-06 / P2） | `allowBackup=false` + `fullBackupContent=false` + 新增 `res/xml/data_extraction_rules.xml`（云备份与 D2D 全量排除） | lint 的 `DataExtractionRules` 告警消除；`adb shell bmgr` 无可备份数据 |
 | F3c 触控目标（H-02 / H-01） ✅ | 播放页进度条触控区 22dp → **48dp**（线仍画在顶部 5dp，视觉不变，多出高度由下方歌词 weight 吸收）；Me 页明暗切换 34dp → **48dp** 点击区（视觉圆仍 34dp）+ 补 `contentDescription`；mini 播放键 40 → 48dp；首页搜索历史删除键 28 → 48dp | 构建/lint/单测绿；**触控与视觉需真机复核** |
-| F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
+| F3d 方向锁（A-02） | **已决策：保留 `portrait`**（2026-11-01，用户授权由我定）：手机优先的音频应用，竖屏是唯一有设计稿的形态；放开旋转要重做横屏布局，回归面不匹配。API 36+ 大屏会忽略该锁 | 已关闭 |
 | F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
 
 ### 6.7 F5a 仓储层（2026-11-01，D-01 / P1）
