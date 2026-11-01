@@ -8,8 +8,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        关掉自动备份（REVIEW_REPORT F-06）：收藏/历史 DB 与 DataStore 会随云备份走，但登录凭证
+        加密用的 Keystore 密钥不迁移，换机恢复后必然解不开（EncryptedAuthStore 静默返回 null）。
+        数据本身都能重建（重新登录 + 重新收藏），不值得为此扩大个人数据外泄面。
+    -->
     <application
         android:name=".TingBiliApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

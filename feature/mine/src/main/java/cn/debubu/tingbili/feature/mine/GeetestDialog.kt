@@ -83,7 +83,12 @@ fun GeetestDialog(
                             settings.loadWithOverviewMode = true
                             settings.useWideViewPort = true
                             settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            // 不再放行全部混合内容（REVIEW_REPORT F-07）：极验页只需 https 资源；
+                            // 万一有兼容性诉求，COMPATIBILITY_MODE 仍按浏览器标准处理，而不是「总是允许」。
+                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                            // 极验页不读本地文件、不加载 content://，关掉缩小攻击面
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
                             webChromeClient = object : android.webkit.WebChromeClient() {
                                 override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
                                     Log.d(TAG, "console [${msg.messageLevel()}] ${msg.message()} @${msg.lineNumber()}")
@@ -98,12 +103,29 @@ fun GeetestDialog(
                                 ) {
                                     Log.d(TAG, "page error url=${request.url} code=${error.errorCode}")
                                 }
+
+                                // 导航白名单（REVIEW_REPORT F-07）：只允许站内护照域，其余一律拦下，
+                                // 防止页面被诱导跳出仍持有 Android 桥。
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView,
+                                    request: android.webkit.WebResourceRequest,
+                                ): Boolean = !isAllowedGeeUrl(request.url)
                             }
                             android.webkit.CookieManager.getInstance()
                                 .setAcceptThirdPartyCookies(this, false)
+                            // 桥只接受一次有效结果：成功后的后续消息（含被注入内容伪造的 success）直接丢弃。
+                            // 极验页由 loadDataWithBaseURL(passport) 承载、页面自身不跳转，导航另有白名单。
+                            var bridgeConsumed = false
                             addJavascriptInterface(
                                 GeeBridge { raw ->
-                                    mainHandler.post { handleGeeMessage(raw, onSuccess, onCancel) { error = it } }
+                                    if (bridgeConsumed) {
+                                        Log.w(TAG, "bridge ignored after consume")
+                                        return@GeeBridge
+                                    }
+                                    mainHandler.post {
+                                        handleGeeMessage(raw, onSuccess, onCancel) { error = it }
+                                        bridgeConsumed = true
+                                    }
                                 },
                                 "Android",
                             )
@@ -136,6 +158,12 @@ private class GeeBridge(private val onJsMessage: (String) -> Unit) {
 }
 
 private const val TAG = "GeeDialog"
+
+// 极验页与护照域：只允许这些 host 在弹窗内导航（REVIEW_REPORT F-07 的域名白名单）
+private fun isAllowedGeeUrl(uri: android.net.Uri?): Boolean {
+    val host = uri?.host?.lowercase() ?: return false
+    return host == "passport.bilibili.com" || host.endsWith(".bilibili.com")
+}
 
 private fun handleGeeMessage(
     raw: String,
