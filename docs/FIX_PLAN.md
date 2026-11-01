@@ -269,7 +269,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
 | F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
-| F5 | — | ⏳ | |
+| F5 | `see git log` | 🔄 部分完成 | F5c 登录状态保存、F5e 最小高度已做（§6.6）；F5a 仓储层（待用户点头）、F5b Dispatcher 注入、F5d 颜色 token、F5f 依赖坐标收编未做 |
 | F6 | `see git log` | 🔄 部分完成 | 文档规则回写 + `.gitignore` + Robolectric 配置已做（§6.5）；补 3 个零测试模块的用例、`NavigationTest` 路由集断言未做 |
 
 ### 6.1 F1 实测结果（2026-11-01）
@@ -306,6 +306,13 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F3c 触控目标（H-02 / H-01） ✅ | 播放页进度条触控区 22dp → **48dp**（线仍画在顶部 5dp，视觉不变，多出高度由下方歌词 weight 吸收）；Me 页明暗切换 34dp → **48dp** 点击区（视觉圆仍 34dp）+ 补 `contentDescription`；mini 播放键 40 → 48dp；首页搜索历史删除键 28 → 48dp | 构建/lint/单测绿；**触控与视觉需真机复核** |
 | F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
 | F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
+
+### 6.6 F5 部分结果（2026-11-01）
+
+| 子项 | 改法 | 验收 |
+|---|---|---|
+| F5c 登录页状态（C-09 / P2） ✅ | `LoginScreen` 8 处 `remember` → `rememberSaveable`：当前 tab、短信区手机号/区号/验证码、密码区用户名/密码/明文开关、Cookie 粘贴文本。转屏/折叠屏展开/进程重建后不再丢已输入内容 | 构建/lint/352 单测绿；真机转屏待验 |
+| F5e 大字体适配（H-05 / P2） ✅ | `MiniPlayerBar` 行高 `height(60)`→`heightIn(min=60)`；`DetailScreen` 标题列 `height(68)`→`heightIn(min=68)`；`SpaceScreen` 标题列 `height(72)`→`heightIn(min=72)`。200% 字体下允许长高而不是裁切 | 构建绿；真机 200% 字体走查待做 |
 
 ### 6.5 F6 部分结果（2026-11-01）
 
