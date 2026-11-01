@@ -158,32 +158,51 @@ fun MainTabsScaffold(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
-                val playerManager = viewModel.playerManager
-                val state by playerManager.state.collectAsStateWithLifecycle()
-                val track = state.currentTrack
-                val trackKey = track?.let { "${it.bvid}:${it.cid}" }
-                var dismissedKey by remember { mutableStateOf<String?>(null) }
-                LaunchedEffect(trackKey) { if (trackKey != dismissedKey) dismissedKey = null }
-                if (inTabs && track != null && trackKey != null) {
-                    ImageFormatScope(viewModel) {
-                        MiniPlayerBar(
-                            track = track,
-                            isPlaying = state.isPlaying,
-                            isLoading = state.isLoading,
-                            onToggle = { playerManager.toggle() },
-                            onOpen = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp)
-                                .width(320.dp),
-                            positionMs = state.positionMs,
-                            durationMs = state.durationMs,
-                            visible = dismissedKey != trackKey,
-                            onDismiss = { dismissedKey = trackKey },
-                        )
-                    }
+                // 平板壳的 mini 条：订阅下沉到独立 composable，壳体（含 NavHost）不再每 500ms 失效。
+                // 手机分支早已这么修（BottomNavWithCenterPlayer.MiniPlayerSlot），这里是漏掉的同一处（REVIEW_REPORT B-03 / R1）。
+                if (inTabs) {
+                    TabletMiniPlayer(
+                        viewModel = viewModel,
+                        navController = navController,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .width(320.dp),
+                    )
                 }
             }
         }
+    }
+}
+
+/**
+ * 平板/大屏壳里的 mini 播放条：自己订阅 player.state（播放中 500ms tick），
+ * 让 2Hz 失效只发生在这个子组件的重组范围内，而不是整棵 NavHost（REVIEW_REPORT B-03 / R1）。
+ */
+@Composable
+private fun TabletMiniPlayer(
+    viewModel: MainViewModel,
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+) {
+    val playerManager = viewModel.playerManager
+    val state by playerManager.state.collectAsStateWithLifecycle()
+    val track = state.currentTrack ?: return
+    val trackKey = "${track.bvid}:${track.cid}"
+    var dismissedKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(trackKey) { if (dismissedKey != trackKey) dismissedKey = null }
+    ImageFormatScope(viewModel) {
+        MiniPlayerBar(
+            track = track,
+            isPlaying = state.isPlaying,
+            isLoading = state.isLoading,
+            onToggle = { playerManager.toggle() },
+            onOpen = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+            modifier = modifier,
+            positionMs = state.positionMs,
+            durationMs = state.durationMs,
+            visible = dismissedKey != trackKey,
+            onDismiss = { dismissedKey = trackKey },
+        )
     }
 }

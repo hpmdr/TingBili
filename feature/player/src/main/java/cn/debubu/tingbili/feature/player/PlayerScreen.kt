@@ -158,7 +158,9 @@ fun PlayerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
-    val progUi by vm.progressUi.collectAsStateWithLifecycle()
+    // 注意：进度流（1Hz）不在这里订阅——它只被「进度条 / 辅助栏 / 定时弹层」用，
+    // 顶层订阅会让整个播放页 body 每秒重跑一次（REVIEW_REPORT B-03）。
+    // 各子组件自己收（见 ProgressBarSection / PlayerAuxBarSection / SleepTimerSheetSection）。
     val lyrUi by vm.lyricUi.collectAsStateWithLifecycle()
     val pipelineInfo by vm.pipelineInfo.collectAsStateWithLifecycle()
     val qualityLabel by vm.audioQualityLabel.collectAsStateWithLifecycle()
@@ -328,7 +330,8 @@ fun PlayerScreen(
                     FullscreenLyricsList(
                         state = lyrUi,
                         onSeekLyric = { line ->
-                            val from = progUi.positionMs
+                            // 读瞬时值而不是组合态：不建立 1Hz 订阅，点击时也是最新位置
+                            val from = vm.currentPositionMs()
                             vm.seekToLyric(line)
                             val token = (undoJump?.token ?: 0L) + 1L
                             undoJump = JumpUndo(from, formatMs(line.timeMs), token)
@@ -358,13 +361,7 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(10.dp))
 
-        PlaybackProgressBar(
-            positionMs = progUi.positionMs,
-            bufferedPositionMs = progUi.bufferedPositionMs,
-            durationMs = progUi.durationMs,
-            enabled = !trackUi.isLoading,
-            onSeek = vm::seekTo,
-        )
+        ProgressBarSection(vm = vm, enabled = !trackUi.isLoading)
 
         Spacer(Modifier.height(8.dp))
 
@@ -442,9 +439,8 @@ fun PlayerScreen(
         Spacer(Modifier.height(6.dp))
 
         // 底部辅助栏固定 5 项：定时 / 章节 / 倍速 / 音质 / 信息（字幕切换在字幕卡头部，避免条目增减导致整排跳动）
-        PlayerAuxBar(
-            sleepLabel = sleepLabel(progUi.sleepRemainSec, progUi.sleepEndOfChapter),
-            sleepActive = progUi.sleepRemainSec != null || progUi.sleepEndOfChapter,
+        PlayerAuxBarSection(
+            vm = vm,
             speedLabel = if (trackUi.speed == 1f) "倍速" else "${trackUi.speed}x",
             qualityLabel = qualityLabel,
             onTimerClick = { showTimerSheet = true },
@@ -484,18 +480,7 @@ fun PlayerScreen(
     }
 
     if (showTimerSheet) {
-        SleepTimerSheet(
-            remainSec = progUi.sleepRemainSec,
-            totalMin = progUi.sleepTotalSec?.div(60),
-            finishChapter = progUi.sleepFinishChapter,
-            finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
-            lastMin = vm.sleepLastMin.collectAsStateWithLifecycle().value,
-            endOfChapter = progUi.sleepEndOfChapter,
-            onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
-            onToggleFinish = { vm.setSleepFinishChapter(it) },
-            onCancel = { vm.cancelSleepTimer() },
-            onDismiss = { showTimerSheet = false },
-        )
+        SleepTimerSheetSection(vm = vm, onDismiss = { showTimerSheet = false })
     }
     if (showChapterSheet) {
         ChapterSheet(
@@ -962,6 +947,65 @@ private fun PlayerTopBar(
             }
         }
     }
+}
+
+/**
+ * 进度条的真实订阅点：1Hz 进度只让这一块重组，播放页 body 不再每秒重跑（REVIEW_REPORT B-03）。
+ */
+@Composable
+private fun ProgressBarSection(vm: PlayerViewModel, enabled: Boolean) {
+    val progUi by vm.progressUi.collectAsStateWithLifecycle()
+    PlaybackProgressBar(
+        positionMs = progUi.positionMs,
+        bufferedPositionMs = progUi.bufferedPositionMs,
+        durationMs = progUi.durationMs,
+        enabled = enabled,
+        onSeek = vm::seekTo,
+    )
+}
+
+/** 辅助栏的睡眠定时文案每秒变：订阅下沉到这里，避免整页 body 跟着重跑。 */
+@Composable
+private fun PlayerAuxBarSection(
+    vm: PlayerViewModel,
+    speedLabel: String,
+    qualityLabel: String,
+    onTimerClick: () -> Unit,
+    onChapterClick: () -> Unit,
+    onQualityClick: () -> Unit,
+    onSpeedClick: () -> Unit,
+    onInfoClick: () -> Unit,
+) {
+    val progUi by vm.progressUi.collectAsStateWithLifecycle()
+    PlayerAuxBar(
+        sleepLabel = sleepLabel(progUi.sleepRemainSec, progUi.sleepEndOfChapter),
+        sleepActive = progUi.sleepRemainSec != null || progUi.sleepEndOfChapter,
+        speedLabel = speedLabel,
+        qualityLabel = qualityLabel,
+        onTimerClick = onTimerClick,
+        onChapterClick = onChapterClick,
+        onQualityClick = onQualityClick,
+        onSpeedClick = onSpeedClick,
+        onInfoClick = onInfoClick,
+    )
+}
+
+/** 定时弹层：只在打开时组合，倒计时每秒刷新也只影响弹层。 */
+@Composable
+private fun SleepTimerSheetSection(vm: PlayerViewModel, onDismiss: () -> Unit) {
+    val progUi by vm.progressUi.collectAsStateWithLifecycle()
+    SleepTimerSheet(
+        remainSec = progUi.sleepRemainSec,
+        totalMin = progUi.sleepTotalSec?.div(60),
+        finishChapter = progUi.sleepFinishChapter,
+        finishDefault = vm.sleepFinishDefault.collectAsStateWithLifecycle().value,
+        lastMin = vm.sleepLastMin.collectAsStateWithLifecycle().value,
+        endOfChapter = progUi.sleepEndOfChapter,
+        onSelectMinutes = { min, finish -> vm.startSleepTimer(min * 60, finish) },
+        onToggleFinish = { vm.setSleepFinishChapter(it) },
+        onCancel = { vm.cancelSleepTimer() },
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable

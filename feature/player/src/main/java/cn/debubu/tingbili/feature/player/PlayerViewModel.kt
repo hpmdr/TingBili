@@ -92,6 +92,9 @@ class PlayerViewModel @Inject constructor(
     @Named("subtitleIo") private val subtitleIo: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
+    /** 点击瞬间的播放位置：直接读 StateFlow.value，不建立组合订阅（避免把 1Hz 进度拖进整页重组） */
+    fun currentPositionMs(): Long = player.state.value.positionMs
+
     private val trackFlow = player.state
         .map { it.currentTrack }
         .distinctUntilChanged()
