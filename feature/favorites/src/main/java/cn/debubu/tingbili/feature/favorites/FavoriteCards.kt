@@ -37,9 +37,9 @@ import cn.debubu.tingbili.core.ui.playedProgressLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** 类型 tag：收藏夹 / BV。统一列表里用颜色区分两类条目。 */
 @Composable
@@ -332,8 +332,10 @@ private fun formatDuration(ms: Long): String? {
     }
 }
 
+private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
 fun formatDate(epochMs: Long): String = try {
-    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(epochMs))
+    Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDate().format(DATE_FORMATTER)
 } catch (_: Exception) {
     "$epochMs"
 }

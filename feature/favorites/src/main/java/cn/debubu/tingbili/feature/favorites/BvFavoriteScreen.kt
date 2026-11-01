@@ -66,9 +66,9 @@ import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun BvFavoriteScreen(
@@ -473,8 +473,11 @@ private fun BvFavoritePageEntity.toDisplayEntity(parent: BvFavoriteEntity): Favo
         order = order,
     )
 
+private val DATE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+
 private fun formatDateTime(epochMs: Long): String = try {
-    SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(epochMs))
+    Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDateTime()
+        .format(DATE_TIME_FORMATTER)
 } catch (_: Exception) {
     "$epochMs"
 }

@@ -82,9 +82,9 @@ import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -669,6 +669,10 @@ private fun formatDuration(ms: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
+// DateTimeFormatter 线程安全且可复用：原来每次调用都 new 一个 SimpleDateFormat（约 10-20µs/次），
+// 列表滚动/播放中 1Hz 重算时是纯浪费（REVIEW_REPORT C-01）
+private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
 private fun formatDate(epochMs: Long): String = try {
-    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(epochMs))
+    Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDate().format(DATE_FORMATTER)
 } catch (_: Exception) { "$epochMs" }

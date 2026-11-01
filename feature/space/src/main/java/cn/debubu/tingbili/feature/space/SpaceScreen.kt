@@ -78,9 +78,9 @@ import cn.debubu.tingbili.data.bilibili.dto.UpSpaceInfo
 import cn.debubu.tingbili.data.bilibili.dto.UpVideo
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 /**
@@ -655,7 +655,10 @@ private fun formatCount(n: Long): String = when {
 }
 
 /** 列表里的短日期：MM-dd（与设计稿一致，不占宽度） */
+private val SHORT_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd")
+
 private fun formatShortDate(epochSec: Long): String? {
     if (epochSec <= 0L) return null
-    return SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(epochSec * 1000L))
+    return Instant.ofEpochSecond(epochSec).atZone(ZoneId.systemDefault()).toLocalDate()
+        .format(SHORT_DATE_FORMATTER)
 }

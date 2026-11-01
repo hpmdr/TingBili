@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -187,12 +188,16 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val destination = navBackStackEntry?.destination
-    val inMainTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
-    // 全局 mini：除全屏播放页/登录页外，二级页（详情、UP、设置…）也常驻，
-    // 不随页面切换重建，转场时保持连续
-    val showMiniPlayer = destination?.hierarchy?.any {
-        it.hasRoute<PlayerRoute>() || it.hasRoute<LoginRoute>()
-    } != true
+    // hierarchy 遍历 + hasRoute 每次重组都要分配；只在导航目标变化时重算（REVIEW_REPORT C-04）
+    val (inMainTabs, showMiniPlayer) = remember(destination) {
+        // 全局 mini：除全屏播放页/登录页外，二级页（详情、UP、设置…）也常驻，
+        // 不随页面切换重建，转场时保持连续
+        val inTabs = cn.debubu.tingbili.navigation.isMainTabDestination(destination)
+        val showMini = destination?.hierarchy?.any {
+            it.hasRoute<PlayerRoute>() || it.hasRoute<LoginRoute>()
+        } != true
+        inTabs to showMini
+    }
 
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
