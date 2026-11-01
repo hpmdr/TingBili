@@ -75,13 +75,19 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         withTimeoutOrNull(PRIME_BLOCK_TIMEOUT_MS) { audioOffload.first() }
     }?.also { audioOffloadMirror = it } ?: true
 
-    val stepSec: Flow<Int> = ds.data.map { it[STEP_SEC] ?: 15 }
-    val repeatMode: Flow<Int> = ds.data.map { it[REPEAT_MODE] ?: 0 }
+    // 读侧钳制（REVIEW_REPORT E-06）：旧版本写入、手改 DataStore 或异常路径都可能留下越界值，
+    // 直接作用于「快进秒数 / 倍速 / 循环模式 / 音质 code」会造成诡异的播放行为，读时收敛到合法区间。
+    val stepSec: Flow<Int> = ds.data.map { (it[STEP_SEC] ?: 15).coerceIn(MIN_STEP_SEC, MAX_STEP_SEC) }
+    val repeatMode: Flow<Int> = ds.data.map { (it[REPEAT_MODE] ?: 0).coerceIn(0, 2) }
     /** 随机播放方式（洗牌 / 纯随机；只管方式，开关属于当前播放列表） */
     val randomPlayMode: Flow<RandomPlayMode> = ds.data.map {
         RandomPlayMode.fromCode(it[RANDOM_PLAY_MODE] ?: RandomPlayMode.SHUFFLE.code)
     }
-    val speed: Flow<Float> = ds.data.map { it[SPEED] ?: 1f }
+    // 倍速读侧钳制：UI 只提供 1.0~2.0，但异常值（NaN/负数/10x）会直接喂给 ExoPlayer。coerceIn 对 NaN 无效，先判空区间
+    val speed: Flow<Float> = ds.data.map { p ->
+        val raw = p[SPEED] ?: 1f
+        if (raw.isNaN() || raw.isInfinite()) 1f else raw.coerceIn(MIN_SPEED, MAX_SPEED)
+    }
     /** 字幕字号缩放（全屏+迷你一起跟，默认 1.0，落盘钳制防极端值） */
     val subtitleScale: Flow<Float> = ds.data.map { (it[SUBTITLE_SCALE] ?: 1f).coerceIn(0.85f, 1.3f) }
     /** 音频优先硬解（设置页开关，默认开；开则硬解优先、失败自动回落软解） */
@@ -89,7 +95,12 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     /** DSP 音频卸载（设置页开关，默认开；开后条件满足时整条管线交 DSP，AP 休眠） */
     val audioOffload: Flow<Boolean> = ds.data.map { it[AUDIO_OFFLOAD] ?: true }
     /** 音质偏好（playurl qn/audio id：30216/30232/30280/30250/30251，默认 132K；未知值回落默认） */
-    val audioQuality: Flow<Int> = ds.data.map { it[AUDIO_QUALITY] ?: DEFAULT_AUDIO_QUALITY }
+    val audioQuality: Flow<Int> = ds.data.map { p ->
+        val raw = p[AUDIO_QUALITY] ?: DEFAULT_AUDIO_QUALITY
+        // 合法档位 code 都落在 30216..30280（64K/132K/192K/杜比/Hi-Res），区间外视为脏值回默认。
+        // 档位语义由 data:bilibili 的 AudioQuality 解释；core:data 在依赖图下游，不能反向引用它。
+        if (raw in MIN_AUDIO_QUALITY_CODE..MAX_AUDIO_QUALITY_CODE) raw else DEFAULT_AUDIO_QUALITY
+    }
     val sleepFinishChapter: Flow<Boolean> = ds.data.map { it[SLEEP_FINISH_CHAPTER] ?: false }
     /** 睡眠定时滚轮上次所选分钟（无记忆默认 60，居中露出上下项、暗示可滑；启动定时即记住） */
     val sleepLastMinutes: Flow<Int> = ds.data.map { it[SLEEP_LAST_MINUTES] ?: 60 }
@@ -350,6 +361,13 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val AUDIO_QUALITY = androidx.datastore.preferences.core.intPreferencesKey("audio_quality")
         /** 默认音质偏好 132K（免登录可得最佳档；对齐 data:bilibili AudioQuality.DEFAULT_CODE，core:data 不反向依赖） */
         const val DEFAULT_AUDIO_QUALITY = 30232
+        /** 步长滑杆范围（SettingsScreen 的 5f..60f） */
+        const val MIN_STEP_SEC = 5
+        const val MAX_STEP_SEC = 60
+        const val MIN_AUDIO_QUALITY_CODE = 30216
+        const val MAX_AUDIO_QUALITY_CODE = 30280
+        const val MIN_SPEED = 0.5f
+        const val MAX_SPEED = 3.0f
         val SLEEP_FINISH_CHAPTER = androidx.datastore.preferences.core.booleanPreferencesKey("sleep_finish_chapter")
         val SLEEP_LAST_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("sleep_last_minutes")
         val SLEEP_DEADLINE_MS = androidx.datastore.preferences.core.longPreferencesKey("sleep_deadline_ms")

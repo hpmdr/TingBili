@@ -933,7 +933,8 @@ private fun PlayerTopBar(
                 ) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (isFavorite) "已收藏到我的最爱" else "收藏到我的最爱",
+                        // 外层 combinedClickable 已设 onClickLabel/onLongClickLabel，这里再给描述会被 TalkBack 念两遍（REVIEW_REPORT H-04）
+                        contentDescription = null,
                         tint = if (isFavorite) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurface,
                     )
