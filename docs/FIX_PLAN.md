@@ -312,7 +312,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 子项 | 改法 | 验收 |
 |---|---|---|
 | F4b 索引与订阅（E-07 / B-04 / P2） ✅ | `HistoryEntity` 补 `Index("bvid")`、`Index("updatedAt")`；`FavoriteTrackEntity` 补 `Index(value=["bvid","cid"])`；DB 15 → **16**（测试期允许破坏性升级，不写迁移）；`HistoryViewModel` 的 history/folderIds 从 `Eagerly` 改 `WhileSubscribed(5_000)` | 全量测试绿（含改过的 `HistoryViewModelTest`：WhileSubscribed 下首订阅会先拿初值，断言改 `first { it.size == 2 }`）；真机查询耗时待验 |
-| F4a 播放页/平板壳重组（B-03 / C-14 / P1） | **未做** | 下一轮：`PlayerScreen` 顶层 `progUi`/`lyricUi` 下沉、`MainTabsScaffold` 复用 `MiniPlayerOverlay` |
-| F4c 稳定性与派生（C-13/C-04/C-01/C-02） | **未做** | 下一轮：`@Immutable`/稳定性配置 + 编译器报告、`derivedStateOf`、SDF remember、网格 key 去 index |
+| F4a 播放页/平板壳重组（B-03 / C-14 / P1） ✅ | `PlayerScreen` 顶层去掉 `progUi`（1Hz）；新增 `ProgressBarSection` / `PlayerAuxBarSection` / `SleepTimerSheetSection` 三个叶子各自订阅；歌词跳转改 `vm.currentPositionMs()` 读瞬时值；`MainTabsScaffold` 把 2Hz `player.state` 下沉到 `TabletMiniPlayer` 子组件 | 构建/lint/352 单测绿；**重组计数需真机 Layout Inspector 复核** |
+| F4c 稳定性与派生（C-13/C-04/C-01/C-02） 🔄 | 日期格式化 4 处 `SimpleDateFormat` → 静态 `DateTimeFormatter`（线程安全、无每次构造开销）；`MainActivity` 的 `inMainTabs`/`showMiniPlayer` 改 `remember(destination)`（原来每次重组都遍历 hierarchy + hasRoute） | 剩 `@Immutable`/稳定性配置与编译器报告、网格 key 去 index 未做 |
 
 > 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
