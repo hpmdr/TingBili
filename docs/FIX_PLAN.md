@@ -406,4 +406,8 @@ debug 包 StrictMode 抓到应用自身的一处主线程磁盘读：
   at cn.debubu.tingbili.core.media.AudioCacheModule.provideAudioCache(AudioCacheModule.kt:37)
 ```
 
-比 F7 轻一个数量级（64ms ≈ 4 帧），同属「DI 构造期碰磁盘」。修法有两种：Application 在 IO 线程预建目录（治标，能干掉 mkdir 部分），或把 `SimpleCache` 改成懒加载/后台建（治本，但要改播放服务起播时序）。**暂不动**：当前播放链路刚在真机验过，为 64ms 改动起播时序不划算；记在这里等下次动播放初始化时一起处理。
+比 F7 轻一个数量级（67ms ≈ 4 帧），同属「DI 构造期碰磁盘」。
+
+**已尝试并回滚**：在 `TingBiliApp.onCreate` 的 IO 协程里预取 `cacheDir`，实测**仍然 67ms** ——播放服务组件在 Application 启动后很快就被 Hilt 创建，IO 协程没赢过这个竞态，预建目录无效。已回滚该改动（不留无效代码）。
+
+**真正可行的修法**：把 `SimpleCache`/缓存目录改成「首次播放时才创建」，或把 `provideAudioCache` 换成 `Lazy`/`Provider`。代价是动播放初始化时序，**建议下次动播放服务外壳时一起做**，不要为 67ms 单独改刚验过的链路。
