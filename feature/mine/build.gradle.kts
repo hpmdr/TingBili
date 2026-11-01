@@ -45,14 +45,14 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.zxing.core)
     ksp(libs.hilt.compiler)
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.hilt.navigation.compose)
     testImplementation(libs.junit)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
+    testImplementation(libs.kotlinx.serialization.json)
     testImplementation(libs.datastore.preferences)
 }
 

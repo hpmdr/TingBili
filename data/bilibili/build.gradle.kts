@@ -26,16 +26,16 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)
     implementation(libs.okhttp)
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
-    testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
+    testImplementation(libs.okhttp.mockwebserver)
     // 字幕 URL 会被归一化成 https，MockWebServer 默认是明文，这里用 TLS 端点才能覆盖真实路径
-    testImplementation("com.squareup.okhttp3:okhttp-tls:${libs.versions.okhttp.get()}")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.okhttp.tls)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
 }
 

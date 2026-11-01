@@ -44,18 +44,18 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.media3.exoplayer)
     ksp(libs.hilt.compiler)
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.material.icons.extended)
     testImplementation(libs.junit)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.arch.core.testing)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
     testImplementation(libs.media3.exoplayer)
     testImplementation(libs.datastore.preferences)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
+    testImplementation(libs.kotlinx.serialization.json)
 }
 
 kotlin {

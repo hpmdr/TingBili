@@ -142,8 +142,8 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.adaptive.navigation.suite)
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${libs.versions.kotlinx.serialization.get()}")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${libs.versions.coroutines.get()}")
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.datastore.preferences)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
@@ -164,9 +164,9 @@ dependencies {
     testImplementation(libs.compose.material3)
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.compose.ui.test.manifest)
-    testImplementation("androidx.navigation:navigation-testing:${libs.versions.navigation.get()}")
+    testImplementation(libs.navigation.testing)
     testImplementation(libs.hilt.navigation.compose)
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.arch.core.testing)
 }
 
