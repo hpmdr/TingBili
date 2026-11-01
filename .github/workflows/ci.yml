@@ -67,6 +67,10 @@ jobs:
       # lint 之前完全没进 CI：assembleDebug 不触发 lint，只有打 tag 的 assembleRelease 隐式跑 lintVitalRelease。
       - name: Lint
         run: ./gradlew lintDebug --no-daemon --stacktrace
+      # R8 路径此前不进 CI：PR 全绿、发版当天才可能炸（缺 keep/缺依赖）。
+      # perfDebug 与 release 共用同一套 minify+shrink 规则，但用 debug 签名，不需要 Secrets。
+      - name: Assemble minified build (R8 smoke)
+        run: ./gradlew :app:assemblePerfDebug --no-daemon --stacktrace
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
