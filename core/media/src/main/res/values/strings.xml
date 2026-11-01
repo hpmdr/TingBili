@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 媒体通知渠道（REVIEW_REPORT A-03）：不显式指定时 Media3 会用 App 名建渠道，用户无法单独识别/调重要性 -->
+    <string name="playback_notification_channel">播放控制</string>
+    <string name="playback_notification_channel_desc">播放/暂停、上一首下一首、锁屏与耳机线控</string>
+</resources>

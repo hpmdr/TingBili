@@ -94,6 +94,15 @@ class TingBiliPlaybackService : MediaSessionService() {
                 }
             })
         }
+        // 通知渠道显式定义（REVIEW_REPORT A-03）：渠道名/说明/重要级可控，用户能在通知设置里单独识别；
+        // 旧渠道（Media3 默认 default_channel_id，名字是 App 名）清掉，避免设置里出现两条。
+        ensureNotificationChannel()
+        setMediaNotificationProvider(
+            androidx.media3.session.DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .setChannelName(R.string.playback_notification_channel)
+                .build(),
+        )
         // 点通知/锁屏卡片的「应用」区域要能回到 App：不设 sessionActivity 时默认 contentIntent 是 null（G-13）。
         // 用 getLaunchIntentForPackage 而不是直接引用 MainActivity，避免 core:media 反向依赖 app 模块。
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -136,6 +145,21 @@ class TingBiliPlaybackService : MediaSessionService() {
         }
     }
 
+    /** 常驻但不响铃（IMPORTANCE_LOW）：媒体控制要可见，但不能在播放时弹提示音 */
+    private fun ensureNotificationChannel() {
+        val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
+        val channel = android.app.NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.playback_notification_channel),
+            android.app.NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.playback_notification_channel_desc)
+            setShowBadge(false)
+        }
+        nm.createNotificationChannel(channel)
+        runCatching { nm.deleteNotificationChannel(LEGACY_CHANNEL_ID) }
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
@@ -145,3 +169,6 @@ class TingBiliPlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 }
+
+private const val CHANNEL_ID = "tingbili_playback"
+private const val LEGACY_CHANNEL_ID = "default_channel_id"

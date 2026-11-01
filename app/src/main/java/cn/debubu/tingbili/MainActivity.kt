@@ -86,8 +86,14 @@ class MainActivity : ComponentActivity() {
     // Activity 作用域：setContent 里的 hiltViewModel() 拿到的是同一个实例
     private val mainViewModel: MainViewModel by viewModels()
 
+    // 通知权限被拒后必须给一次性提示（REVIEW_REPORT A-03）：
+    // 否则媒体通知、锁屏卡片、耳机线控会静默消失，用户只会觉得「播放坏了」。
+    private var notificationDenied by mutableStateOf(false)
+
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) notificationDenied = true
+        }
 
     /**
      * 锁屏/深度睡眠回来后唯一的可靠恢复点：先按播放器位置对表，再决定是否重建音频路径。
@@ -150,6 +156,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     AdaptiveMainScaffold(mainViewModel)
+                }
+                if (notificationDenied) {
+                    NotificationDeniedDialog(onDismiss = { notificationDenied = false })
                 }
             }
         }
@@ -261,3 +270,34 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     }
 }
 
+/**
+ * 通知权限被拒的说明与二次引导（REVIEW_REPORT A-03）：
+ * 不弹「再问一次」系统框（用户已明确拒绝，系统也可能不再展示），只解释后果并给「去设置」。
+ */
+@Composable
+private fun NotificationDeniedDialog(onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("通知权限已关闭") },
+        text = {
+            Text(
+                "关闭后，播放控制面板不会出现在通知栏和锁屏上，耳机线控也可能无响应。" +
+                    "播放本身不受影响，可在系统设置的「通知」里重新打开。",
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    runCatching { context.startActivity(intent) }
+                    onDismiss()
+                },
+            ) { Text("去设置") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("知道了") }
+        },
+    )
+}

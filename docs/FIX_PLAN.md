@@ -411,3 +411,17 @@ debug 包 StrictMode 抓到应用自身的一处主线程磁盘读：
 **已尝试并回滚**：在 `TingBiliApp.onCreate` 的 IO 协程里预取 `cacheDir`，实测**仍然 67ms** ——播放服务组件在 Application 启动后很快就被 Hilt 创建，IO 协程没赢过这个竞态，预建目录无效。已回滚该改动（不留无效代码）。
 
 **真正可行的修法**：把 `SimpleCache`/缓存目录改成「首次播放时才创建」，或把 `provideAudioCache` 换成 `Lazy`/`Provider`。代价是动播放初始化时序，**建议下次动播放服务外壳时一起做**，不要为 67ms 单独改刚验过的链路。
+
+### 7.4 A-03 修复结果（2026-11-01，真机验证）
+
+| 改动 | 内容 |
+|---|---|
+| 显式通知渠道 | `TingBiliPlaybackService.onCreate` 建 `NotificationChannel("tingbili_playback", "播放控制", IMPORTANCE_LOW, desc)`，再用 `DefaultMediaNotificationProvider` 指定同一渠道；顺手删掉 Media3 遗留的 `default_channel_id` |
+| 权限拒绝引导 | `MainActivity` 的权限回调原来空实现，改为拒绝后弹一次性说明（标题「通知权限已关闭」，说明「媒体控制面板不会显示、耳机线控可能无响应，但播放不受影响」），按钮「去设置」（跳本应用通知设置）+「知道了」 |
+
+**真机验证**（设备 2311DRK48C）：
+
+- 播放中 `dumpsys notification`：`channel=tingbili_playback`，渠道实体 `mName=播放控制, mImportance=2(IMPORTANCE_LOW), mShowBadge=false, hasDescription=true` —— 渠道名/重要级/角标完全可控；通知本身 `category=transport actions=3 flags=NO_CLEAR` 不变。
+- `pm revoke POST_NOTIFICATIONS` 后重启 → 系统权限框；点「拒绝」→ 应用弹出上述说明对话框（uiautomator 抓到标题与两个按钮）。
+- 点「去设置」→ 焦点落到 `Settings$AppNotificationSettingsActivity`（本应用通知页）。
+- `pm grant` 恢复后重启 → 不再弹框，正常落到首屏。
