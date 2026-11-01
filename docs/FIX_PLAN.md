@@ -264,10 +264,26 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 
 | 批次 | 提交 | 状态 | 验收结果 |
 |---|---|---|---|
-| F0 | — | ⏳ | |
-| F1 | — | ⏳ | |
+| F0 | `bf2918f` | ✅ | 基线：debug APK 85.0 MB / perfDebug 6.53 MB / 活跃模块 352 个用例 / lint 105 条（80 Error，其中 78 条 media3 `@UnstableApi`） |
+| F1 | `2a714cc` | ✅ | 见 §6.1 |
 | F2 | — | ⏳ | |
 | F3 | — | ⏳ | |
 | F4 | — | ⏳ | |
 | F5 | — | ⏳ | |
 | F6 | — | ⏳ | |
+
+### 6.1 F1 实测结果（2026-11-01）
+
+| 验收项 | 修前 | 修后 | 证据 |
+|---|---|---|---|
+| `./gradlew lintDebug` | **105 条**（80 Error + 25 Warning），且中断构建 | **0 条**，`LASTEXITCODE=0` | 13 个模块 lint 报告聚合为 0 |
+| media3 `@UnstableApi` | 78 条 Error | 0（项目级 opt-in，官方支持写法） | `lint.xml` |
+| 真违规 | UseTomlInstead 6 / DefaultLocale 4 / NonObservableLocale 2 / ModifierParameter 3 / ObsoleteSdkInt 2 / UseKtx 2 | 全部按规范修掉（不是压掉） | `git show 2a714cc` |
+| 需保留的两处 | `SetJavaScriptEnabled`、`LockedOrientationActivity` + `DiscouragedApi` | 显式 `@SuppressLint` / `tools:ignore`，注释指向 F3 | `GeetestDialog.kt`、`AndroidManifest.xml` |
+| 单测 | CI 只跑 19/50 文件、137/346 用例 | 13 模块全跑：**352 用例 0 失败** | `build/test-results/**/TEST-*.xml` 聚合 |
+| CI 门禁 | 无 lint；测试回退语义永不触发 | 加 `testDebugUnitTest --continue` + `lintDebug` + 失败上传报告；超时 30→45min | `.github/workflows/ci.yml` |
+| 构建 | `parallel=false`、无缓存、daemon 30s 自杀、无效属性 | `parallel=true` + `caching=true` + daemon 3h；删 `nonTransitiveRResources` 与 `suppressUnsupportedCompileSdk` | `gradle.properties`；本次构建 340 tasks / 38 from cache |
+| R8 | 无行号、mapping 不归档 | `-keepattributes SourceFile,LineNumberTable`；release 上传 `mapping.txt`（90 天） | `proguard-rules.pro`、`release.yml` |
+| 文档 | 三份文档三套版本口径、与代码冲突 | CONVENTIONS / DEVELOPMENT / AGENTS 已止血（版本以 toml 为准、SDK 37、历史模型、登录现状、破坏性迁移新决策） | `git show 2a714cc -- docs AGENTS.md` |
+
+> 遗留（不在 F1 范围）：`feature:search` / `feature:playlist` 的本地 `build/` 残留会让测试计数多出 5 个旧用例，已删除本地目录（build/ 不入库）。
