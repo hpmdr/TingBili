@@ -154,7 +154,7 @@ fun DetailScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("加载失败：${s.message}", color = Color.Gray)
+                        Text("加载失败：${s.message}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = { viewModel.load() }) { Text("重试") }
                     }
@@ -331,14 +331,14 @@ private fun DetailContent(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "进入 UP 主主页",
                                 modifier = Modifier.size(18.dp),
-                                tint = Color.Gray
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Text(
                         text = subLine,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -348,7 +348,7 @@ private fun DetailContent(
             Text(
                 text = statLine,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -396,7 +396,7 @@ private fun DetailContent(
                 Spacer(Modifier.height(14.dp))
                 Text(text = "简介", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
-                Text(text = video.desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(text = video.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         stickyHeader {
@@ -487,7 +487,7 @@ private fun DetailContent(
                             }
                         }
                     }
-                    Text(text = formatDuration(t.durationMs), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text(text = formatDuration(t.durationMs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -513,7 +513,7 @@ private fun DetailContent(
                         Text(
                             text = "相关推荐加载失败：${r.message}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         TextButton(onClick = onRetryRelated) { Text("重试") }
                     }
@@ -525,7 +525,7 @@ private fun DetailContent(
                         Text(
                             text = "暂无相关推荐",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
