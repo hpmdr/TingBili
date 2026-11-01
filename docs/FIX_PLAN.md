@@ -266,8 +266,8 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 |---|---|---|---|
 | F0 | `bf2918f` | ✅ | 基线：debug APK 85.0 MB / perfDebug 6.53 MB / 活跃模块 352 个用例 / lint 105 条（80 Error，其中 78 条 media3 `@UnstableApi`） |
 | F1 | `2a714cc` | ✅ | 见 §6.1 |
-| F2 | `see git log` | 🔄 部分完成 | F2a/F2c/F2d 已完成（见 §6.2）；F2b 启动首帧门禁留待下一轮 |
-| F3 | — | ⏳ | |
+| F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
+| F3 | `9cee8c6` | 🔄 部分完成 | F3a WebView / F3b 备份已完成（§6.3）；F3c 触控目标、F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | — | ⏳ | |
 | F5 | — | ⏳ | |
 | F6 | — | ⏳ | |
@@ -295,6 +295,16 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F2a 三处主线程 `runBlocking`（P0 / D-08） | `PreferencesRepository` 增加 `@Volatile` 内存镜像 + `prime()` 预热；`TingBiliApp.onCreate` 在 IO 线程预热；`AudioCacheModule`/`ServicePlayerModule`/`Coil ImageLoader` 改读 `cacheMaxMbNow()` / `audioOffloadNow()`（镜像缺失才 80ms 有界兜底，读失败落默认） | 构建绿、lint 0、`PlayerManagerTest` 等 352 用例全绿；构造期不再无条件读盘 |
 | F2c 前台服务时序（G-12） | 删除 3 处手动 `startForegroundService`（`play`/`rebuildTransport`/`PlaybackConnection.ensureServiceStarted` 死方法），改由 Media3 在真正起播时自行拉起并 `startForeground`；`PlayerManagerTest` 的旧断言改成锁新契约 | 单测锁定「play() 不再手动起服务」；真机后台起播待验证 |
 | F2d MediaSession（G-13 / G-09） | `setSessionActivity(getLaunchIntentForPackage)`（点通知回 App，且不让 core:media 反向依赖 app）；`MediaController.Listener.onDisconnected` 清空引用并允许重连；`future.get()` 包 `runCatching` | 单测绿；点通知回 App、服务被杀后重连待真机 |
-| F2b 启动首帧门禁（B-02） | **未完成**：需要给 DataStore 加 `hasFavoriteEver` 标记并在收藏写路径置位（会动 `DefaultFavoritesRepository` 构造与 8 处测试），留待下一轮 | — |
+| F2b 启动首帧门禁（B-02） ✅ | 新增 DataStore `has_favorite_ever` 标记 + `FavoriteEverRecorder` 接口（仓储写路径置位；单测走两参次构造，8 处测试零改动）；`MainViewModel.resolveStartTab` 先读标记（300ms 预算），只有覆盖安装后首启无标记时回填一次（800ms，超时则不写避免写死 false） | 单测绿；首启仍有一次性回填，之后启动不再碰 Room |
+
+### 6.3 F3 实测结果（2026-11-01，部分完成）
+
+| 子项 | 改法 | 验收 |
+|---|---|---|
+| F3a 极验 WebView（F-07 / P1） | `MIXED_CONTENT_ALWAYS_ALLOW` → `COMPATIBILITY_MODE`；`allowFileAccess/allowContentAccess=false`；`shouldOverrideUrlLoading` 只放行 `*.bilibili.com`；JS 桥改为一次性消费（成功后丢弃后续消息） | 构建绿、lint 0；**真机登录待验**（极验流程对 UA/混合内容敏感，必须实测扫码/短信登录一次） |
+| F3b 备份策略（F-06 / P2） | `allowBackup=false` + `fullBackupContent=false` + 新增 `res/xml/data_extraction_rules.xml`（云备份与 D2D 全量排除） | lint 的 `DataExtractionRules` 告警消除；`adb shell bmgr` 无可备份数据 |
+| F3c 触控目标（H-02 / P1） | **未做** | 需改 4 处 UI（进度条 22dp 容器、Me 34dp、Home 28dp、mini 40dp），要真机验触控 |
+| F3d 方向锁（A-02） | **待你拍板**（删 portrait vs 保留 + 文档说明） | — |
+| F3e 沉浸式 API 收敛（J-09） | **未做**（HyperOS 黑条有前科，改完必须真机逐页看） | — |
 
 > 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
