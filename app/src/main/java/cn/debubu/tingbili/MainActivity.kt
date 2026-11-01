@@ -97,8 +97,6 @@ class MainActivity : ComponentActivity() {
     /** 每进程只提示一次：播放开始时若通知被关，弹一次说明就够，反复弹会烦人 */
     private var notificationHintShown = false
 
-    /** 通知点击要直达播放页：intent 里的标记交给导航消费，消费后复位（避免返回时又被弹一次） */
-    private var openPlayerRequest by mutableStateOf(false)
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -122,7 +120,7 @@ class MainActivity : ComponentActivity() {
 
     private fun consumeOpenPlayerExtra(intent: android.content.Intent?) {
         if (intent?.getBooleanExtra(cn.debubu.tingbili.core.media.TingBiliPlaybackService.EXTRA_OPEN_PLAYER, false) == true) {
-            openPlayerRequest = true
+            mainViewModel.requestOpenPlayer()
         }
     }
 
@@ -196,11 +194,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AdaptiveMainScaffold(
-                        mainViewModel = mainViewModel,
-                        openPlayerOnStart = openPlayerRequest,
-                        onOpenPlayerConsumed = { openPlayerRequest = false },
-                    )
+                    AdaptiveMainScaffold(mainViewModel)
                 }
                 if (notificationDenied) {
                     NotificationDeniedDialog(onDismiss = { notificationDenied = false })
@@ -211,11 +205,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AdaptiveMainScaffold(
-    mainViewModel: MainViewModel,
-    openPlayerOnStart: Boolean = false,
-    onOpenPlayerConsumed: () -> Unit = {},
-) {
+private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     // null = 首 Tab 还没定：先不画内容，系统启动屏继续盖着。
     // 但 pagerState 必须先创建：否则 Activity 因 IME/弹窗重建时，页面会回到首 Tab。
     val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value
@@ -315,8 +305,6 @@ private fun AdaptiveMainScaffold(
         cn.debubu.tingbili.navigation.MainTabsScaffold(
             navController = navController,
             pagerState = pagerState,
-            openPlayerOnStart = openPlayerOnStart,
-            onOpenPlayerConsumed = onOpenPlayerConsumed,
         )
     }
 }

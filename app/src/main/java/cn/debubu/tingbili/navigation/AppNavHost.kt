@@ -5,6 +5,8 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -42,9 +44,6 @@ fun AppRootNavHost(
     pagerState: PagerState,
     modifier: Modifier = Modifier,
     mainViewModel: MainViewModel = hiltViewModel(),
-    /** 通知点击要求直达播放页（P1）：一次性标记，消费后由上层复位 */
-    openPlayerOnStart: Boolean = false,
-    onOpenPlayerConsumed: () -> Unit = {},
 ) {
 
     NavHost(
@@ -61,12 +60,13 @@ fun AppRootNavHost(
         // 主页 Tab 容器（带底栏，见 MainTabsScaffold）
         // 主页 4 Tab：单个 destination + 横向分页（底栏点击与左右滑都在 pager 内）
         composable<MainTabsRoute> {
-            // 通知点击直达播放页（P1）：放在 Tab 容器内部触发，此时 NavHost 图必然已挂好，
-            // 不会像放在 NavHost 之前那样撞上「graph has not been set」。
-            if (openPlayerOnStart) {
-                LaunchedEffect(Unit) {
+            // 通知点击直达播放页（P1）：在 Tab 容器内部消费事件，此时导航图必然已挂好。
+            // 事件放 VM 里而不是当参数传：destination lambda 会捕获旧布尔值（实测「冷启动能跳、热启动不跳」）。
+            val openPlayer by mainViewModel.openPlayerRequest.collectAsStateWithLifecycle()
+            LaunchedEffect(openPlayer) {
+                if (openPlayer) {
+                    mainViewModel.consumeOpenPlayer()
                     navController.navigate(PlayerRoute) { launchSingleTop = true }
-                    onOpenPlayerConsumed()
                 }
             }
             MainTabsPager(

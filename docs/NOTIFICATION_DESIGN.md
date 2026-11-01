@@ -29,11 +29,13 @@
 3. **硬件媒体键**：声明 `androidx.media3.session.MediaButtonReceiver`（`MEDIA_BUTTON` intent-filter），服务未起时按键能拉起来。
 4. **事后关闭通知也要提示**：播放开始时若 `areNotificationsEnabled() == false` 且本进程未提示过，弹同一个说明框（复用 A-03 的对话框）。
 
-### P1 已实现（代码已进 `master`，**真机待验证**）
+### P1 已实现并真机验证（2026-11-01）
 
 5. **通知点击直达播放页**：`sessionActivity` 的 Intent 带 `EXTRA_OPEN_PLAYER`（`FLAG_ACTIVITY_SINGLE_TOP|CLEAR_TOP`）→ `MainActivity.onCreate/onNewIntent` 读到后置 `openPlayerRequest` → 透传 `AdaptiveMainScaffold → MainTabsScaffold → AppRootNavHost` → 在 **MainTabsRoute 内容内部**的 `LaunchedEffect` 里 `navigate(PlayerRoute)` 并复位标记。
-   - 关键点：effect 不能放在 `NavHost` 之前——冷启动构图时导航图还没挂上，`navigate` 会失败（实测：extra 已读到但页面不动）。放进 Tab 容器内部后图必然就绪。
-   - ⚠️ **验证状态**：代码已通过构建/lint/单测；真机验证时设备被锁屏，未能完成点击链路确认，下次解锁后补。
+   - 两个坑（都实测踩过）：
+     1. effect 放在 `NavHost` **之前**时导航图还没挂上，`navigate` 失败；必须放进 Tab 容器内部。
+     2. 把布尔当 Composable 参数一路传下去时，`NavHost` 的 destination lambda 会**捕获旧值**——冷启动能跳、热启动（onNewIntent）不跳。改法：标记放 `MainViewModel.openPlayerRequest`，在 destination 内容里 `collectAsStateWithLifecycle()` 消费。
+   - 验证：冷启动带 extra → 播放页；App 在后台时投递同签名 intent（等价通知点击）→ 播放页。
 
 ### P2 记录不实现
 

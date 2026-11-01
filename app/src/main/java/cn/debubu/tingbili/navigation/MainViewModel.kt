@@ -42,6 +42,18 @@ class MainViewModel @Inject constructor(
     private val _startTab = MutableStateFlow<Any?>(null)
     val startTab = _startTab.asStateFlow()
 
+    /**
+     * 通知点击直达播放页（P1）：MainActivity 收到 intent 后置位，导航层消费后复位。
+     * 走 VM 而不是把布尔一路当 Composable 参数传：NavHost 的 destination lambda 会捕获旧值，
+     * 导致「冷启动能跳、运行中再点不跳」（实测踩过）。
+     */
+    private val _openPlayer = MutableStateFlow(false)
+    val openPlayerRequest = _openPlayer.asStateFlow()
+
+    fun requestOpenPlayer() { _openPlayer.value = true }
+
+    fun consumeOpenPlayer() { _openPlayer.value = false }
+
     /** 推荐 tab 双击回顶（事件经单例总线发给首页，见 HomeScrollTopBus） */
     fun requestHomeScrollTop() = scrollTopBus.requestScrollTop()
 
