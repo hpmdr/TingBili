@@ -19,6 +19,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Robolectric 需要合并后的 manifest/资源才能起应用上下文（其余模块都有这行）
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -29,6 +36,15 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.coil.compose)
+
+    // 该模块原本零测试：纯函数 + 两个 Compose 冒烟用例
+    testImplementation(libs.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
 }
 
 kotlin {
