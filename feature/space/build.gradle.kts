@@ -43,6 +43,10 @@ dependencies {
     implementation(libs.material.icons.extended)
     implementation(libs.paging.compose)
     implementation(libs.paging.runtime)
+
+    // 该模块原本零测试：只补实际用到的测试栈（纯 JVM 单测，不需要 Robolectric）
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 kotlin {
