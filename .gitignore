@@ -1,6 +1,9 @@
 # Gradle
 .gradle/
+.kotlin/
 build/
+# Gradle OOM 时 HeapDumpOnOutOfMemoryError 会在仓库根落 hprof
+*.hprof
 
 # IDE
 .idea/
@@ -32,6 +35,7 @@ keystore.properties
 .superpowers/
 .codebuddy/
 .pi/
+.mimocode/
 
 # 日志与临时文件
 *.log

@@ -29,11 +29,13 @@ Tab（`MainTabsRoute`：首页/听单/历史/设置，带底栏）与全屏页�
 - 唯一真相源 `PlayerManager.state: StateFlow<PlaybackState>`，UI 不碰 ExoPlayer。经 `PlaybackConnection（MediaController → 播放 Service）` 间接驱动，ExoPlayer 归 Service 所有。历史一条 = 一个播单（主键 `sourceType + sourceId`，BV 播单与收藏夹播单各一条）、约 10s 节流；冷启动只恢复、不自动播。
 - `Track` 去重键 `bvid+cid`；`BV → List<Track>` 走 `ViewDto.toTracks()`。Room `exportSchema=false`；**单人测试期允许破坏性升级**（`fallbackToDestructiveMigration`，DB 版本升即清库），对外发版前再补手写 `Migration`。改动实体必须同步补索引（查询/排序用到的列）。DataStore（`PreferencesRepository`）新增键要读写成对、给默认、做钳制。字幕只走 `SubtitleParser + LyricState`。
 - 网络出口统一 `BiliRepository`，`feature` 不直调 `BiliApi`（现存违例见 `docs/REVIEW_REPORT.md` D-01，F5 修）。已实现登录（扫码/短信/密码/极验/Cookie）。不打 buvid / wbi 日志。
+- 高频状态（`progressUi` 这类 1Hz / `player.state` 这类 500ms）**只在真正消费的叶子 Composable 里订阅**；页面顶层与导航壳订阅会让整页/整树重组（F4a 已修 `PlayerScreen` 与平板壳，别再写回去）。
 
 ## 6. 界面 / 测试 / Git
 
 - 主题只用 `TingBiliTheme(dynamicColor)`；自适应走 `NavigationSuiteScaffold`；`enableEdgeToEdge() + innerPadding` 必处理。分页抄 `HomeViewModel` 模板（pageSize 20、`cachedIn` + `WhileSubscribed(5000)`）。
 - 测试在各模块 `src/test`（`*Test`）；时间逻辑用虚拟时间。跑受影响的层，不必每次全量。
+- 提交前门禁三件套：`./gradlew assembleDebug lintDebug testDebugUnitTest --continue`；**lint 必须 0 条**（已从 105 条清零，新增告警就是回归）。Robolectric 模块统一 `src/test/resources/robolectric.properties` 钉 `sdk=36`。
 
 ### 单元测试的三个坑（症状是「卡死」而不是失败，很难查；死锁和 100% CPU 空转都遇到过）
 1. `PlayerManager.play()` 会启动 `while(true){delay()}` 的历史节流与进度轮询，而 `runTest` 收尾自己会调一次 `advanceUntilIdle`，这些无限任务会让它永不返回。**凡触发过播放的测试，必须在 `finally` 里 `player.release()`** —— `@After` 太晚（它在 `runTest` 收尾之后才执行）。断言写在 `release()` 之前时，一旦断言失败就会跳过清理，「失败」就被伪装成「卡死」。
