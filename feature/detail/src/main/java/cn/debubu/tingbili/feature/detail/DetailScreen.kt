@@ -629,7 +629,8 @@ private fun RelatedRow(track: Track, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f).height(68.dp), verticalArrangement = Arrangement.SpaceBetween) {
+        // 最小高度：200% 字体下标题两行会更高，固定 68dp 会裁切（REVIEW_REPORT H-05）
+    Column(modifier = Modifier.weight(1f).heightIn(min = 68.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.bodyMedium,

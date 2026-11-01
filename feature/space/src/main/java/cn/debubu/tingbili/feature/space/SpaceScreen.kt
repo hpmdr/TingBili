@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -588,7 +589,8 @@ private fun UpVideoRow(video: UpVideo, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(
-            modifier = Modifier.weight(1f).height(72.dp),
+            // 最小高度：字体放大时两行标题允许长高（REVIEW_REPORT H-05）
+            modifier = Modifier.weight(1f).heightIn(min = 72.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(

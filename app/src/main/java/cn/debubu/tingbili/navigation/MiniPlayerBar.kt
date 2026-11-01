@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -229,7 +230,8 @@ private fun DismissableBarContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(60.dp)
+                    // 用最小高度而不是固定高度：系统字体放大到 200% 时两行文本需要更多空间（REVIEW_REPORT H-05）
+                    .heightIn(min = 60.dp)
                     .padding(start = 14.dp, end = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

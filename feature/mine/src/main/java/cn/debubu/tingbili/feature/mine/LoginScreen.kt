@@ -69,6 +69,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -124,7 +125,8 @@ fun LoginScreen(
     LaunchedEffect(session) {
         if (session != null) onSuccess()
     }
-    var tab by remember { mutableIntStateOf(QR_TAB) }
+    // 转屏/折叠屏展开/进程重建后保留当前 tab（REVIEW_REPORT C-09）
+    var tab by rememberSaveable { mutableIntStateOf(QR_TAB) }
     DisposableEffect(Unit) {
         onDispose { vm.stopQr() }
     }
@@ -664,9 +666,10 @@ private fun QrContent(vm: LoginViewModel) {
 @Composable
 private fun SmsContent(vm: LoginViewModel) {
     val sms by vm.sms.collectAsStateWithLifecycle()
-    var zone by remember { mutableStateOf("86") }
-    var tel by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
+    // 已输入的手机号/验证码在转屏后不能丢（REVIEW_REPORT C-09）
+    var zone by rememberSaveable { mutableStateOf("86") }
+    var tel by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
     val codeFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     // 发送成功（手机号已过校验）→ 光标自动进验证码框
@@ -788,9 +791,10 @@ private fun SmsContent(vm: LoginViewModel) {
 @Composable
 private fun PasswordContent(vm: LoginViewModel) {
     val passwordUi by vm.password.collectAsStateWithLifecycle()
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var visible by remember { mutableStateOf(false) }
+    // 用户名/密码/明文开关在转屏后保留（REVIEW_REPORT C-09）
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var visible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val working = passwordUi is LoginViewModel.PasswordUi.Working
 
@@ -857,7 +861,8 @@ private fun PasswordContent(vm: LoginViewModel) {
 @Composable
 private fun CookieContent(vm: LoginViewModel) {
     val cookie by vm.cookie.collectAsStateWithLifecycle()
-    var text by remember { mutableStateOf("") }
+    // 粘贴到一半的 Cookie 串在转屏后保留（REVIEW_REPORT C-09）
+    var text by rememberSaveable { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val clipboard = remember(context) {
