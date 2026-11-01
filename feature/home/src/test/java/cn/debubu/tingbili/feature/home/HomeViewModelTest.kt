@@ -1,4 +1,4 @@
-﻿package cn.debubu.tingbili.feature.home
+package cn.debubu.tingbili.feature.home
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.viewModelScope
@@ -156,7 +156,8 @@ class HomeViewModelTest {
         override suspend fun clearAll() {}
     }
 
-    class FakeHomeSnapshotDao : HomeSnapshotDao {
+    // fake 同时实现 DAO 与仓储：VM 用仓储，测试内部逻辑复用同一份状态
+class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.repository.HomeSnapshotRepository {
         var entity: HomeSnapshotEntity? = null
         override suspend fun get(): HomeSnapshotEntity? = entity
         override fun observe(): Flow<HomeSnapshotEntity?> = flowOf(entity)
