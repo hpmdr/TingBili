@@ -269,7 +269,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | F2 | `5f7e281` / `a1732f4` | ✅ | F2a/F2b/F2c/F2d 全部完成，见 §6.2；真机项待验 |
 | F3 | `9cee8c6` / `63a04e6` | 🔄 部分完成 | F3a/F3b/F3c 完成（§6.3）；F3d 方向锁（待拍板）、F3e 沉浸式收敛待做 |
 | F4 | `4d48250` | 🔄 部分完成 | F4b 索引与订阅完成（§6.4）；F4a 重组下沉、F4c 稳定性/派生状态待做 |
-| F5 | `8805950` / `see git log` | 🔄 部分完成 | F5c/F5e/F5f 已做（§6.6）；F5a 仓储层（待用户点头）、F5b Dispatcher 注入、F5d 颜色 token 未做 |
+| F5 | `8805950` / `6635566` / `see git log` | 🔄 部分完成 | F5b/F5c/F5e/F5f 已做（§6.6）；F5a 仓储层（待用户点头）、F5d 颜色 token 未做 |
 | F6 | `see git log` | 🔄 部分完成 | 文档规则回写 + `.gitignore` + Robolectric 配置已做（§6.5）；补 3 个零测试模块的用例、`NavigationTest` 路由集断言未做 |
 
 ### 6.1 F1 实测结果（2026-11-01）
@@ -313,6 +313,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 |---|---|---|
 | F5c 登录页状态（C-09 / P2） ✅ | `LoginScreen` 8 处 `remember` → `rememberSaveable`：当前 tab、短信区手机号/区号/验证码、密码区用户名/密码/明文开关、Cookie 粘贴文本。转屏/折叠屏展开/进程重建后不再丢已输入内容 | 构建/lint/352 单测绿；真机转屏待验 |
 | F5e 大字体适配（H-05 / P2） ✅ | `MiniPlayerBar` 行高 `height(60)`→`heightIn(min=60)`；`DetailScreen` 标题列 `height(68)`→`heightIn(min=68)`；`SpaceScreen` 标题列 `height(72)`→`heightIn(min=72)`。200% 字体下允许长高而不是裁切 | 构建绿；真机 200% 字体走查待做 |
+| F5b 调度器注入（D-07 / P2） ✅ | 新增 `core:data/di/DispatcherModule.kt` 提供 `@Named("ioDispatcher") CoroutineDispatcher`；`AuthRepository`(10 处)、`BiliRepository`(1)、`AppCacheManager`(5)、`HomeViewModel`(2) 的 `withContext(Dispatchers.IO)` / `launch(Dispatchers.IO)` 改为注入的 `io`（构造参数带默认值，测试无需改动） | 构建/lint/352 单测绿；剩余硬编码 `Dispatchers.` 仅 4 处属有意为之（Application 预热 scope、PlayerManager/PlaybackService 的 `Main.immediate` 作用域语义） |
 | F5f 依赖坐标收编（J-05 / P2） ✅ | 版本目录补 10 个别名（coroutines-core/test、serialization-json、lifecycle-viewmodel-compose、navigation-testing、room-testing、okhttp mockwebserver/tls、paging common/testing），11 个 build 文件里的 **47 处硬编码坐标全部替换为 `libs.*`**；校验后 `Implementation("` 命中为 0 | 构建/lint/352 单测绿 |
 
 ### 6.5 F6 部分结果（2026-11-01）
