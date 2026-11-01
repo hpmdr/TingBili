@@ -85,3 +85,74 @@ adb shell am force-stop cn.debubu.tingbili ; adb shell am start -W -n cn.debubu.
 adb logcat | Select-String 'TingBiliAudio|EFFECT_CMD_OFFLOAD|setOffloaded'
 adb shell dumpsys audio | Select-String 'active effect'
 ```
+
+---
+
+## 7. 扩展实测（2026-11-01 16:30–16:55，perfDebug 包）
+
+### 7.1 页面级内存（R8 包，冷启动后逐页前进）
+
+| 页面 | TOTAL PSS | Graphics | Views | 增量 |
+|---|---|---|---|---|
+| 首页（收藏 tab） | **121 MB** | 35 MB | 9 | — |
+| 搜索页（空态） | 119 MB | 35 MB | 11 | −2（首页释放） |
+| 搜索结果列表 | **125 MB** | 36 MB | 14 | +6 |
+| **BV 详情页** | **171 MB** | **81 MB** | 12 | **+46（Graphics +45）** |
+| UP 主页 | 172 MB | 83 MB | 12 | +1 |
+| 返回首页后 | 200 MB | 109 MB | 12 | 继续持有 GPU 缓存 |
+| 10 轮「详情→返回」 | **220 MB** | **105 MB** | 12 | 与 5 轮相同（**平台期**） |
+| 退到后台（UI_HIDDEN） | **107 MB** | **18 MB** | 12 | 缓存全部可回收 |
+
+**结论**：
+
+- 内存增长集中在 **Graphics（GPU 缓冲/硬件位图）**，不是 Java/Native 堆；
+- 5 轮与 10 轮往返数值相同（106MB vs 105MB）→ **是缓存填到上限，不是泄漏**；
+- 退到后台 Graphics 立即从 105MB 掉到 18MB → 系统层面可回收，无泄漏风险；
+- 详情页单页 +45MB 偏大：封面 + 相关推荐封面 + 163 分P 列表（lazy，只组合可见项）+ Compose 过渡层缓冲。低端 4GB 机器会更早触发回收，值得做「图片内存缓存上限」。
+
+### 7.2 debug 包 vs R8 包（同一台机、同场景）
+
+| 构建 | 冷启动首页 | 详情页 |
+|---|---|---|
+| debug（无 R8） | **225 MB** | 292 MB |
+| perfDebug（R8 压缩） | **121 MB** | 171 MB |
+
+> 结论：**内存结论只能看 R8 包**。debug 包 Java 堆/Compose 调试开销会放大 ~1.8 倍，之前用 debug 测出的 224MB 不能当成用户侧数据。
+
+### 7.3 为什么 AAC 只有软解（已查实）
+
+设备 `MediaCodecList` 实测（临时打点，已回滚）：
+
+```
+c2.mtk.mp3.decoder            | hw=true  | sw=false | vendor=true   (audio/mpeg)
+OMX.MTK.AUDIO.DECODER.MP3     | hw=true  | sw=false | vendor=true   (audio/mpeg)
+c2.android.aac.decoder        | hw=false | sw=true  | vendor=false  (audio/mp4a-latm)
+OMX.google.aac.decoder        | hw=false | sw=true  | vendor=false  (audio/mp4a-latm)
+```
+
+vendor 编解码器清单（`/vendor/etc/media_codecs*.xml`）同样显示：MTK 只注册了 **mp3 / alac / wma / adpcm** 的 `c2.mtk.*` 解码器，**没有 AAC 的 MTK 解码器**。
+
+**这不是小米漏适配某个符号，而是 Android 的省电模型决定的**：
+
+- MediaCodec 里的「硬件解码器」主要服务于视频；音频的省电路径是 **audio offload**（把压缩码流直接交给 DSP/ADSP，CPU 不参与解码）；
+- 厂商通常只为少数格式注册音频硬解（此机是 MP3 / ALAC / WMA），AAC 一律走 offload 或 CPU 软解；
+- 所以「关掉杜比后仍然软解」是**预期行为**——AAC 在这台机器上根本没有 MediaCodec 硬解可用，能省电的只有 offload。
+
+### 7.4 offload 为什么仍然不生效（更新结论）
+
+| 证据 | 结果 |
+|---|---|
+| `/vendor/etc/audio_policy_configuration.xml` | 存在 `compress_offload` mixPort（COMPRESS_OFFLOAD / DIRECT / GAPLESS_OFFLOAD）→ **平台支持** |
+| 播放时 HAL 日志 | `EffectMiSound: MiSound_Command EFFECT_CMD_OFFLOAD` + `setOffloaded_l offloaded 0` → **小米 MiSound 音效仍在下发「禁止 offload」** |
+| `dumpsys audio` | `Current active effect: none`（杜比已关，但 MiSound 属于另一条通路） |
+| `AudioManager.getAudioOffloadSupport()` | 反射抛 `NoSuchMethodException` → 该 ROM 改过 framework（旁证，不影响 media3 判断） |
+
+**结论**：关闭「杜比」不够，还需要关掉 MIUI 的「音效 / 耳机音效（MiSound）」总开关；若关掉后仍 `offloaded 0`，则属小米对三方应用的 offload 限制（常见策略），应用侧无法绕过。
+
+## 8. 可选优化建议（未实施）
+
+| 项 | 依据 | 预期收益 | 风险 |
+|---|---|---|---|
+| 给 Coil 内存缓存设显式上限 | 前台 Graphics 峰值 105MB，缓存填满才停 | 低端机峰值内存降 30~60MB | 滚动时图片重解码，略增 CPU |
+| 详情页相关推荐用小档封面 | 详情页单页 +46MB | 详情页 −10~20MB | 视觉略糊 |
+| offload 未生效时在设置页提示 | MiSound/杜比会静默阻止 offload | 用户可自主选择关音效换续航 | 需要检测 offload 是否真正生效 |
