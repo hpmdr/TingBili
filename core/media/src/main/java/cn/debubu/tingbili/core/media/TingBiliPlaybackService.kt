@@ -30,6 +30,11 @@ class TingBiliPlaybackService : MediaSessionService() {
 
     @Inject lateinit var player: Player
     @Inject lateinit var prefs: cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+    companion object {
+        /** 通知点击 → 直达播放页（MainActivity 读取后消费，见 AppRootNavHost） */
+        const val EXTRA_OPEN_PLAYER = "cn.debubu.tingbili.extra.OPEN_PLAYER"
+    }
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var mediaSession: MediaSession? = null
 
@@ -107,7 +112,11 @@ class TingBiliPlaybackService : MediaSessionService() {
         setMediaNotificationProvider(notificationProvider)
         // 点通知/锁屏卡片的「应用」区域要能回到 App：不设 sessionActivity 时默认 contentIntent 是 null（G-13）。
         // 用 getLaunchIntentForPackage 而不是直接引用 MainActivity，避免 core:media 反向依赖 app 模块。
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            // P1：点通知应直达播放页，而不是回到上次的 tab
+            putExtra(EXTRA_OPEN_PLAYER, true)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
         val sessionActivity = launchIntent?.let {
             PendingIntent.getActivity(
                 this,

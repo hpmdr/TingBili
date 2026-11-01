@@ -97,6 +97,9 @@ class MainActivity : ComponentActivity() {
     /** 每进程只提示一次：播放开始时若通知被关，弹一次说明就够，反复弹会烦人 */
     private var notificationHintShown = false
 
+    /** 通知点击要直达播放页：intent 里的标记交给导航消费，消费后复位（避免返回时又被弹一次） */
+    private var openPlayerRequest by mutableStateOf(false)
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) notificationDenied = true
@@ -111,12 +114,25 @@ class MainActivity : ComponentActivity() {
         playerManager.onUiVisible()
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeOpenPlayerExtra(intent)
+    }
+
+    private fun consumeOpenPlayerExtra(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(cn.debubu.tingbili.core.media.TingBiliPlaybackService.EXTRA_OPEN_PLAYER, false) == true) {
+            openPlayerRequest = true
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // 先装启动屏（super 之前），决策完成前不撤：第一帧直接落在正确 Tab，无跳变、无白屏
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         splashScreen.setKeepOnScreenCondition { mainViewModel.startTab.value == null }
         playbackConnection.connect()
+        consumeOpenPlayerExtra(intent)
         // 通知权限延到首 Tab 落定后再要：onCreate 直接弹框会盖住首帧，
         // 且 MediaSession 通知在起播前用不上
         lifecycleScope.launch {
@@ -180,7 +196,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AdaptiveMainScaffold(mainViewModel)
+                    AdaptiveMainScaffold(
+                        mainViewModel = mainViewModel,
+                        openPlayerOnStart = openPlayerRequest,
+                        onOpenPlayerConsumed = { openPlayerRequest = false },
+                    )
                 }
                 if (notificationDenied) {
                     NotificationDeniedDialog(onDismiss = { notificationDenied = false })
@@ -191,7 +211,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
+private fun AdaptiveMainScaffold(
+    mainViewModel: MainViewModel,
+    openPlayerOnStart: Boolean = false,
+    onOpenPlayerConsumed: () -> Unit = {},
+) {
     // null = 首 Tab 还没定：先不画内容，系统启动屏继续盖着。
     // 但 pagerState 必须先创建：否则 Activity 因 IME/弹窗重建时，页面会回到首 Tab。
     val startTab = mainViewModel.startTab.collectAsStateWithLifecycle().value
@@ -291,6 +315,8 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         cn.debubu.tingbili.navigation.MainTabsScaffold(
             navController = navController,
             pagerState = pagerState,
+            openPlayerOnStart = openPlayerOnStart,
+            onOpenPlayerConsumed = onOpenPlayerConsumed,
         )
     }
 }

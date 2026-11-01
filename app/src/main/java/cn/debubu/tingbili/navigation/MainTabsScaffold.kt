@@ -48,6 +48,8 @@ fun MainTabsScaffold(
     navController: NavHostController,
     pagerState: PagerState,
     viewModel: MainViewModel = hiltViewModel(),
+    openPlayerOnStart: Boolean = false,
+    onOpenPlayerConsumed: () -> Unit = {},
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
@@ -87,7 +89,7 @@ fun MainTabsScaffold(
             }
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize(), openPlayerOnStart = openPlayerOnStart, onOpenPlayerConsumed = onOpenPlayerConsumed)
                 // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过
                 if (showMiniPlayer) {
                     MiniPlayerOverlay(
@@ -157,7 +159,7 @@ fun MainTabsScaffold(
             layoutType = if (inTabs) layoutType else NavigationSuiteType.None
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize())
+                AppRootNavHost(navController = navController, pagerState = pagerState, mainViewModel = viewModel, modifier = Modifier.fillMaxSize(), openPlayerOnStart = openPlayerOnStart, onOpenPlayerConsumed = onOpenPlayerConsumed)
                 // 平板壳的 mini 条：订阅下沉到独立 composable，壳体（含 NavHost）不再每 500ms 失效。
                 // 手机分支早已这么修（BottomNavWithCenterPlayer.MiniPlayerSlot），这里是漏掉的同一处（REVIEW_REPORT B-03 / R1）。
                 if (inTabs) {

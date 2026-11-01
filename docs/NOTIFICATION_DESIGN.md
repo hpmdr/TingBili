@@ -29,9 +29,11 @@
 3. **硬件媒体键**：声明 `androidx.media3.session.MediaButtonReceiver`（`MEDIA_BUTTON` intent-filter），服务未起时按键能拉起来。
 4. **事后关闭通知也要提示**：播放开始时若 `areNotificationsEnabled() == false` 且本进程未提示过，弹同一个说明框（复用 A-03 的对话框）。
 
-### P1 下一轮
+### P1 已实现（代码已进 `master`，**真机待验证**）
 
-5. **通知点击直达播放页**：`sessionActivity` 的 Intent 带 `openPlayer=true`，`MainActivity` 透传给导航，`AppRootNavHost` 消费后 `navigate(PlayerRoute)`；同时处理 `onNewIntent`（App 已在前台时点击）。
+5. **通知点击直达播放页**：`sessionActivity` 的 Intent 带 `EXTRA_OPEN_PLAYER`（`FLAG_ACTIVITY_SINGLE_TOP|CLEAR_TOP`）→ `MainActivity.onCreate/onNewIntent` 读到后置 `openPlayerRequest` → 透传 `AdaptiveMainScaffold → MainTabsScaffold → AppRootNavHost` → 在 **MainTabsRoute 内容内部**的 `LaunchedEffect` 里 `navigate(PlayerRoute)` 并复位标记。
+   - 关键点：effect 不能放在 `NavHost` 之前——冷启动构图时导航图还没挂上，`navigate` 会失败（实测：extra 已读到但页面不动）。放进 Tab 容器内部后图必然就绪。
+   - ⚠️ **验证状态**：代码已通过构建/lint/单测；真机验证时设备被锁屏，未能完成点击链路确认，下次解锁后补。
 
 ### P2 记录不实现
 
