@@ -156,3 +156,43 @@ vendor 编解码器清单（`/vendor/etc/media_codecs*.xml`）同样显示：MTK
 | 给 Coil 内存缓存设显式上限 | 前台 Graphics 峰值 105MB，缓存填满才停 | 低端机峰值内存降 30~60MB | 滚动时图片重解码，略增 CPU |
 | 详情页相关推荐用小档封面 | 详情页单页 +46MB | 详情页 −10~20MB | 视觉略糊 |
 | offload 未生效时在设置页提示 | MiSound/杜比会静默阻止 offload | 用户可自主选择关音效换续航 | 需要检测 offload 是否真正生效 |
+
+## 9. 补充：图片缓存与封面尺寸（2026-11-01 19:00）
+
+### 9.1 Coil 内存缓存默认值
+
+- 版本：**Coil 3.6.3**；我们只自定义了磁盘缓存（`ImageLoader.Builder.diskCache`），**没有显式设置内存缓存**。
+- Coil 3 默认内存缓存 = `maxSizePercent(0.25)`，即 **应用可用内存的 25%**（按 `Runtime.maxMemory()` 计算）。
+- 本机 `dalvik.vm.heapsize = 512m` → 默认上限约 **128MB**。这与实测 Graphics 平台期（~105MB）同量级，基本可以认定详情页那 +45MB 的 Graphics 主要就是**图片内存缓存被填满 + 页面切换缓冲**，不是单张封面。
+
+> 若要压峰值：给 `ImageLoader` 显式设 `memoryCache { maxSizeBytes(64.memory) }`（或 `maxSizePercent(0.1)`），代价是滚动时少量重解码。
+
+### 9.2 封面尺寸：详情页与播放页一致，单张只有 2MB
+
+| 位置 | 档位 | 尺寸 | ARGB_8888 大小 |
+|---|---|---|---|
+| 详情页主封面 | `LargeCover` | 960×540 | **≈2.07MB** |
+| 播放页主封面 | `LargeCover` | 960×540 | ≈2.07MB |
+| 详情页相关推荐封面 | `ListThumb` | 480×270 | ≈0.52MB |
+| UP 头像 | `Avatar` | 96×96 | ≈0.04MB |
+
+所以「详情页 +45MB」不可能是一张封面造成的：单张 2MB，相关推荐可见项几张 0.5MB，剩余全是缓存填充与 Compose/SurfaceFlinger 的缓冲（全屏 1220×2712×4 ≈ 13MB/张）。
+
+### 9.3 音效改「原声」后 offload 仍未生效
+
+用户操作后确认：`UiAutomator` 抓到的 MiSound 页面文本为「音效选择 → **原声**」；HAL 侧 `MisoundEnable=0`。
+
+但播放时日志仍是：
+
+```
+DlbVolumeListener: effectCommand :: Command EFFECT_CMD_OFFLOAD offload=0 ioHandle=21
+EffectModule: setOffloaded_l offloaded 0 io 21 status 0
+EffectMiSound: MiSound_Command EFFECT_CMD_OFFLOAD
+TingBiliAudio: audioDecoder=c2.android.aac.decoder
+```
+
+即：**效果模块仍挂在输出流上并否决 offload**（原声 ≠ 移除效果模块）。CPU 实测 18.5%~29.6%（5 次采样），未下降。
+
+**更正 §7.4 一处**：之前说「`AudioManager.getAudioOffloadSupport()` 反射不到」是我用错了签名——media3 在 SDK≥33 上用的是**两参重载** `getAudioOffloadSupport(AudioFormat, AudioAttributes)`，我反射的是一参版本。这条不能作为「ROM 删了 API」的证据，撤回。
+
+**结论**：offload 被小米音频效果链阻塞，属系统侧限制；应用侧已正确下发 `AudioOffloadPreferences.ENABLED`。若要进一步确认，可做对照实验：用第三方播放器播同一首歌，看 HAL 是否同样 `offloaded 0`。
