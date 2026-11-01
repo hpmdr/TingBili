@@ -16,6 +16,16 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 全量 `./gradlew testDebugUnitTest` 很重，留给 CI 跑。CI 流程看 `.github/workflows/ci.yml`。
 版本号统一在 `gradle/libs.versions.toml` 维护，别处不要硬编码。
 
+**构建变体怎么选**（别拿 R8 包做日常验证，慢 5~8 倍）：
+
+| 变体 | 混淆 | 用途 | 增量耗时 |
+|---|---|---|---|
+| `assembleDebug` / `installDebug` | 否 | **真机功能验证、日常调试默认用它** | ~20s |
+| `assemblePerfDebug` | 是（R8 + 资源收缩，debug 签名） | 只在改了 `proguard-rules.pro` / 依赖 / 序列化与反射点，或要验「压缩后能否正常跑」时用 | ~2.5min |
+| `assembleRelease` | 是 | 发版；需签名配置与 Secrets | — |
+
+`perfDebug` 存在的意义是「不碰发版签名也能测 R8 路径」，CI 只跑冒烟（`lintDebug` 之外的一步），**不要用它跑功能验证**。
+
 ## 地图
 
 - 模块清单以 `settings.gradle.kts` 为准（`app` + `core:*` + `data:bilibili` + `feature:*`）。
