@@ -368,4 +368,33 @@ class BiliRepositoryTest {
         assertTrue(repo.getViewDetail("BV7", forceRefresh = true) is Result.Success)
         assertEquals(2, server.requestCount)
     }
+
+    @Test
+    fun `getBiliHistory returns DTO with cursor fields`() = runTest {
+        // F5a 把该方法从「返回映射后的列表」改成「返回 DTO」：翻页游标必须保留在 DTO 里，
+        // 否则上拉永远拿 max=0（这是它在改造前无人调用、也翻不了页的原因）。
+        server.enqueue(
+            MockResponse().setBody(
+                """{"code":0,"data":{"cursor":{"max":1700000000,"view_at":1700000100,"business":"archive"},"list":[{"title":"t1","author_name":"up","view_at":1700000100,"history":{"oid":111,"bvid":"BV1","cid":22}}]}}"""
+            ).setResponseCode(200).addHeader("Content-Type", "application/json")
+        )
+        val r = repo.getBiliHistory(ps = 20, max = 0L, viewAt = 0L)
+        assertTrue("期望 Success，实际 $r", r is Result.Success)
+        val dto = (r as Result.Success).data
+        assertEquals(1, dto.data?.list?.size)
+        assertEquals(111L, dto.data?.list?.first()?.history?.oid)
+        // 游标不在 cursor 对象里：DTO 只给 list，翻页用「最后一条的 oid + viewAt」，所以要确保这两项能取到
+        assertEquals(1700000100L, dto.data?.list?.first()?.viewAt)
+    }
+
+    @Test
+    fun `getBiliHistory returns Error on non-zero code`() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"code":-101,"message":"账号未登录","data":null}""")
+                .setResponseCode(200).addHeader("Content-Type", "application/json")
+        )
+        val r = repo.getBiliHistory(max = 0L, viewAt = 0L)
+        assertTrue(r is Result.Error)
+        assertEquals("账号未登录", (r as Result.Error).msg)
+    }
 }
