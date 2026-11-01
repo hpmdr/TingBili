@@ -196,3 +196,37 @@ TingBiliAudio: audioDecoder=c2.android.aac.decoder
 **更正 §7.4 一处**：之前说「`AudioManager.getAudioOffloadSupport()` 反射不到」是我用错了签名——media3 在 SDK≥33 上用的是**两参重载** `getAudioOffloadSupport(AudioFormat, AudioAttributes)`，我反射的是一参版本。这条不能作为「ROM 删了 API」的证据，撤回。
 
 **结论**：offload 被小米音频效果链阻塞，属系统侧限制；应用侧已正确下发 `AudioOffloadPreferences.ENABLED`。若要进一步确认，可做对照实验：用第三方播放器播同一首歌，看 HAL 是否同样 `offloaded 0`。
+
+## 10. 结论：AAC「无硬解」是平台常态，不是本机/本应用缺陷（2026-11-01 19:10）
+
+### 10.1 本机 SoC
+
+```
+ro.soc.model       = MT6897        (MediaTek Dimensity 8300)
+ro.soc.manufacturer= Mediatek
+```
+
+### 10.2 联发科官方规格页没有「音频解码」这一项
+
+抓取并比对了两代产品页：
+
+- `mediatek.com/products/smartphones/mediatek-dimensity-8300`
+- `mediatek.com/products/smartphones/mediatek-dimensity-9400-plus`
+
+两页的规格表只列：CPU/GPU、**视频解码（HEVC/AVC/VP9/AV1）**、视频编码、显示、相机、AI、连接。**没有任何 Audio codec / 音频硬解 / AAC 条目**。
+
+这正好解释了实测现象：音频硬解不由 SoC 规格承诺，MediaCodec 里的音频解码器由厂商按需注册（本机注册了 MP3/ALAC/WMA，没有 AAC），AAC 由 AOSP 软件解码器承担。
+
+### 10.3 跨设备验证
+
+用户另一台 **天玑 9400+** 手机播放同一类内容**同样只有软解**。结合 10.2，可确认：
+
+> **Android 上「AAC 走 CPU 软解」是正常形态；省电只能靠 audio offload（把压缩流交给 DSP），而不是 MediaCodec 硬解。** 本机与 9400+ 表现一致，说明这不是小米/联发科对某个型号的缺陷，更不是 TingBili 的代码问题。
+
+### 10.4 对本项目的可行动项
+
+| 能做 | 说明 |
+|---|---|
+| 给 Coil 内存缓存设上限 | 压前台峰值内存（§9.1） |
+| 设置页提示 offload 未生效 | 当前被 MiSound 效果链阻塞（§9.3），提示用户可关系统音效 |
+| 不做 | 无法通过应用代码让 AAC 走「硬解」（硬件路径不存在）；也无法绕过 ROM 对 offload 的 veto |
