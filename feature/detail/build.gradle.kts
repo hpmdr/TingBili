@@ -42,6 +42,15 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.material.icons.extended)
+
+    // 该模块原本零测试：与 feature:history 对齐的最小测试栈
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.arch.core.testing)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.datastore.preferences)
+    testImplementation(libs.media3.exoplayer)
 }
 
 kotlin {
