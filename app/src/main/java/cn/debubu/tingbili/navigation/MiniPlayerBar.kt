@@ -288,7 +288,7 @@ private fun DismissableBarContent(
                         FilledTonalIconButton(
                             onClick = onToggle,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(48.dp)
                                 .testTag("miniPlayPause"),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,

@@ -533,7 +533,8 @@ private fun HistoryChip(
             )
             IconButton(
                 onClick = onRemove,
-                modifier = Modifier.size(28.dp)
+                // 触控目标按无障碍最小值 48dp（REVIEW_REPORT H-02）；图标本身仍是 14dp
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Clear,

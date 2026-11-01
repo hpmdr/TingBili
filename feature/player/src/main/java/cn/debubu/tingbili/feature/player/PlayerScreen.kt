@@ -1003,13 +1003,14 @@ private fun PlaybackProgressBar(
             )
         }
 
-        // 自绘进度线：M3 Slider 自带 44dp 触控高度，线始终离上方文字一大截。
-        // 这里用 22dp 触控区、线画在顶部 5dp，让时间数字紧贴进度线。
+        // 自绘进度线：线仍画在顶部 5dp（时间数字紧贴进度线，视觉与原来一致），
+        // 但可点/可拖区域从 22dp 提到 48dp——无障碍最小触控目标（REVIEW_REPORT H-02）。
+        // 多出来的高度在线的下方，由下方歌词区的 weight 吸收。
         val canSeek = enabled && safeDuration > 0L
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(22.dp)
+                .height(48.dp)
                 .semantics {
                     if (canSeek) {
                         progressBarRangeInfo = ProgressBarRangeInfo(shownRatio, 0f..1f)

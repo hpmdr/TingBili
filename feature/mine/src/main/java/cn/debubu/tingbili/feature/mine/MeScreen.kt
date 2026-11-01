@@ -382,15 +382,28 @@ private fun MeHeader(
 
 @Composable
 private fun HeaderIconButton(icon: ImageVector, darkTheme: Boolean, onClick: () -> Unit) {
+    // 视觉仍是 34dp 圆形，点击区按 48dp 铺开（REVIEW_REPORT H-01/H-02）
     Box(
         modifier = Modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(if (darkTheme) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.12f))
+            .size(48.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(if (darkTheme) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                // 读屏必须能说出这个按钮干什么（原来 contentDescription = null，TalkBack 读作无名按钮）
+                contentDescription = if (darkTheme) "切换到浅色模式" else "切换到深色模式",
+                tint = Color.White,
+                modifier = Modifier.size(17.dp),
+            )
+        }
     }
 }
 
