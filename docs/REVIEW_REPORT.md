@@ -819,3 +819,60 @@
 | `temp/recon/*.md` | 侦察阶段 4 份材料（含官方规范来源清单 30 项） |
 
 > 所有 `temp/` 材料不入库；`git status` 只有 `docs/` 下两份文档。
+
+---
+
+## 9. 执行后复核（闭环，2026-11-01）
+
+> 本节是报告出具后按 `docs/FIX_PLAN.md` 执行完 F1–F6 的复核结果；**原始结论保持为基线快照**，本节只记录「改了什么、还剩什么」。
+> 基线：`2900f56` → 复核时 HEAD：`e2a421c`（26 个提交）。
+
+### 9.1 指标对照
+
+| 指标 | 审查时（基线） | 复核时 | 证据 |
+|---|---|---|---|
+| `lintDebug` | 105 条（80 Error），跑一次中断构建 | **0 条**（13 模块 errors=0 warnings=0），已进 CI | `lint.xml` + 各模块 0 命中 |
+| CI 实际执行单测 | 19/50 文件、137/346 用例 | **360 用例全跑**（13 模块 `--continue`） | `testDebugUnitTest` |
+| 主线程读 DataStore | 3 处 `runBlocking` | 0（预热 + 内存镜像 + 80ms 有界兜底） | `PreferencesRepository.prime/cacheMaxMbNow` |
+| 播放页 1Hz 整页重组 | 顶层 collect `progUi` | 订阅下沉到 3 个叶子组件 | `ProgressBarSection`/`PlayerAuxBarSection`/`SleepTimerSheetSection` |
+| 平板壳 2Hz 整树失效 | `MainTabsScaffold` 同作用域读 tick | 下沉到 `TabletMiniPlayer` | `MainTabsScaffold.kt` |
+| 硬编码依赖坐标 | 47 处 | **0** | `Implementation("` 命中 0 |
+| 硬编码 IO 调度器 | 19 处（可注入 0） | 0（4 类改为注入，余 4 处为语义必需） | `DispatcherModule` |
+| 数据库索引 | 历史/收藏表无索引 | 3 个索引，DB v16 | `HistoryDao`/`FavoriteEntities`/`TingBiliDatabase` |
+| 触控目标 <48dp | 4 处 | 0 | 播放进度条/Me/Home/mini |
+| 零测试模块 | 3 个（detail/space/bili-ui） | 1 个（space 已补 6 例） | `SpaceViewModelTest` |
+| 路由测试覆盖 | 11/21 且无守卫 | 21/21 + 元测试守卫 | `RouteCoverageTest` |
+
+### 9.2 P0 / P1 复核
+
+| 编号 | 结论 | 状态 | 提交 / 说明 |
+|---|---|---|---|
+| **D-08 / B-01**（P0）主线程 `runBlocking` 读 DataStore | 违规 | ✅ 已修 | `5f7e281`；预热 + 镜像 + 有界兜底 |
+| **I-01** CI 测试回退永不触发 | 违规 | ✅ 已修 | `2a714cc`；改 `--continue` 全量，门禁真实覆盖 360 例 |
+| **I-02** 无 lint/静态分析门禁 | 违规 | ✅ 已修 | `2a714cc` + `lint.xml`；lint 0 并进 CI |
+| **B-03 / C-14** 播放页与平板壳 1–2Hz 重组 | 违规（回归） | ✅ 已修 | `e36502a`；真机重组计数待复核 |
+| **B-02** 启动首帧门禁查 Room | 违规 | ✅ 已修 | `a1732f4`；偏好标记 + 一次性回填 |
+| **G-12** 先起服务后起播（5s 被杀） | 违规 | ✅ 已修 | `5f7e281`；删除手动 `startForegroundService`，交给 Media3 |
+| **F-07** WebView 混合内容 + 桥无校验 | 违规 | ✅ 已修 | `9cee8c6`；**真机登录待验** |
+| **H-02** 触控目标 <48dp（4 处） | 违规 | ✅ 已修 | `63a04e6`；真机触控待验 |
+| **C-13** 稳定性注解/编译器报告缺失 | 部分合规 | ⏸ 未做（有理由） | strong skipping 已兜底；编译器报告在 AGP9 内置 Kotlin 下未产出，盲加注解风险大于收益（详见 FIX_PLAN §6.4） |
+| **D-01** feature VM 直连 DAO/`BiliApi` | 违规 | ⏸ 未做（等拍板） | 需改 7 个 VM + 10 多个测试，属结构性重构，F5a |
+| **E-07** 历史/收藏索引缺失（P2 但影响 P1 现象） | 违规 | ✅ 已修 | `4d48250`；真机 SQL 耗时待测 |
+
+### 9.3 仍然开放的事项（及原因）
+
+| 事项 | 原因 | 解除条件 |
+|---|---|---|
+| 全部真机验证（8 批改动） | 测试设备锁屏/Doze，未擅自安装唤醒 | 用户解锁并授权装机 |
+| F3d 方向锁（A-02 / J-08） | 产品取舍：删 `portrait` 还是保留 + 文档说明 | 用户拍板 |
+| F3e 沉浸式 API 收敛（J-09） | 历史上 HyperOS 黑条，必须逐页真机看 | 有设备时执行 |
+| F5a 仓储层（D-01） | 触碰面最大的一批（7 VM + 10 测试） | 用户确认后执行 |
+| F5d 颜色 token（C-12，49 行硬编码色） | 视觉回归必须真机复核 | 有设备时执行 |
+| F4c `@Immutable` | 缺少编译器报告做量化 | Compose 编译器报告可用后 |
+| F6 `feature:detail` 补测 | 需搭 ~100 行 `PlayerManager`/`BiliRepository` 脚手架 | 可随时执行（纯工作量） |
+
+### 9.4 复核结论
+
+- **所有 P0/P1 中，除 D-01（结构性，待拍板）与 C-13（工具链受限）外，全部修复并进门禁**。
+- **规范类问题已从「靠自觉」变成「靠门禁」**：lint 0 + 360 用例 + 路由守卫 + 破坏性升级/索引规则写进 `AGENTS.md`。
+- **未上机验证是当前最大风险**：8 批改动涉及播放服务启动方式、启动落地页、登录链路、触控与字体适配，静态证据充分但缺真机回归。
