@@ -266,7 +266,7 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 |---|---|---|---|
 | F0 | `bf2918f` | ✅ | 基线：debug APK 85.0 MB / perfDebug 6.53 MB / 活跃模块 352 个用例 / lint 105 条（80 Error，其中 78 条 media3 `@UnstableApi`） |
 | F1 | `2a714cc` | ✅ | 见 §6.1 |
-| F2 | — | ⏳ | |
+| F2 | `see git log` | 🔄 部分完成 | F2a/F2c/F2d 已完成（见 §6.2）；F2b 启动首帧门禁留待下一轮 |
 | F3 | — | ⏳ | |
 | F4 | — | ⏳ | |
 | F5 | — | ⏳ | |
@@ -287,3 +287,14 @@ Get-Item app/build/outputs/apk/debug/app-debug.apk, app/build/outputs/apk/perfDe
 | 文档 | 三份文档三套版本口径、与代码冲突 | CONVENTIONS / DEVELOPMENT / AGENTS 已止血（版本以 toml 为准、SDK 37、历史模型、登录现状、破坏性迁移新决策） | `git show 2a714cc -- docs AGENTS.md` |
 
 > 遗留（不在 F1 范围）：`feature:search` / `feature:playlist` 的本地 `build/` 残留会让测试计数多出 5 个旧用例，已删除本地目录（build/ 不入库）。
+
+### 6.2 F2 实测结果（2026-11-01，部分完成）
+
+| 子项 | 改法 | 验收 |
+|---|---|---|
+| F2a 三处主线程 `runBlocking`（P0 / D-08） | `PreferencesRepository` 增加 `@Volatile` 内存镜像 + `prime()` 预热；`TingBiliApp.onCreate` 在 IO 线程预热；`AudioCacheModule`/`ServicePlayerModule`/`Coil ImageLoader` 改读 `cacheMaxMbNow()` / `audioOffloadNow()`（镜像缺失才 80ms 有界兜底，读失败落默认） | 构建绿、lint 0、`PlayerManagerTest` 等 352 用例全绿；构造期不再无条件读盘 |
+| F2c 前台服务时序（G-12） | 删除 3 处手动 `startForegroundService`（`play`/`rebuildTransport`/`PlaybackConnection.ensureServiceStarted` 死方法），改由 Media3 在真正起播时自行拉起并 `startForeground`；`PlayerManagerTest` 的旧断言改成锁新契约 | 单测锁定「play() 不再手动起服务」；真机后台起播待验证 |
+| F2d MediaSession（G-13 / G-09） | `setSessionActivity(getLaunchIntentForPackage)`（点通知回 App，且不让 core:media 反向依赖 app）；`MediaController.Listener.onDisconnected` 清空引用并允许重连；`future.get()` 包 `runCatching` | 单测绿；点通知回 App、服务被杀后重连待真机 |
+| F2b 启动首帧门禁（B-02） | **未完成**：需要给 DataStore 加 `hasFavoriteEver` 标记并在收藏写路径置位（会动 `DefaultFavoritesRepository` 构造与 8 处测试），留待下一轮 | — |
+
+> 真机待验（设备已连接但处于锁屏/Doze，未擅自唤醒）：后台起播不被杀、点通知回到 App、`am force-stop` 后重进可重连。
