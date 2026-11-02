@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.ExoPlayer
@@ -63,6 +64,14 @@ class TingBiliPlaybackService : MediaSessionService() {
                 override fun onOffloadedPlayback(offloadedPlayback: Boolean) {
                     Log.i("TingBiliAudio", "offloadedPlayback=$offloadedPlayback")
                     AudioPipelineMonitor.onOffloadedPlaybackChanged(offloadedPlayback)
+                }
+            })
+            // 切歌即清 offload 粘性标记：新的一轨要等新的 offload/decoder 回调重建证据，
+            // 否则上一轨的 true 会漏到下一轨（CPU 解码 + 解码器复用时无 init 回调纠正）。
+            // decoderName 故意保留（复用场景下名字不变，清掉就补不回来）。
+            (player as ExoPlayer).addListener(object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    AudioPipelineMonitor.onNewTrack()
                 }
             })
             (player as ExoPlayer).addAnalyticsListener(object : AnalyticsListener {

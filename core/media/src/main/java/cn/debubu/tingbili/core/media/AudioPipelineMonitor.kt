@@ -67,9 +67,23 @@ object AudioPipelineMonitor {
         // offload 状态由 onOffloadSleepingChanged / onOffloadedPlayback / onAudioDecoderInitialized 自行维护。
     }
 
-    /** 清空"本轨"相关的判定（切轨、停止播放、单测复位） */
+    /**
+     * 切到新的一轨（Service 侧 onMediaItemTransition 调用）。
+     * 只清 offload 三件套、保留 decoderName：解码器复用时不会再回调
+     * onAudioDecoderInitialized，一清就永远补不回来（e210946 的教训）；
+     * 换新解码器的场景下 onDecoderInitialized 会随后更新名字并重建证据。
+     */
+    fun onNewTrack() {
+        offloadSleepingState.value = false
+        offloadedPlaybackState.value = false
+        offloadEverActiveState.value = false
+    }
+
+    /** 清空"本轨"相关的判定（停止播放、单测复位）；underrun 累计不清零（各处用 delta 消费）。 */
     fun resetTrackState() {
         decoderNameState.value = null
+        offloadSleepingState.value = false
+        offloadedPlaybackState.value = false
         offloadEverActiveState.value = false
     }
 }
