@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
+import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import cn.debubu.tingbili.core.data.db.DEFAULT_FOLDER_ID
 import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -90,6 +92,8 @@ class PlayerViewModel @Inject constructor(
     private val favoritesRepository: FavoritesRepository,
     /** 字幕管线 IO 调度器（`PlayerModule` 提供 IO；单测传入 StandardTestDispatcher 保虚拟时间确定性） */
     @Named("subtitleIo") private val subtitleIo: CoroutineDispatcher = Dispatchers.IO,
+    /** 网络恢复时字幕 Error 态自动重拉（只认断网失败的粘滞标记，不碰其他状态）。放最后：前面全有默认值的历史包袱，positional 调用方不受影响。 */
+    private val networkMonitor: NetworkMonitor = AlwaysOnlineNetworkMonitor,
 ) : ViewModel() {
 
     /** 点击瞬间的播放位置：直接读 StateFlow.value，不建立组合订阅（避免把 1Hz 进度拖进整页重组） */
@@ -154,6 +158,14 @@ class PlayerViewModel @Inject constructor(
     /** 字幕失败重试计数：+1 即按当前曲目重走一遍 */
     private val _subtitleRetryTick = MutableStateFlow(0)
 
+    /**
+     * 字幕是否停在断网失败上：Error 发射点置位，Ready/Empty 清零，Loading 不动
+     *（加载中被断网打断时，失败稍后才到，网络恢复事件不能提前消费掉）。
+     * 写在 subtitleIo、读在 Main，volatile 保可见性（与 BiliMediaResolvers 同例）。
+     */
+    @Volatile
+    private var subtitleFailed = false
+
     fun retrySubtitles() {
         _subtitleRetryTick.value += 1
     }
@@ -185,10 +197,14 @@ class PlayerViewModel @Inject constructor(
                         }
                         if (cachedHit && cached.isFresh()) return@flow
                         when (val tr = subtitles.tracksResult(track.bvid, track.cid)) {
-                            is Result.Error -> if (cached == null) emit(SubState(status = SubtitleLoadState.Error))
+                            is Result.Error -> if (cached == null) {
+                                subtitleFailed = true
+                                emit(SubState(status = SubtitleLoadState.Error))
+                            }
                             is Result.Success -> {
                                 val tracks = tr.data
                                 if (tracks.isEmpty()) {
+                                    subtitleFailed = false
                                     emit(SubState(status = SubtitleLoadState.Empty))
                                 } else {
                                     val safeIdx = idx.coerceIn(0, (tracks.size - 1).coerceAtLeast(0))
@@ -196,11 +212,16 @@ class PlayerViewModel @Inject constructor(
                                     val lr = chosen?.let { subtitles.linesResult(it.url) }
                                     if (lr is Result.Success && lr.data.isNotEmpty()) {
                                         subtitles.store(track.bvid, track.cid, tracks, safeIdx, lr.data, chosen!!.displayLabel, chosen.isAi)
+                                        subtitleFailed = false
                                         emit(SubState(tracks, safeIdx, lr.data, chosen.displayLabel, chosen.isAi, SubtitleLoadState.Ready))
                                     } else if (lr is Result.Error) {
-                                        if (cached == null) emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Error))
+                                        if (cached == null) {
+                                            subtitleFailed = true
+                                            emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Error))
+                                        }
                                     } else {
                                         // 正文为空按没字幕处理，label 也不带（与 getSubtitle 语义一致）
+                                        subtitleFailed = false
                                         emit(SubState(tracks, safeIdx, status = SubtitleLoadState.Empty))
                                     }
                                 }
@@ -216,6 +237,17 @@ class PlayerViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             trackFlow.collect { selectedSubtitleIndex.value = 0 }
+        }
+        // 网络断开→恢复且字幕正粘在失败上：等价手动点一次卡片重试（同一入口，不开第二链路）。
+        // 只认 subtitleFailed：登录态/空字幕/加载中都不动；combine 里没有网络因子就永远粘住，
+        // 这就是之前"恢复正常了错误提示一直显示"的根因。
+        viewModelScope.launch {
+            var wasOnline: Boolean? = null
+            networkMonitor.isOnline.collect { online ->
+                val prev = wasOnline
+                wasOnline = online
+                if (prev == false && online && subtitleFailed) retrySubtitles()
+            }
         }
         viewModelScope.launch {
             runCatching { favoritesRepository.ensureDefaultFolder() }

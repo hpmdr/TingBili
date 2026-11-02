@@ -35,7 +35,8 @@ class PlaybackEventHandler(
         fun onPlayerStateChanged(buffering: Boolean)
         /** 播放器位置不连续（seek/切章/自动跳变）：调用方按播放器位置立即对表。 */
         fun onPositionDiscontinuity() {}
-        fun onFatalError(message: String?)
+        /** error 为触发本次 fatal 的原始异常（重试耗尽时同样透传，便于调用方做断网分类）；纯本地失败为 null。 */
+        fun onFatalError(message: String?, error: PlaybackException? = null)
         fun onRetryStarted()
         /** 执行一次刷新恢复（解析→替换→prepare→seek→play），调用方返回结果。 */
         suspend fun onRetryRecover(): RecoverResult
@@ -53,8 +54,12 @@ class PlaybackEventHandler(
     var retryCount = 0
         private set
 
+    /** 最近一次播放器错误的原始异常：fatal 时透传给调用方做断网分类（成功/切歌即清）。 */
+    private var lastError: PlaybackException? = null
+
     fun resetRetry() {
         retryCount = 0
+        lastError = null
     }
 
     fun attach(scope: CoroutineScope, listener: Listener) {
@@ -94,8 +99,9 @@ class PlaybackEventHandler(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                lastError = error
                 if (!pipeline.isRecoverable(error) || retryCount >= MAX_URL_REFRESH_RETRY) {
-                    listener.onFatalError(friendlyMessage(error))
+                    listener.onFatalError(friendlyMessage(error), lastError)
                     return
                 }
                 retryCount++
@@ -105,7 +111,7 @@ class PlaybackEventHandler(
                     delay(1000L * retryCount)
                     when (val r = listener.onRetryRecover()) {
                         is RecoverResult.Recovered -> Unit // 调用方已接管（isLoading/重排主动刷新）
-                        is RecoverResult.Failed -> listener.onFatalError(r.message)
+                        is RecoverResult.Failed -> listener.onFatalError(r.message, lastError)
                     }
                 }
             }

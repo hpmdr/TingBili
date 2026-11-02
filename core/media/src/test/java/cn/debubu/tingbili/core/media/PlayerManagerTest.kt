@@ -11,6 +11,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +79,8 @@ class PlayerManagerTest {
             mediaItems = mediaItems.toMutableList().also { if (index in it.indices) it.removeAt(index) }
         }
         override fun prepare() {}
-        override fun play() { _isPlaying = true }
+        var playCalls = 0
+        override fun play() { _isPlaying = true; playCalls++ }
         override fun pause() { _isPlaying = false }
         override fun seekTo(positionMs: Long) {
             seekDelta = positionMs - _pos
@@ -1064,46 +1066,118 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `network restore auto retries resolve failure`() = runTest {
+    fun `network restore auto retries connectivity playback error`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
-        // 先断网再失败：模拟深夜省电断网导致的直链解析失败
         fakeNetwork.setOnline(false)
         runCurrent()
-        fakePlayer.failSetMediaItems = true
-        fakePlayer.failErrorMessage =
-            "${AudioUrlResolver.RESOLVE_FAILED_MARK}（可能触发风控），请稍后再试"
         playerManager.play(tracks, 0)
         runCurrent()
-        assertTrue(playerManager.state.value.errorMessage != null)
-        assertFalse(fakePlayer.isPlaying)
-        // 网络恢复前不自动重试；恢复后重走 playAt 同一入口，从头播本集并清掉旧错
-        fakePlayer.failSetMediaItems = false
+        assertEquals(null, playerManager.state.value.errorMessage)
+        // 深夜断网：直链超时，播放器经两次退避重试仍失败，转 fatal（带断网 cause）
+        val cause = java.io.IOException(
+            "$CONNECTIVITY_MARK，请检查网络后重试",
+            java.net.UnknownHostException("dns"),
+        )
+        val error = androidx.media3.common.PlaybackException(
+            "Source error",
+            cause,
+            androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        )
+        fakePlayer.storedListener?.onPlayerError(error)
+        advanceTimeBy(1100L)
+        runCurrent()
+        fakePlayer.storedListener?.onPlayerError(error)
+        advanceTimeBy(2100L)
+        runCurrent()
+        fakePlayer.storedListener?.onPlayerError(error)
+        runCurrent()
+        assertTrue(playerManager.state.value.errorMessage?.contains(CONNECTIVITY_MARK) == true)
+        val base = fakePlayer.playCalls
+        // 网络恢复 → 自动 playAt 同一入口（transport.play 被多调一次），从头播本集并清掉旧错；手动未介入
         fakeNetwork.setOnline(true)
         runCurrent()
-        assertTrue(fakePlayer.isPlaying)
+        assertTrue(fakePlayer.playCalls > base)
         assertEquals(null, playerManager.state.value.errorMessage)
         playerManager.release()
     }
 
     @Test
-    fun `network restore ignores non-resolve errors`() = runTest {
+    fun `network restore ignores non-connectivity errors`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
         fakeNetwork.setOnline(false)
         runCurrent()
-        // 非音源解析失败（比如服务未就绪）：网络恢复也不该自动重试
-        fakePlayer.failSetMediaItems = true
-        fakePlayer.failErrorMessage = "播放服务未就绪，请重试"
         playerManager.play(tracks, 0)
         runCurrent()
+        // 解码器挂了：网络恢复也修不好，不该自动重试
+        val error = androidx.media3.common.PlaybackException(
+            "Decoder failed",
+            null,
+            androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        )
+        fakePlayer.storedListener?.onPlayerError(error)
+        runCurrent()
         assertTrue(playerManager.state.value.errorMessage != null)
-        fakePlayer.failSetMediaItems = false
+        val base = fakePlayer.playCalls
         fakeNetwork.setOnline(true)
         runCurrent()
-        assertFalse(fakePlayer.isPlaying)
+        assertEquals(base, fakePlayer.playCalls)
+        assertTrue(playerManager.state.value.errorMessage != null)
+        playerManager.release()
+    }
+
+    @Test
+    fun `network restore stops after max attempts`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        fakeNetwork.setOnline(false)
+        runCurrent()
+        playerManager.play(tracks, 0)
+        runCurrent()
+        val base = fakePlayer.playCalls
+        // 每次恢复都重试、每次都失败：3 次后停手，等用户手动（Phase 3 弹窗接管）。
+        // 用"不可 handler 重试但认断网"的错误直达 fatal，专注计数逻辑本身。
+        repeat(3) { round ->
+            val cause = java.io.IOException(
+                "$CONNECTIVITY_MARK，请检查网络后重试",
+                java.net.UnknownHostException("dns"),
+            )
+            fakePlayer.storedListener?.onPlayerError(
+                androidx.media3.common.PlaybackException(
+                    "Source error",
+                    cause,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+                ),
+            )
+            runCurrent()
+            fakeNetwork.setOnline(true)
+            runCurrent()
+            assertEquals(base + round + 1, fakePlayer.playCalls)
+            fakeNetwork.setOnline(false)
+            runCurrent()
+            // 冷却 30s：拨虚拟时钟，避免冷却门控干扰计数断言
+            advanceTimeBy(31_000L)
+        }
+        // 第 4 次恢复不再自动播
+        val cause = java.io.IOException(
+            "$CONNECTIVITY_MARK，请检查网络后重试",
+            java.net.UnknownHostException("dns"),
+        )
+        fakePlayer.storedListener?.onPlayerError(
+            androidx.media3.common.PlaybackException(
+                "Source error",
+                cause,
+                androidx.media3.common.PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+            ),
+        )
+        runCurrent()
+        fakeNetwork.setOnline(true)
+        runCurrent()
+        assertEquals(base + 3, fakePlayer.playCalls)
         assertTrue(playerManager.state.value.errorMessage != null)
         playerManager.release()
     }

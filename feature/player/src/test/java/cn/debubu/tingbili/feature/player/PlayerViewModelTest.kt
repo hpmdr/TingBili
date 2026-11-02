@@ -24,6 +24,7 @@ import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.SubtitleCache
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
+import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
@@ -36,6 +37,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -156,6 +160,12 @@ class PlayerViewModelTest {
         override suspend fun removeBvFavorite(bvid: String) {}
         override suspend fun refreshBvFavorite(snapshot: BvFavoriteSnapshot) {}
         override suspend fun hasAnyFavorite(): Boolean = false
+    }
+
+    class FakeNetworkMonitor(initial: Boolean = true) : NetworkMonitor {
+        private val _online = MutableStateFlow(initial)
+        override val isOnline: StateFlow<Boolean> = _online.asStateFlow()
+        fun setOnline(v: Boolean) { _online.value = v }
     }
 
     class FakeHistoryDao : HistoryDao {
@@ -306,6 +316,59 @@ class PlayerViewModelTest {
             advanceTimeBy(100)
             assertEquals(SubtitleLoadState.Empty, vm.uiState.value.subtitleLoadState)
             assertEquals(2, failingApi.callCount())
+        } finally {
+            collectJob.cancel()
+        }
+    }
+
+    @Test
+    fun `network restore retries failed subtitles`() = runTest(dispatcher) {
+        loginAndRebuildAuth()
+        val failingApi = object : BiliApi {
+            var calls = 0
+            var fail = true
+            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = SearchDto()
+            override suspend fun view(bvid: String): ViewDto = ViewDto()
+            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
+            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
+            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto {
+                calls++
+                if (fail) throw java.net.UnknownHostException("dns down")
+                return SubtitleDto()
+            }
+            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
+            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
+            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
+            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
+        }
+        val fakeNetwork = FakeNetworkMonitor(false)
+        val cache = SubtitleCache(BiliRepository(failingApi), FakeSubtitleDiskDao())
+        val track = demoTrack()
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(listOf(track)), currentIndex = 0, sourceTitle = "测试书")
+        player.restoreLastPlayback()
+        prefs.stepSec.first()
+        val vm = PlayerViewModel(player, cache, auth, prefs, repo, FakeFavoritesRepository(), networkMonitor = fakeNetwork, subtitleIo = dispatcher)
+        val collectJob = launch { vm.uiState.collect {} }
+        try {
+            runCurrent()
+            advanceTimeBy(100)
+            // 断网失败粘住 Error（之前到此为止，只能手动点卡片重试）
+            assertEquals(SubtitleLoadState.Error, vm.uiState.value.subtitleLoadState)
+            assertEquals(1, failingApi.calls)
+            // 网络恢复 → 自动重拉一次，无需手动点
+            failingApi.fail = false
+            fakeNetwork.setOnline(true)
+            runCurrent()
+            advanceTimeBy(100)
+            assertEquals(SubtitleLoadState.Empty, vm.uiState.value.subtitleLoadState)
+            assertEquals(2, failingApi.calls)
+            // 成功后标记清零：再来一次恢复不再重拉
+            fakeNetwork.setOnline(false)
+            runCurrent()
+            fakeNetwork.setOnline(true)
+            runCurrent()
+            advanceTimeBy(100)
+            assertEquals(2, failingApi.calls)
         } finally {
             collectJob.cancel()
         }

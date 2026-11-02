@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.PlayQueueDao
@@ -15,6 +16,7 @@ import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
+import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -171,13 +173,19 @@ class PlayerManager @Inject constructor(
             prefs.setLastPosition(pos)
         }
     }
-    // ── 网络恢复自动重试：深夜省电断网导致直链解析失败（errorMessage 粘着）后，
+    // ── 网络恢复自动重试：深夜省电断网导致播放失败（errorMessage 粘着）后，
     // 网络回来只靠手动点"重试"才能恢复。这里监听断开→恢复的跳变，自动重走一次
-    // 手动重试同一入口 playAt（不另开恢复链路）。只认音源解析失败，不碰其他错误；
-    // 冷却 NETWORK_RETRY_COOLDOWN_MS 防抖动网络连击；进行中（isLoading）不抢跑。
+    // 手动重试同一入口 playAt（不另开恢复链路）。只认"网能修好的"错误
+    //（[PlayUrlPipeline.isNetworkRestorable]：IO 建连/超时或 cause 链断网；
+    // 风控/403/过期不认，那些靠重解析修）；上限 MAX 次防抖动网络下无限重播，
+    // 冷却 NETWORK_RETRY_COOLDOWN_MS 防连击；进行中（isLoading）不抢跑。
     private var networkMonitorJob: Job? = null
     private var lastNetworkOnline: Boolean? = null
     private var lastNetworkRetryAtMs = -NETWORK_RETRY_COOLDOWN_MS
+    /** 最近一次 fatal 的原始播放器异常：网络恢复门控认它（message 只剩文案，分不了类）。 */
+    private var lastPlaybackError: PlaybackException? = null
+    /** 网络恢复自动重试已用次数：用户手动播放/真正在出声即清零，见 Phase 3 弹窗接管上限。 */
+    private var restoreAttempts = 0
 
     private fun attachNetworkMonitor(monitorScope: CoroutineScope) {
         networkMonitorJob?.cancel()
@@ -192,14 +200,30 @@ class PlayerManager @Inject constructor(
     }
 
     private fun onNetworkRestored() {
-        val err = _state.value.errorMessage
-        if (err == null || AudioUrlResolver.RESOLVE_FAILED_MARK !in err) return
+        // play() 同步失败路径没有异常对象：能走到这里且带 CONNECTIVITY_MARK 的文案，
+        // 一定是 AudioUrlResolver 透传的断网（Phase 0b 起风控 MARK 不再认），可认。
+        val stashed = lastPlaybackError
+        val restorable = (stashed != null && playUrlPipeline.isNetworkRestorable(stashed)) ||
+            (_state.value.errorMessage?.let { CONNECTIVITY_MARK in it } == true)
+        if (!restorable) return
         if (queue.isEmpty() || _state.value.isLoading) return
+        if (restoreAttempts >= MAX_NETWORK_RESTORE_ATTEMPTS) return
         val now = clock()
         if (now - lastNetworkRetryAtMs < NETWORK_RETRY_COOLDOWN_MS) return
         lastNetworkRetryAtMs = now
-        Log.i("TingBiliAudio", "network restored, auto retry track idx=$currentIndex err=$err")
-        playAt(currentIndex)
+        restoreAttempts++
+        Log.i(
+            "TingBiliAudio",
+            "network restored, auto retry track idx=$currentIndex " +
+                "attempt=$restoreAttempts err=${_state.value.errorMessage}",
+        )
+        playAt(currentIndex, manual = false)
+    }
+
+    /** 用户手动起播/重试：接管控制权，自动重试计数与旧异常即过期。 */
+    private fun resetRestoreState() {
+        restoreAttempts = 0
+        lastPlaybackError = null
     }
 
     // ── 直链管线：cid 补齐 + 惰性直链 item 组装（真正的 playurl 解析在 Service 的 DataSource 里）──
@@ -660,8 +684,9 @@ class PlayerManager @Inject constructor(
     }
 
     /** 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。 */
-    fun playAt(index: Int) {
+    fun playAt(index: Int, manual: Boolean = true) {
         if (index !in queue.indices) return
+        if (manual) resetRestoreState()
         // 重试即清旧错：成功靠播放事件续上，失败由错误链重写，避免"恢复正常了还一直显示"
         _state.update { it.copy(errorMessage = null) }
         if (transport.mediaItemCount == queue.size) {
@@ -770,6 +795,7 @@ class PlayerManager @Inject constructor(
         if (tracks.isEmpty()) return
         // 防重入：正在加载时忽略新的播放请求
         if (!playMutex.tryLock()) return
+        resetRestoreState()
         // 旧状态留作失败回滚：解析失败时不能让界面停在「新标题 + 旧声音/旧进度」
         var previous: PlaybackState? = null
         var wasPlaying = false
@@ -1145,6 +1171,8 @@ class PlayerManager @Inject constructor(
                     errorMessage = if (isPlaying) null else it.errorMessage,
                 )
             }
+            // 出声即健康：自动重试计数与旧异常清零，下一次断网重来一轮
+            if (isPlaying) resetRestoreState()
             // 停下的落点以播放器为准（缓冲/offload 时 isPlaying 会假，位置才是真相）
             if (!isPlaying) {
                 positionSyncGraceUntilMs = 0L
@@ -1167,10 +1195,12 @@ class PlayerManager @Inject constructor(
             positionSyncGraceUntilMs = 0L
             syncPositionFromPlayer()
         }
-        override fun onFatalError(message: String?) {
+        override fun onFatalError(message: String?, error: PlaybackException?) {
+            lastPlaybackError = error
             _state.update { it.copy(isLoading = false, errorMessage = message ?: "播放出错") }
         }
         override fun onRetryStarted() {
+            lastPlaybackError = null
             _state.update { it.copy(isLoading = true, errorMessage = null) }
         }
         override suspend fun onRetryRecover(): PlaybackEventHandler.RecoverResult {
@@ -1214,6 +1244,8 @@ class PlayerManager @Inject constructor(
     private companion object {
         /** 网络恢复自动重试的冷却：抖动网络下别连击，同位置重试间隔至少它 */
         const val NETWORK_RETRY_COOLDOWN_MS = 30_000L
+        /** 网络恢复自动重试上限：超过即停手，等用户手动（Phase 3 弹窗接管决策）。 */
+        const val MAX_NETWORK_RESTORE_ATTEMPTS = 3
         /** 冻结后重同步的冷却：seek 会重建 AudioTrack，别让它连续触发 */
         const val REALIGN_COOLDOWN_MS = 60_000L
         /** 位置对表死区：小于它不写回，避免 tick 抖动带来无意义重组 */

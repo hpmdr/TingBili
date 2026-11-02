@@ -6,6 +6,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.network.isConnectivityError
 import cn.debubu.tingbili.core.data.model.episodeLabel
 import cn.debubu.tingbili.core.data.model.queueLabel
 
@@ -50,6 +51,16 @@ class PlayUrlPipeline(
                     .build()
             )
             .build()
+
+    /**
+     * 网络恢复值得重试的错误：IO 建连/超时，或 cause 链认出断网。
+     * 注意比 [isRecoverable] 窄：403/过期/风控靠重解析修，不用等网络恢复；
+     * 网络恢复只认"网能修好的"。
+     */
+    fun isNetworkRestorable(error: PlaybackException): Boolean =
+        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+            error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+            isConnectivityError(error)
 
     /** 可恢复的直链错误（过期/403/断网/直链解析失败）：值得重试；其余直接报 Result.Error。 */
     fun isRecoverable(error: PlaybackException): Boolean =

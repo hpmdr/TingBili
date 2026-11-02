@@ -70,7 +70,11 @@ class PlaybackEventHandlerTest {
         override fun onTransition(index: Int, reason: Int) { transitions += index }
         override fun onPlayingChanged(isPlaying: Boolean) { playingChanges += isPlaying }
         override fun onPlayerStateChanged(buffering: Boolean) { stateChanges += buffering }
-        override fun onFatalError(message: String?) { fatals += message }
+        val fatalErrors = mutableListOf<androidx.media3.common.PlaybackException?>()
+        override fun onFatalError(message: String?, error: androidx.media3.common.PlaybackException?) {
+            fatals += message
+            fatalErrors += error
+        }
         override fun onRetryStarted() { retryStarts++ }
         override suspend fun onRetryRecover(): PlaybackEventHandler.RecoverResult = recover
     }
