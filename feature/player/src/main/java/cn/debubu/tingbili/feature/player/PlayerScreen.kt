@@ -214,10 +214,6 @@ fun PlayerScreen(
     ) {
         PlayerTopBar(
             title = headerTitle,
-            favoriteAvailable = trackUi.track != null,
-            isFavorite = isDefaultFavorite,
-            onFavoriteClick = { vm.toggleDefaultFavorite() },
-            onFavoriteLongClick = { showFavoriteSheet = true },
             onMoreClick = { showMoreSheet = true },
             onBack = onBack,
         )
@@ -243,40 +239,18 @@ fun PlayerScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            Text(
-                text = playerChapterLabel(trackUi.track, trackUi.currentIndex),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
+            // 章节标题行：左标题列吃剩余宽度（weight=1f，最多两行省略），
+            // 右侧爱心固定 48dp 再长也挤不动；点标题进章节目录看全文。
+            PlayerChapterHeader(
+                chapterLabel = playerChapterLabel(trackUi.track, trackUi.currentIndex),
+                author = trackUi.track?.author,
+                favoriteAvailable = trackUi.track != null,
+                isFavorite = isDefaultFavorite,
+                onChapterClick = { showChapterSheet = true },
+                onAuthorClick = { vm.openUpSpace(onUpClick) },
+                onFavoriteClick = { vm.toggleDefaultFavorite() },
+                onFavoriteLongClick = { showFavoriteSheet = true },
             )
-            Spacer(Modifier.height(6.dp))
-            // UP 名可点：进 UP 主主页（Track 不带 mid，由 VM 走 view 接口解析）
-            trackUi.track?.author?.takeIf { it.isNotBlank() }?.let { author ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { vm.openUpSpace(onUpClick) }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "UP主 · $author",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "进入 UP 主主页",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
         }
 
         // 音源错误不再放字幕卡上方（张冠李戴）：阻塞式失败走下面的 PlaybackErrorDialog，
@@ -891,18 +865,12 @@ private fun SkipIcon(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerTopBar(
     title: String,
-    favoriteAvailable: Boolean,
-    isFavorite: Boolean,
-    onFavoriteClick: () -> Unit,
-    onFavoriteLongClick: () -> Unit,
     onMoreClick: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -934,40 +902,109 @@ private fun PlayerTopBar(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth()
-                // 右侧有爱心 + ⋮ 两个动作位，左右留白同步放大避免标题压到按钮
-                .padding(horizontal = 96.dp, vertical = 6.dp),
+                // 右侧只剩 ⋮ 一个动作位，左右留白同步收窄，长合集名多露一行
+                .padding(horizontal = 56.dp, vertical = 6.dp),
         )
 
-        Row(modifier = Modifier.align(Alignment.CenterEnd)) {
-            if (favoriteAvailable) {
-                Box(
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "播放设置",
+            )
+        }
+    }
+}
+
+/**
+ * 章节标题行：左侧标题列 + 右侧固定爱心（方案 A）。
+ * 长标题时文字列内部省略（两行截断 + UP 名单行截断），爱心 48dp 不参与挤压；
+ * 点标题进章节目录看全文。UP 名可点进主页。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlayerChapterHeader(
+    chapterLabel: String,
+    author: String?,
+    favoriteAvailable: Boolean,
+    isFavorite: Boolean,
+    onChapterClick: () -> Unit,
+    onAuthorClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onFavoriteLongClick: () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.Start,
+        ) {
+            Text(
+                text = chapterLabel,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Start,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onChapterClick),
+            )
+            // UP 名可点：进 UP 主主页（Track 不带 mid，由 VM 走 view 接口解析）
+            author?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .combinedClickable(
-                            onClickLabel = if (isFavorite) "取消收藏到我的最爱" else "收藏到我的最爱",
-                            onLongClickLabel = "选择收藏夹",
-                            onClick = onFavoriteClick,
-                            onLongClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onFavoriteLongClick()
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onAuthorClick() }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
+                    Text(
+                        text = "UP主 · $it",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        // 外层 combinedClickable 已设 onClickLabel/onLongClickLabel，这里再给描述会被 TalkBack 念两遍（REVIEW_REPORT H-04）
-                        contentDescription = null,
-                        tint = if (isFavorite) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface,
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "进入 UP 主主页",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            IconButton(onClick = onMoreClick) {
+        }
+        if (favoriteAvailable) {
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        onClickLabel = if (isFavorite) "取消收藏到我的最爱" else "收藏到我的最爱",
+                        onLongClickLabel = "选择收藏夹",
+                        onClick = onFavoriteClick,
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onFavoriteLongClick()
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = "播放设置",
+                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    // 外层 combinedClickable 已设 onClickLabel/onLongClickLabel，这里再给描述会被 TalkBack 念两遍（REVIEW_REPORT H-04）
+                    contentDescription = null,
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
