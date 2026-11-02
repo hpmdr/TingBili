@@ -352,9 +352,9 @@ fun PlayerScreen(
             }
         }
 
-        // 进度与字幕卡间距取 18dp：卡片底边框是强视觉停靠点，10dp 会显得数字贴边框；
-        // 下方按钮区无边框，18dp 上 / 8dp 下在视觉上大致居中。
-        Spacer(Modifier.height(18.dp))
+        // 进度与字幕卡间距取 10dp：时间已移至线下，上方是 32dp 触摸盒顶部 27dp 透明，
+        // 18dp 会显空，收至 10dp 后卡底到视觉线约 37dp，与下方视觉相当；下方按钮区仍 8dp。
+        Spacer(Modifier.height(10.dp))
 
         ProgressBarSection(vm = vm, enabled = !trackUi.isLoading)
 
