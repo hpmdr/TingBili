@@ -310,6 +310,11 @@ class PlayerViewModel @Inject constructor(
         val isPlaying: Boolean = false,
         val isLoading: Boolean = false,
         val errorMessage: String? = null,
+        /**
+         * 阻塞弹窗开关：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完）。
+         * 纯离线且还有自动重试机会时不弹（顶部横幅已解释）；网是好的还失败、或次数用完，才打断用户做决策。
+         */
+        val showErrorDialog: Boolean = false,
         val sourceTitle: String? = null,
         val speed: Float = 1f,
         val repeatMode: Int = 0,
@@ -320,7 +325,11 @@ class PlayerViewModel @Inject constructor(
         val shuffleEnabled: Boolean = false,
     )
 
-    val trackUi: StateFlow<TrackUiState> = combine(player.state, prefs.stepSec) { p, stepSec ->
+    val trackUi: StateFlow<TrackUiState> = combine(
+        player.state,
+        prefs.stepSec,
+        networkMonitor.isOnline,
+    ) { p, stepSec, online ->
         TrackUiState(
             track = p.currentTrack,
             queue = p.queue,
@@ -328,6 +337,7 @@ class PlayerViewModel @Inject constructor(
             isPlaying = p.isPlaying,
             isLoading = p.isLoading,
             errorMessage = p.errorMessage,
+            showErrorDialog = p.errorMessage != null && !p.isLoading && (online || p.autoRetryExhausted),
             sourceTitle = p.sourceTitle,
             speed = p.speed,
             repeatMode = p.repeatMode,
@@ -491,6 +501,11 @@ class PlayerViewModel @Inject constructor(
     /** 章节点播（读常热的 player.state：uiState 自屏幕改收三层流后已无生产订阅者，读它会拿到过期初值） */
     fun playAt(index: Int) {
         player.playAt(index)
+    }
+
+    /** 错误弹窗"知道了"：只关框不清队列，同一错误不再自动重试打扰。 */
+    fun dismissPlaybackError() {
+        player.dismissPlaybackError()
     }
 
     /** 当前播放列表切正序/倒序（只重排这条队列，不碰收藏夹/BV）。 */

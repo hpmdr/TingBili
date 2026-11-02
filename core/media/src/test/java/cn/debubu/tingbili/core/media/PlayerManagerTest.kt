@@ -1179,6 +1179,47 @@ class PlayerManagerTest {
         runCurrent()
         assertEquals(base + 3, fakePlayer.playCalls)
         assertTrue(playerManager.state.value.errorMessage != null)
+        // 停手即升级：UI 据此把错误升级为阻塞弹窗
+        assertTrue(playerManager.state.value.autoRetryExhausted)
+        playerManager.release()
+    }
+
+    @Test
+    fun `dismiss clears error and suppresses auto retry until next error`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        fakeNetwork.setOnline(false)
+        runCurrent()
+        playerManager.play(tracks, 0)
+        runCurrent()
+        val base = fakePlayer.playCalls
+        fun connectivityError() = androidx.media3.common.PlaybackException(
+            "Source error",
+            java.io.IOException(
+                "$CONNECTIVITY_MARK，请检查网络后重试",
+                java.net.UnknownHostException("dns"),
+            ),
+            androidx.media3.common.PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+        )
+        // 第一次失败 → 用户点"知道了"：关框，恢复网络也不打扰
+        fakePlayer.storedListener?.onPlayerError(connectivityError())
+        runCurrent()
+        assertTrue(playerManager.state.value.errorMessage != null)
+        playerManager.dismissPlaybackError()
+        assertEquals(null, playerManager.state.value.errorMessage)
+        fakeNetwork.setOnline(true)
+        runCurrent()
+        assertEquals(base, fakePlayer.playCalls)
+        // 新错误来了重起一轮：恢复后照常自动重试
+        fakeNetwork.setOnline(false)
+        runCurrent()
+        fakePlayer.storedListener?.onPlayerError(connectivityError())
+        runCurrent()
+        fakeNetwork.setOnline(true)
+        runCurrent()
+        assertEquals(base + 1, fakePlayer.playCalls)
+        assertEquals(null, playerManager.state.value.errorMessage)
         playerManager.release()
     }
 }

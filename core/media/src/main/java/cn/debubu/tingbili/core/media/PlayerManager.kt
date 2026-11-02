@@ -207,7 +207,11 @@ class PlayerManager @Inject constructor(
             (_state.value.errorMessage?.let { CONNECTIVITY_MARK in it } == true)
         if (!restorable) return
         if (queue.isEmpty() || _state.value.isLoading) return
-        if (restoreAttempts >= MAX_NETWORK_RESTORE_ATTEMPTS) return
+        if (restoreAttempts >= MAX_NETWORK_RESTORE_ATTEMPTS) {
+            // 停手即升级：告诉 UI 别再等自动恢复，等用户拍板（弹窗）。
+            _state.update { it.copy(autoRetryExhausted = true) }
+            return
+        }
         val now = clock()
         if (now - lastNetworkRetryAtMs < NETWORK_RETRY_COOLDOWN_MS) return
         lastNetworkRetryAtMs = now
@@ -220,10 +224,20 @@ class PlayerManager @Inject constructor(
         playAt(currentIndex, manual = false)
     }
 
-    /** 用户手动起播/重试：接管控制权，自动重试计数与旧异常即过期。 */
+    /** 用户手动起播/重试/知道了：接管控制权，自动重试计数、旧异常与"已用完"标记即过期。 */
     private fun resetRestoreState() {
         restoreAttempts = 0
         lastPlaybackError = null
+        _state.update { it.copy(autoRetryExhausted = false) }
+    }
+
+    /**
+     * 用户在错误弹窗点"知道了"：只关框不清队列。
+     * 错误本身清掉 + 计数清零：同一错误不再自动重试打扰；新错误来了重起一轮（onFatalError 暂存新异常）。
+     */
+    fun dismissPlaybackError() {
+        resetRestoreState()
+        _state.update { it.copy(errorMessage = null) }
     }
 
     // ── 直链管线：cid 补齐 + 惰性直链 item 组装（真正的 playurl 解析在 Service 的 DataSource 里）──

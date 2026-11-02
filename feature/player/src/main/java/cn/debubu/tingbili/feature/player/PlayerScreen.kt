@@ -87,6 +87,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -278,26 +279,8 @@ fun PlayerScreen(
             }
         }
 
-        trackUi.errorMessage?.let { errorMsg ->
-            Spacer(Modifier.height(8.dp))
-            // 错误态不能只有一行红字：给显式重试入口（REVIEW_REPORT A-05）。
-            // 重试用 playAt 重走一遍「解析音源 → prepare」，与点播同一个入口，避免出现第二套恢复逻辑。
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = errorMsg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(4.dp))
-                TextButton(
-                    onClick = { vm.playAt(trackUi.currentIndex) },
-                    enabled = trackUi.queue.isNotEmpty() && !trackUi.isLoading,
-                ) { Text("重试") }
-            }
-        }
-
+        // 音源错误不再放字幕卡上方（张冠李戴）：阻塞式失败走下面的 PlaybackErrorDialog，
+        // 非阻塞断网走顶部全局横幅。字幕卡只显字幕自己的状态。
         Spacer(Modifier.height(12.dp))
 
         if (!lyricFullscreen) {
@@ -519,6 +502,35 @@ fun PlayerScreen(
                 showSubtitleSheet = false
             },
             onDismiss = { showSubtitleSheet = false },
+        )
+    }
+    // 阻塞式播放失败弹窗：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完）。
+    // 纯离线且还有自动重试机会时不弹（顶部横幅已解释）；网是好的还失败、或次数用完，才打断用户做决策。
+    // 返回键/点外部 = 知道了（只关框不清队列，同一错误不再自动重试打扰）。
+    val playbackError = trackUi.errorMessage
+    if (trackUi.showErrorDialog && playbackError != null) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissPlaybackError() },
+            title = { Text("播放失败") },
+            text = { Text(playbackError) },
+            confirmButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            vm.next()
+                            vm.dismissPlaybackError()
+                        },
+                        enabled = trackUi.queue.isNotEmpty(),
+                    ) { Text("下一首") }
+                    TextButton(
+                        onClick = { vm.playAt(trackUi.currentIndex) },
+                        enabled = trackUi.queue.isNotEmpty() && !trackUi.isLoading,
+                    ) { Text("重试") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissPlaybackError() }) { Text("知道了") }
+            },
         )
     }
     if (showMoreSheet) {

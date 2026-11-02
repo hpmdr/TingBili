@@ -31,6 +31,8 @@ data class PlaybackState(
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    /** 网络恢复自动重试已用完（上限）：播放页据此把错误升级为阻塞弹窗，等用户决策。 */
+    val autoRetryExhausted: Boolean = false,
     val repeatMode: Int = REPEAT_MODE_OFF,
     val speed: Float = 1f,
     /**
