@@ -324,6 +324,39 @@ class NavigationTest {
     }
 
     @Test
+    fun `upSpaceRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = HomeRoute) {
+                composable<HomeRoute> { Text("home") }
+                composable<UpSpaceRoute> { Text("up space") }
+                composable<VideoDetailRoute> { Text("detail") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(UpSpaceRoute(12345L)) }
+        composeTestRule.onNodeWithText("up space").assertIsDisplayed()
+        composeTestRule.runOnIdle { navController.navigate(VideoDetailRoute("BV1xx")) }
+        composeTestRule.onNodeWithText("detail").assertIsDisplayed()
+    }
+
+    @Test
+    fun `mainTab mapping roundtrips`() {
+        // 底栏顺序：首页/听单/历史/我的，page↔route 必须互逆，否则选中态和 pager 错位
+        assert(mainTabPageOf(HomeRoute) == 0)
+        assert(mainTabPageOf(PlaylistRoute) == 1)
+        assert(mainTabPageOf(HistoryRoute) == 2)
+        assert(mainTabPageOf(MeRoute) == 3)
+        assert(mainTabRouteOf(0) is HomeRoute)
+        assert(mainTabRouteOf(1) is PlaylistRoute)
+        assert(mainTabRouteOf(2) is HistoryRoute)
+        assert(mainTabRouteOf(3) is MeRoute)
+        assert(isMainTabRoute(MainTabsRoute))
+        assert(!isMainTabRoute(PlayerRoute))
+    }
+
+    @Test
     fun `qualityRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {
