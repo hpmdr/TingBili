@@ -191,7 +191,7 @@ fun PlayerScreen(
     var showQualitySheet by remember { mutableStateOf(false) }
     var showFavoriteSheet by remember { mutableStateOf(false) }
 
-    // 歌词行跳转的撤销提示：误触跳走时 2.5s 内可一键回到原位置
+    // 歌词行跳转的撤销提示：误触跳走时 4s 内可一键回到原位置
     var undoJump by remember { mutableStateOf<JumpUndo?>(null) }
     val undoScope = rememberCoroutineScope()
     LaunchedEffect(lyricFullscreen) {
