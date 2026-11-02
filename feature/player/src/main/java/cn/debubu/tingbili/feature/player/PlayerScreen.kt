@@ -1059,13 +1059,14 @@ private fun PlaybackProgressBar(
         }
 
         // 自绘进度线：线仍画在顶部 5dp（时间数字紧贴进度线，视觉与原来一致），
-        // 但可点/可拖区域从 22dp 提到 48dp——无障碍最小触控目标（REVIEW_REPORT H-02）。
-        // 多出来的高度在线的下方，由下方歌词区的 weight 吸收。
+        // 可点/可拖区域取 32dp：细长条进度线 48dp 留白过多、视觉头重脚轻，
+        // 故相对 REVIEW_REPORT H-02 的 48dp 下限做例外（语义与手势范围不变，仅压缩透明区）。
+        // 省出的高度由上方歌词区的 weight 吸收，多显示约半行歌词。
         val canSeek = enabled && safeDuration > 0L
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(32.dp)
                 .semantics {
                     if (canSeek) {
                         progressBarRangeInfo = ProgressBarRangeInfo(shownRatio, 0f..1f)
