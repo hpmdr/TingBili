@@ -10,10 +10,22 @@ import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -22,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -226,6 +239,8 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         }
     }
     if (startTab == null) return
+    // 全局离线横幅数据源：低频状态（只在连接翻转时变），放壳顶层订阅没问题。
+    val isOnline by mainViewModel.isOnline.collectAsStateWithLifecycle()
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
@@ -247,6 +262,21 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         inTabs to showMini
     }
 
+    // 离线横幅盖两分支（手机 Scaffold / 平板 MainTabsScaffold），放 NavHost 之外：
+    // 进出二级页不重建，转场动画不受影响；在线时整段消失，布局与之前完全一致。
+    Column(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = !isOnline,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            OfflineBanner(modifier = Modifier.fillMaxWidth())
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
         // 注意：NavHost 绝不能放在 inMainTabs 的 if/else 两分支里各调一次——
@@ -306,6 +336,42 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             navController = navController,
             pagerState = pagerState,
         )
+    }
+        }
+    }
+}
+
+/**
+ * 全局离线横幅：非阻塞常驻提示（M3 里持久性应用级警告归 Banner，不归 Dialog）。
+ * 只在断网时出现，恢复自动消失；不抢焦点、不挡操作，半夜场景零打扰。
+ */
+@Composable
+private fun OfflineBanner(modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "网络已断开，仅可播放已缓存",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+        }
     }
 }
 

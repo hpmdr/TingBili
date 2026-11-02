@@ -6,6 +6,7 @@ import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.toTrack
+import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.HomeScrollTopBus
@@ -29,6 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @HiltViewModel
 class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
+    networkMonitor: NetworkMonitor,
     private val prefs: PreferencesRepository,
     auth: AuthRepository,
     private val scrollTopBus: HomeScrollTopBus,
@@ -49,6 +51,12 @@ class MainViewModel @Inject constructor(
      */
     private val _openPlayer = MutableStateFlow(false)
     val openPlayerRequest = _openPlayer.asStateFlow()
+
+    /**
+     * 全局在线状态（透传单例 NetworkMonitor，不断包一层 stateIn：
+     * 本身已是带现值的 StateFlow，scaffold 直接订阅即可，翻转频率极低）。
+     */
+    val isOnline: kotlinx.coroutines.flow.StateFlow<Boolean> = networkMonitor.isOnline
 
     fun requestOpenPlayer() { _openPlayer.value = true }
 
