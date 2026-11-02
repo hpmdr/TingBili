@@ -1275,11 +1275,12 @@ private fun MiniLyricCard(
     onSwitchTrack: () -> Unit = {},
     fontScale: Float = 1f,
 ) {
-    // 窗口固定"上 2 下 6"：锚点取窗口首行（= currentIndex-2）。
+    // 窗口固定"上 2 下 7"：锚点取窗口首行（= currentIndex-2），共 10 行。
     // 之前锚当前行本身，内容超出视口时会被滚动尾部钳制，字体放大后上方上下文只剩半行。
+    // 底部仍有约一行白，10 行刚好填满。
     val windowStart = (currentIndex - 2).coerceAtLeast(0)
     val window = remember(lyrics, windowStart) {
-        lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 9))
+        lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 10))
     }
     val listState = rememberLazyListState()
     LaunchedEffect(windowStart, lyrics) {
