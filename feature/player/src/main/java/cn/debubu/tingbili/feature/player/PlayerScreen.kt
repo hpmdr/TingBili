@@ -369,7 +369,9 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        // 进度与字幕卡间距取 18dp：卡片底边框是强视觉停靠点，10dp 会显得数字贴边框；
+        // 下方按钮区无边框，18dp 上 / 8dp 下在视觉上大致居中。
+        Spacer(Modifier.height(18.dp))
 
         ProgressBarSection(vm = vm, enabled = !trackUi.isLoading)
 
