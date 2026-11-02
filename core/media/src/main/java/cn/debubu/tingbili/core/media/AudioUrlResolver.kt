@@ -3,6 +3,8 @@ package cn.debubu.tingbili.core.media
 import android.net.Uri
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
+import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
+import cn.debubu.tingbili.core.data.network.isConnectivityError
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,7 +37,15 @@ class AudioUrlResolver @Inject constructor(
         val cached = runCatching { runBlocking { cache.get(key) } }.getOrNull()
         if (cached != null && cached.isFresh(now)) return cached.url
 
-        val fresh = runCatching { runBlocking { playUrls.resolve(bvid, cid) } }.getOrNull()
+        // 断网异常不吞成 null：先看有没有过期缓存能顶（不断播），没有才透传，
+        // 调用方的错误链路认 isConnectivityError(cause) 做分类 + 网络恢复重试门控。
+        val fresh: String? = try {
+            runBlocking { playUrls.resolve(bvid, cid) }
+        } catch (e: Exception) {
+            if (!isConnectivityError(e)) null
+            else cached?.url?.takeIf { it.isNotBlank() }?.let { return it }
+                ?: throw IOException("$CONNECTIVITY_MARK，请检查网络后重试", e)
+        }
         if (!fresh.isNullOrBlank()) {
             runCatching {
                 runBlocking {

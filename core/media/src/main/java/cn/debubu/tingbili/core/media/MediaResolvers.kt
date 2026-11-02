@@ -11,7 +11,11 @@ import cn.debubu.tingbili.core.data.model.Track
  * - data:bilibili 用 BiliMediaResolvers 一次实现三个（见 data:bilibili/di/ResolverModule）。
  */
 interface PlayUrlResolver {
-    /** 取可播直链；解析失败/风控返回 null（调用方跳过该集，不断播）。 */
+    /**
+     * 取可播直链；解析失败/风控返回 null（调用方跳过该集，不断播）。
+     * 断网类失败直接抛 IOException（cause 链保留，认 isConnectivityError），
+     * 调用方不得吞成 null：要给过期缓存兜底 + 错误分类留依据。
+     */
     suspend fun resolve(bvid: String, cid: Long): String?
 }
 

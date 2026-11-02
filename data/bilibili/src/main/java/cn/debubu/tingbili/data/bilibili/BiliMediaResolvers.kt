@@ -5,12 +5,15 @@ import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
+import cn.debubu.tingbili.core.data.network.isConnectivityError
 import cn.debubu.tingbili.core.media.ArtworkResolver
 import cn.debubu.tingbili.core.media.CatalogResolver
 import cn.debubu.tingbili.core.media.PlayUrlResolver
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
+import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 
@@ -46,6 +49,10 @@ class BiliMediaResolvers @Inject constructor(
         }
         if (r is Result.Error) {
             android.util.Log.w("TingBiliPlay", "resolve $bvid:$cid qn=$prefer failed: ${r.msg}")
+            // 断网直接抛（带 cause）：深夜省电断网时跳过游客重试那次必死的请求，快速失败；
+            // 调用方（AudioUrlResolver）认 isConnectivityError 做过期缓存兜底 + 透传分类。
+            // 风控/业务错继续走 null（游客退路不受影响）。
+            if (isConnectivityError(r.throwable)) throw IOException("$CONNECTIVITY_MARK，请稍后重试", r.throwable)
             if (!coolingDown && isRiskControlled(r.msg)) {
                 guestUntilMs = System.currentTimeMillis() + RISK_COOLDOWN_MS
                 r = repo.getPlayUrl(bvid, cid, prefer, guest = true)
@@ -54,6 +61,9 @@ class BiliMediaResolvers @Inject constructor(
                     "guest retry $bvid:$cid -> ${if (r is Result.Success) "ok" else (r as Result.Error).msg}",
                 )
             }
+        }
+        if (r is Result.Error && isConnectivityError(r.throwable)) {
+            throw IOException("$CONNECTIVITY_MARK，请稍后重试", r.throwable)
         }
         return when (r) {
             is Result.Success -> r.data.takeIf { it.isNotBlank() }
