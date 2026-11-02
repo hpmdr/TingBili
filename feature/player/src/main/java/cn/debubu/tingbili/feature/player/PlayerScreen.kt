@@ -1055,24 +1055,7 @@ private fun PlaybackProgressBar(
     val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = formatMs(shownPositionMs) + " / " + formatMs(durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "-${formatMs(remainingMs)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        // 自绘进度线：线仍画在顶部 5dp（时间数字紧贴进度线，视觉与原来一致），
+        // 自绘进度线：线画在底部 5dp（时间数字紧贴进度线，时间在下，整体为一个模块），
         // 可点/可拖区域取 32dp：细长条进度线 48dp 留白过多、视觉头重脚轻，
         // 故相对 REVIEW_REPORT H-02 的 48dp 下限做例外（语义与手势范围不变，仅压缩透明区）。
         // 省出的高度由上方歌词区的 weight 吸收，多显示约半行歌词。
@@ -1115,7 +1098,8 @@ private fun PlaybackProgressBar(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 // 细线风：与 mini 播放器顶部的 2.dp 进度线统一，无常驻圆点
-                val centerY = 5.dp.toPx()
+                // 时间在下方，线取底部 5dp 以保持紧贴（与原来顶部 5dp 镜像）
+                val centerY = size.height - 5.dp.toPx()
                 val baseHeight = 3.dp.toPx()
                 val buffered = bufferedRatio.coerceAtLeast(shownRatio).coerceIn(0f, 1f)
 
@@ -1146,6 +1130,24 @@ private fun PlaybackProgressBar(
                     )
                 }
             }
+        }
+
+        // 时间行在进度线下方：与进度线为同一模块，紧贴（0dp），不另加间距。
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = formatMs(shownPositionMs) + " / " + formatMs(durationMs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "-${formatMs(remainingMs)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
