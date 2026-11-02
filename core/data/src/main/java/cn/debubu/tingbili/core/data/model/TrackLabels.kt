@@ -23,3 +23,14 @@ fun Track.episodeLabel(): String {
     val page = episodePageLabel(name, videoTitle, pageIndex)
     return page?.let { "$it · $name" } ?: name
 }
+
+/**
+ * 队列序号标题：`03 · 295-308`（序号是该条在当前播放列表的位置，从 1 开始）。
+ *
+ * 混播收藏夹里各条分属不同 BV，`P{n}` 各说各话；队列序号才是所有来源的统一口径。
+ * 播放页章节行、迷你条副标题、通知栏标题都用它；`queueIndex` 为 0-based 下标。
+ */
+fun Track.queueLabel(queueIndex: Int): String {
+    val name = title.ifBlank { bvid }
+    return String.format(java.util.Locale.ROOT, "%02d · %s", queueIndex + 1, name)
+}

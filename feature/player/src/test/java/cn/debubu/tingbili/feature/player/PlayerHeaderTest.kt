@@ -64,6 +64,16 @@ class PlayerHeaderTest {
     }
 
     @Test
+    fun `chapter uses queue number when index provided`() {
+        // 混播时 Px 各说各话，队列序号才是统一口径
+        assertEquals(
+            "03 · M　1-30",
+            playerChapterLabel(track(title = "M　1-30", videoTitle = "民调局异闻录", pageIndex = 17), 2),
+        )
+        assertEquals("01 · M　1-30", playerChapterLabel(track(title = "M　1-30"), 0))
+    }
+
+    @Test
     fun `chapter has no prefix for unknown index`() {
         assertEquals("M　1-30", playerChapterLabel(track(title = "M　1-30")))
         assertEquals("未播放", playerChapterLabel(null))

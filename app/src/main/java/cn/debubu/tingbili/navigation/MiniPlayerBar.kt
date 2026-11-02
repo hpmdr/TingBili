@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.formatDurationMs
-import cn.debubu.tingbili.core.ui.trackPageLabel
+import cn.debubu.tingbili.core.data.model.queueLabel
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MiniPlayerBar(
     track: Track?,
+    queueIndex: Int = -1,
     isPlaying: Boolean,
     isLoading: Boolean,
     onToggle: () -> Unit,
@@ -102,6 +103,7 @@ fun MiniPlayerBar(
         DismissableBarContent(
             track = track,
             trackKey = trackKey,
+            queueIndex = queueIndex,
             isPlaying = isPlaying,
             isLoading = isLoading,
             positionMs = positionMs,
@@ -120,6 +122,7 @@ fun MiniPlayerBar(
 private fun DismissableBarContent(
     track: Track,
     trackKey: String,
+    queueIndex: Int = -1,
     isPlaying: Boolean,
     isLoading: Boolean,
     positionMs: Long,
@@ -139,11 +142,10 @@ private fun DismissableBarContent(
     val title = remember(track) {
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }
     }
-    val subtitle = remember(track) {
-        listOfNotNull(
-            trackPageLabel(track.title, track.videoTitle, track.pageIndex),
-            track.title.ifBlank { track.bvid },
-        ).joinToString(" · ")
+    // 副标题=当前歌曲：`03 · 章节名`（队列序号口径；主标题仍是合集名，回答“在听哪本书”）
+    val subtitle = remember(track, queueIndex) {
+        if (queueIndex >= 0) track.queueLabel(queueIndex)
+        else track.title.ifBlank { track.bvid }
     }
     val progress = if (durationMs > 0L) {
         (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)

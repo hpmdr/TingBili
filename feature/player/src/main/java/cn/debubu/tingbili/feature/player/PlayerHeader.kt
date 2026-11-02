@@ -2,6 +2,7 @@ package cn.debubu.tingbili.feature.player
 
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.episodeLabel
+import cn.debubu.tingbili.core.data.model.queueLabel
 
 /**
  * 播放页顶栏标题：优先 BV 合集名（[Track.videoTitle]），退化到分 P 名。
@@ -15,12 +16,13 @@ internal fun playerHeaderTitle(track: Track?): String =
         ?: "未播放"
 
 /**
- * 封面下方章节行：与迷你播放器/收藏列表/通知栏统一成 `P17 · 295-308`。
+ * 封面下方章节行：`03 · 章节名`（队列序号 + 分 P 名），与通知栏/迷你条统一口径。
  *
- * 只显示 `P{n}` 的条件复用 core:data `episodeLabel`：多 P 且序号已知才带；
- * 单 P（BV 标题与分 P 同名）不显示 `P1`，没有序号时只显示标题。
+ * 混播收藏夹里各条分属不同 BV，`P{n}` 各说各话；队列序号才是统一口径。
+ * `queueIndex` 为 0-based 的当前下标；无效（<0）时退化到分 P 标题。
  */
-internal fun playerChapterLabel(track: Track?): String {
+internal fun playerChapterLabel(track: Track?, queueIndex: Int = -1): String {
     if (track == null || track.title.isBlank()) return "未播放"
+    if (queueIndex >= 0) return track.queueLabel(queueIndex)
     return track.episodeLabel()
 }

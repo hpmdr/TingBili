@@ -3,6 +3,7 @@ package cn.debubu.tingbili.core.data
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.episodeLabel
 import cn.debubu.tingbili.core.data.model.episodePageLabel
+import cn.debubu.tingbili.core.data.model.queueLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -52,5 +53,13 @@ class TrackLabelsTest {
     @Test
     fun `unknown page index falls back to title`() {
         assertEquals("一首单曲", track("一首单曲").episodeLabel())
+    }
+
+    @Test
+    fun `queue label uses playlist position not page number`() {
+        // 混播时各条 P 序号各说各话，队列序号才是统一口径
+        val t = track("295-308", videoTitle = "无限流悬疑多人有声", pageIndex = 17)
+        assertEquals("03 · 295-308", t.queueLabel(2))
+        assertEquals("01 · 一首单曲", track("一首单曲").queueLabel(0))
     }
 }

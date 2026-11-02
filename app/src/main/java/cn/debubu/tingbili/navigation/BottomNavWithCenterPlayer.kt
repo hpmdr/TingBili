@@ -141,6 +141,7 @@ private fun MiniPlayerSlot(
     if (track == null || trackKey == null) return
     MiniPlayerBar(
         track = track,
+        queueIndex = state.currentIndex,
         isPlaying = state.isPlaying,
         isLoading = state.isLoading,
         onToggle = { playerManager.toggle() },

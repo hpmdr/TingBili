@@ -7,6 +7,7 @@ import androidx.media3.common.PlaybackException
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.episodeLabel
+import cn.debubu.tingbili.core.data.model.queueLabel
 
 /**
  * 直链管线（类 MediaSource 的数据源层）：cid 补齐 + MediaItem 组装 + 可恢复错误判定。
@@ -28,15 +29,22 @@ class PlayUrlPipeline(
             )
         } ?: track
 
-    /** Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它；URI 是惰性协议） */
-    fun buildItem(track: Track, imageFormat: ImageFormat): MediaItem =
+    /**
+     * Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它；URI 是惰性协议）。
+     * 标题用队列序号（`queueIndex` 为 0-based 下标）：混播时 `P{n}` 各说各话，
+     * 只有队列序号是统一口径；不传则退化到分 P 标题（兼容旧调用）。
+     */
+    fun buildItem(track: Track, imageFormat: ImageFormat, queueIndex: Int? = null): MediaItem =
         MediaItem.Builder()
             .setUri(AudioUrlResolver.lazyUri(track.bvid, track.cid))
             .setMediaId("${track.bvid}:${track.cid}")
             .setCustomCacheKey("${track.bvid}:${track.cid}")
             .setMediaMetadata(
                 MediaMetadata.Builder()
-                    .setTitle(track.episodeLabel())
+                    .setTitle(
+                        if (queueIndex != null && queueIndex >= 0) track.queueLabel(queueIndex)
+                        else track.episodeLabel()
+                    )
                     .setArtist(track.author)
                     .setArtworkUri(artwork.artwork(track.cover, imageFormat))
                     .build()

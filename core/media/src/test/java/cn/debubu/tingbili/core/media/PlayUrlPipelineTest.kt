@@ -66,7 +66,7 @@ class PlayUrlPipelineTest {
     private fun track(cid: Long = 1L) = Track("BV1", cid, "t", "a", "", 1000, null)
 
     @Test
-    fun `buildItem metadata title includes part number`() {
+    fun `buildItem metadata title uses queue number when provided`() {
         val part = Track(
             bvid = "BV1",
             cid = 7,
@@ -78,8 +78,10 @@ class PlayUrlPipelineTest {
             videoTitle = "无限流悬疑多人有声《请活到天明》",
             pageIndex = 17,
         )
-        val item = pipeline.buildItem(part, ImageFormat.WEBP)
-        assertEquals("P17 · 295-308", item.mediaMetadata.title)
+        // 不传序号：退化到分 P 标题（兼容旧语义）
+        assertEquals("P17 · 295-308", pipeline.buildItem(part, ImageFormat.WEBP).mediaMetadata.title)
+        // 传队列下标：通知栏用队列序号（混播时 Px 各说各话）
+        assertEquals("03 · 295-308", pipeline.buildItem(part, ImageFormat.WEBP, 2).mediaMetadata.title)
     }
 
     @Test

@@ -243,7 +243,7 @@ fun PlayerScreen(
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text = playerChapterLabel(trackUi.track),
+                text = playerChapterLabel(trackUi.track, trackUi.currentIndex),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,

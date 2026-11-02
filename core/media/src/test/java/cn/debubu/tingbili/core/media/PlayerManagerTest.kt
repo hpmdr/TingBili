@@ -611,7 +611,7 @@ class PlayerManagerTest {
         assertEquals(1, res.updated) // P1 改名
         assertEquals(listOf("BV1:1", "BV1:2", "BV1:4"), fakePlayer.mediaItems.map { it.mediaId })
         assertEquals(1, playerManager.state.value.currentIndex) // 还在 P2 上
-        assertEquals("P1-new", fakePlayer.mediaItems[0].mediaMetadata.title)
+        assertEquals("01 · P1-new", fakePlayer.mediaItems[0].mediaMetadata.title)
         assertTrue(playerManager.state.value.isPlaying)
         playerManager.release()
     }

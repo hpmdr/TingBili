@@ -194,6 +194,7 @@ private fun TabletMiniPlayer(
     ImageFormatScope(viewModel) {
         MiniPlayerBar(
             track = track,
+            queueIndex = state.currentIndex,
             isPlaying = state.isPlaying,
             isLoading = state.isLoading,
             onToggle = { playerManager.toggle() },
