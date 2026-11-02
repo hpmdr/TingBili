@@ -1275,16 +1275,10 @@ private fun MiniLyricCard(
     onSwitchTrack: () -> Unit = {},
     fontScale: Float = 1f,
 ) {
-    // 窗口固定"上 2 下 6"：锚点取窗口首行（= currentIndex-2）。
-    // 之前锚当前行本身，内容超出视口时会被滚动尾部钳制，字体放大后上方上下文只剩半行。
-    val windowStart = (currentIndex - 2).coerceAtLeast(0)
-    val window = remember(lyrics, windowStart) {
-        lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 9))
-    }
+    // 当前行居中：与全屏字幕同一套闭环居中（先 scrollToItem 粗定位，再按实测位置 scrollBy 精调），
+    // 上下各留半个视口内边距，首尾行也能居中；迷你卡纯展示，禁止手指滚动抢位。
+    // 之前是窗口"上 2 下 6"顶堆叠，当前行在上三分之一 + 底部留白，头重脚轻。
     val listState = rememberLazyListState()
-    LaunchedEffect(windowStart, lyrics) {
-        if (window.isNotEmpty()) listState.scrollToItem(0)
-    }
     val current = lyrics.getOrNull(currentIndex)?.text
     Surface(
         onClick = onCardClick,
@@ -1415,14 +1409,40 @@ private fun MiniLyricCard(
                         )
                     }
                 } else {
-                LazyColumn(
-                    state = listState,
+                androidx.compose.foundation.layout.BoxWithConstraints(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    itemsIndexed(window, key = { idx, line -> line.timeMs * 100 + idx }) { idx, line ->
+                    // 上下各留半屏内边距，首尾行也能居中
+                    val centerPadding = maxHeight / 2
+                    LaunchedEffect(currentIndex, lyrics.size, centerPadding) {
+                        val idx = currentIndex
+                        if (idx < 0 || idx >= lyrics.size) return@LaunchedEffect
+                        try {
+                            listState.scrollToItem(idx)
+                            snapshotFlow {
+                                listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
+                            }.filterNotNull().first()
+                            val info = listState.layoutInfo
+                            val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
+                                ?: return@LaunchedEffect
+                            val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                            val delta = (item.offset + item.size / 2 - viewportCenter).toFloat()
+                            if (delta != 0f) listState.scroll { scrollBy(delta) }
+                        } catch (_: Exception) {
+                            // 切歌/切字幕轨时列表并发变化，忽略本次跟随
+                        }
+                    }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        userScrollEnabled = false,
+                        contentPadding = PaddingValues(vertical = centerPadding),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                    itemsIndexed(lyrics, key = { idx, line -> "$idx-${line.timeMs}" }) { idx, line ->
                         if (line.text.isNotBlank()) {
-                            val globalIdx = windowStart + idx
+                            val globalIdx = idx
                             if (globalIdx < currentIndex) {
                                 Text(
                                     text = line.text,
@@ -1474,6 +1494,7 @@ private fun MiniLyricCard(
                                 )
                             }
                         }
+                    }
                     }
                 }
                 }
