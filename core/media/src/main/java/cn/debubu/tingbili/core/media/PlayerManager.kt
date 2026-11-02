@@ -14,11 +14,14 @@ import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
+import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +52,7 @@ class PlayerManager @Inject constructor(
     private val playUrlCache: PlayUrlCacheDao,
     private val playQueue: PlayQueueDao,
     @ApplicationContext private val appContext: Context,
+    private val networkMonitor: NetworkMonitor = AlwaysOnlineNetworkMonitor,
 ) {
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
@@ -85,6 +89,7 @@ class PlayerManager @Inject constructor(
             value?.let { historyTracker.attach(it, historyListener) }
             value?.let { queueManager.attach(it, queueListener) }
             value?.let { eventHandler.attach(it, eventListener) }
+            value?.let { attachNetworkMonitor(it) }
         }
     private fun effectiveScope(): CoroutineScope = testScope ?: scope
     /** Test hook — clock for sleep deadline; production=wall clock, tests inject virtual time. */
@@ -166,6 +171,37 @@ class PlayerManager @Inject constructor(
             prefs.setLastPosition(pos)
         }
     }
+    // ── 网络恢复自动重试：深夜省电断网导致直链解析失败（errorMessage 粘着）后，
+    // 网络回来只靠手动点"重试"才能恢复。这里监听断开→恢复的跳变，自动重走一次
+    // 手动重试同一入口 playAt（不另开恢复链路）。只认音源解析失败，不碰其他错误；
+    // 冷却 NETWORK_RETRY_COOLDOWN_MS 防抖动网络连击；进行中（isLoading）不抢跑。
+    private var networkMonitorJob: Job? = null
+    private var lastNetworkOnline: Boolean? = null
+    private var lastNetworkRetryAtMs = -NETWORK_RETRY_COOLDOWN_MS
+
+    private fun attachNetworkMonitor(monitorScope: CoroutineScope) {
+        networkMonitorJob?.cancel()
+        networkMonitorJob = monitorScope.launch {
+            networkMonitor.isOnline.collect { online ->
+                val prev = lastNetworkOnline
+                lastNetworkOnline = online
+                // 只认"断开→恢复"跳变：注册瞬间/启动时的初始值不触发，避免冷启动误重试
+                if (prev == false && online) onNetworkRestored()
+            }
+        }
+    }
+
+    private fun onNetworkRestored() {
+        val err = _state.value.errorMessage
+        if (err == null || AudioUrlResolver.RESOLVE_FAILED_MARK !in err) return
+        if (queue.isEmpty() || _state.value.isLoading) return
+        val now = clock()
+        if (now - lastNetworkRetryAtMs < NETWORK_RETRY_COOLDOWN_MS) return
+        lastNetworkRetryAtMs = now
+        Log.i("TingBiliAudio", "network restored, auto retry track idx=$currentIndex err=$err")
+        playAt(currentIndex)
+    }
+
     // ── 直链管线：cid 补齐 + 惰性直链 item 组装（真正的 playurl 解析在 Service 的 DataSource 里）──
     private val playUrlPipeline = PlayUrlPipeline(catalog, artwork)
 
@@ -234,6 +270,7 @@ class PlayerManager @Inject constructor(
         historyTracker.attach(scope, historyListener)
         queueManager.attach(scope, queueListener)
         audioPolicy.attach(scope, audioListener)
+        attachNetworkMonitor(scope)
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch {
             restoreLastPlayback()
@@ -625,6 +662,8 @@ class PlayerManager @Inject constructor(
     /** 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。 */
     fun playAt(index: Int) {
         if (index !in queue.indices) return
+        // 重试即清旧错：成功靠播放事件续上，失败由错误链重写，避免"恢复正常了还一直显示"
+        _state.update { it.copy(errorMessage = null) }
         if (transport.mediaItemCount == queue.size) {
             transport.seekTo(index, 0L)
             transport.play()
@@ -1050,6 +1089,8 @@ class PlayerManager @Inject constructor(
     }
 
     fun release() {
+        networkMonitorJob?.cancel()
+        networkMonitorJob = null
         historyTracker.release()
         sleepTimer.release()
         audioPolicy.release()
@@ -1096,7 +1137,14 @@ class PlayerManager @Inject constructor(
             effectiveScope().launch { historyTracker.flush() }
         }
         override fun onPlayingChanged(isPlaying: Boolean) {
-            _state.update { it.copy(isPlaying = isPlaying, isLoading = false) }
+            _state.update {
+                it.copy(
+                    isPlaying = isPlaying,
+                    isLoading = false,
+                    // 真正在出声了，之前的错误横幅即过期（各重试入口不断播 swap 时靠这一句收敛）
+                    errorMessage = if (isPlaying) null else it.errorMessage,
+                )
+            }
             // 停下的落点以播放器为准（缓冲/offload 时 isPlaying 会假，位置才是真相）
             if (!isPlaying) {
                 positionSyncGraceUntilMs = 0L
@@ -1164,6 +1212,8 @@ class PlayerManager @Inject constructor(
     }
 
     private companion object {
+        /** 网络恢复自动重试的冷却：抖动网络下别连击，同位置重试间隔至少它 */
+        const val NETWORK_RETRY_COOLDOWN_MS = 30_000L
         /** 冻结后重同步的冷却：seek 会重建 AudioTrack，别让它连续触发 */
         const val REALIGN_COOLDOWN_MS = 60_000L
         /** 位置对表死区：小于它不写回，避免 tick 抖动带来无意义重组 */

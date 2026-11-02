@@ -11,6 +11,7 @@ import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -57,8 +58,9 @@ class PlayerManagerTest {
         fun setCurrentPosition(pos: Long) { _pos = pos }
         fun moveTo(index: Int) { _currentIdx = index.coerceIn(0, mediaItems.size - 1) }
         fun setDuration(v: Long) { _duration = v }
+        var failErrorMessage = "setMediaItems failed"
         override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
-            if (failSetMediaItems) throw IllegalStateException("setMediaItems failed")
+            if (failSetMediaItems) throw IllegalStateException(failErrorMessage)
             mediaItems = items; this.startIndex = startIndex; _currentIdx = startIndex; _pos = startPositionMs
         }
         var failSetMediaItems = false
@@ -171,6 +173,13 @@ class PlayerManagerTest {
         override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
     }
 
+    class FakeNetworkMonitor(initial: Boolean = true) : NetworkMonitor {
+        private val _online = kotlinx.coroutines.flow.MutableStateFlow(initial)
+        override val isOnline: kotlinx.coroutines.flow.StateFlow<Boolean> = _online
+        fun setOnline(v: Boolean) { _online.value = v }
+    }
+
+    private lateinit var fakeNetwork: FakeNetworkMonitor
     private lateinit var fakePlayer: FakePlayerHandle
     private lateinit var fakeHistory: FakeHistoryDao
     private lateinit var fakePlayQueue: FakePlayQueueDao
@@ -193,7 +202,8 @@ class PlayerManagerTest {
         )
         prefs = PreferencesRepository(dataStore)
         fakeResolvers = FakeMediaResolvers()
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), fakePlayQueue, context)
+        fakeNetwork = FakeNetworkMonitor()
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), fakePlayQueue, context, fakeNetwork)
         AudioPipelineMonitor.onOffloadSleepingChanged(false)
     }
 
@@ -818,6 +828,7 @@ class PlayerManagerTest {
         assertTrue(playerManager.setSpeed(1.5f))
         assertEquals(1.5f, fakePlayer.capturedSpeed, 0.001f)
         assertEquals(1.5f, prefs.speed.first(), 0.001f)
+        playerManager.release()
     }
 
     @Test
@@ -844,6 +855,7 @@ class PlayerManagerTest {
         playerManager.setRepeatMode(PlaybackState.REPEAT_MODE_ONE)
         assertEquals(Player.REPEAT_MODE_ONE, fakePlayer.repeatMode)
         assertEquals(PlaybackState.REPEAT_MODE_ONE, playerManager.state.value.repeatMode)
+        playerManager.release()
     }
 
     @Test
@@ -1048,6 +1060,51 @@ class PlayerManagerTest {
         assertEquals("BV1:1", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
         assertTrue(PlayUrlPipeline.isLazyUri(fakePlayer.mediaItems.first().localConfiguration!!.uri))
         assertEquals(before.mediaId, fakePlayer.mediaItems.first().mediaId)
+        playerManager.release()
+    }
+
+    @Test
+    fun `network restore auto retries resolve failure`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        // 先断网再失败：模拟深夜省电断网导致的直链解析失败
+        fakeNetwork.setOnline(false)
+        runCurrent()
+        fakePlayer.failSetMediaItems = true
+        fakePlayer.failErrorMessage =
+            "${AudioUrlResolver.RESOLVE_FAILED_MARK}（可能触发风控），请稍后再试"
+        playerManager.play(tracks, 0)
+        runCurrent()
+        assertTrue(playerManager.state.value.errorMessage != null)
+        assertFalse(fakePlayer.isPlaying)
+        // 网络恢复前不自动重试；恢复后重走 playAt 同一入口，从头播本集并清掉旧错
+        fakePlayer.failSetMediaItems = false
+        fakeNetwork.setOnline(true)
+        runCurrent()
+        assertTrue(fakePlayer.isPlaying)
+        assertEquals(null, playerManager.state.value.errorMessage)
+        playerManager.release()
+    }
+
+    @Test
+    fun `network restore ignores non-resolve errors`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        fakeNetwork.setOnline(false)
+        runCurrent()
+        // 非音源解析失败（比如服务未就绪）：网络恢复也不该自动重试
+        fakePlayer.failSetMediaItems = true
+        fakePlayer.failErrorMessage = "播放服务未就绪，请重试"
+        playerManager.play(tracks, 0)
+        runCurrent()
+        assertTrue(playerManager.state.value.errorMessage != null)
+        fakePlayer.failSetMediaItems = false
+        fakeNetwork.setOnline(true)
+        runCurrent()
+        assertFalse(fakePlayer.isPlaying)
+        assertTrue(playerManager.state.value.errorMessage != null)
         playerManager.release()
     }
 }
