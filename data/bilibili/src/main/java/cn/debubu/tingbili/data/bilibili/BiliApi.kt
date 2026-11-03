@@ -39,11 +39,20 @@ interface BiliApi {
     suspend fun playUrl(
         @Query("bvid") bvid: String,
         @Query("cid") cid: Long,
-        @Query("fnval") fnval: Int = 16,
+        @Query("fnval") fnval: Int = PLAYURL_FNVAL,
         @Query("qn") qn: Int? = null,
         /** 游客标记：拦截器据此跳过登录 Cookie（风控兜底） */
         @Header(WbiInterceptor.GUEST_HEADER) guest: Boolean = false,
     ): PlayUrlDto
+
+    companion object {
+        /**
+         * DASH(16) | 杜比音频(256)。
+         * 不置 256 时服务端根本不返回 `dash.dolby` / `dash.flac`，大会员也拿不到 30250/30251
+         *（2026-11 用户反馈"会员也放不了杜比/Hi-Res"的根因之一；另一半是 DTO 没解析这两个节点）。
+         */
+        const val PLAYURL_FNVAL = 16 or 256
+    }
 
     // B站账号体系(我的页二级页,只读):收藏夹/夹内/稍后看/历史,对标 PiliPlus
     // list-all 一次拉全，不再分页

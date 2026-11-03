@@ -10,7 +10,9 @@ import cn.debubu.tingbili.core.data.network.isConnectivityError
 import cn.debubu.tingbili.core.media.ArtworkResolver
 import cn.debubu.tingbili.core.media.CatalogResolver
 import cn.debubu.tingbili.core.media.PlayUrlResolver
+import cn.debubu.tingbili.core.media.ResolvedAudio
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.data.bilibili.dto.DashAudio
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import java.io.IOException
@@ -35,17 +37,24 @@ class BiliMediaResolvers @Inject constructor(
      * 登录态被风控（412「神秘力量」）时退游客身份：音质可能降级，但能继续放；
      * 随后 [RISK_COOLDOWN_MS] 内直接走游客，不再每条都先撞墙。
      */
-    override suspend fun resolve(bvid: String, cid: Long): String? {
+    override suspend fun resolve(bvid: String, cid: Long): ResolvedAudio? {
         val prefer = try {
             prefs.audioQuality.first()
         } catch (_: Exception) {
             AudioQuality.DEFAULT_CODE
         }
         val coolingDown = System.currentTimeMillis() < guestUntilMs
+        // 实际选中档（标称码率 + 音质 code）带回给调用方：码率兜底 + 底部标签显示实际生效档
+        var bandwidthBps = 0
+        var audioCode = 0
+        val rememberBitrate: (DashAudio) -> Unit = {
+            bandwidthBps = it.bandwidth
+            audioCode = it.id
+        }
         var r = if (coolingDown) {
-            repo.getPlayUrl(bvid, cid, prefer, guest = true)
+            repo.getPlayUrl(bvid, cid, prefer, guest = true, onAudioSelected = rememberBitrate)
         } else {
-            repo.getPlayUrl(bvid, cid, prefer)
+            repo.getPlayUrl(bvid, cid, prefer, onAudioSelected = rememberBitrate)
         }
         if (r is Result.Error) {
             android.util.Log.w("TingBiliPlay", "resolve $bvid:$cid qn=$prefer failed: ${r.msg}")
@@ -55,7 +64,9 @@ class BiliMediaResolvers @Inject constructor(
             if (isConnectivityError(r.throwable)) throw IOException("$CONNECTIVITY_MARK，请稍后重试", r.throwable)
             if (!coolingDown && isRiskControlled(r.msg)) {
                 guestUntilMs = System.currentTimeMillis() + RISK_COOLDOWN_MS
-                r = repo.getPlayUrl(bvid, cid, prefer, guest = true)
+                bandwidthBps = 0
+                audioCode = 0
+                r = repo.getPlayUrl(bvid, cid, prefer, guest = true, onAudioSelected = rememberBitrate)
                 android.util.Log.i(
                     "TingBiliPlay",
                     "guest retry $bvid:$cid -> ${if (r is Result.Success) "ok" else (r as Result.Error).msg}",
@@ -67,6 +78,7 @@ class BiliMediaResolvers @Inject constructor(
         }
         return when (r) {
             is Result.Success -> r.data.takeIf { it.isNotBlank() }
+                ?.let { ResolvedAudio(it, bandwidthBps, audioCode) }
             is Result.Error -> null
         }
     }

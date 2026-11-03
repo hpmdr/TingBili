@@ -34,12 +34,21 @@ class PlayUrlPipeline(
      * Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它；URI 是惰性协议）。
      * 标题用队列序号（`queueIndex` 为 0-based 下标）：混播时 `P{n}` 各说各话，
      * 只有队列序号是统一口径；不传则退化到分 P 标题（兼容旧调用）。
+     *
+     * [audioQuality] 必须进缓存键：不同档位是不同编码（AAC / FLAC / E-AC-3），
+     * 共用 `bvid:cid` 会让换档时复用上一档的缓存字节，播放器按新格式解析旧 MP4，
+     * 直接 `FragmentedMp4Extractor` EOF（2026-11 实测：192K 换 Hi-Res 必挂）。
      */
-    fun buildItem(track: Track, imageFormat: ImageFormat, queueIndex: Int? = null): MediaItem =
+    fun buildItem(
+        track: Track,
+        imageFormat: ImageFormat,
+        audioQuality: Int,
+        queueIndex: Int? = null,
+    ): MediaItem =
         MediaItem.Builder()
             .setUri(AudioUrlResolver.lazyUri(track.bvid, track.cid))
             .setMediaId("${track.bvid}:${track.cid}")
-            .setCustomCacheKey("${track.bvid}:${track.cid}")
+            .setCustomCacheKey("${track.bvid}:${track.cid}:$audioQuality")
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(

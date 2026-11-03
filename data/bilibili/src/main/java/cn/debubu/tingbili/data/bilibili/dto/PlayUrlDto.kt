@@ -26,7 +26,28 @@ data class DurlItem(
 @Serializable
 data class DashData(
     val audio: List<DashAudio>? = null,
-    val video: List<DashVideo>? = null
+    val video: List<DashVideo>? = null,
+    /**
+     * 杜比伴音（30250/30255）：**不在** [audio] 里，服务端单独放这个节点。
+     * 只有请求 fnval 含杜比位（见 `BiliApi.PLAYURL_FNVAL`）且账号有权益时才填充。
+     */
+    val dolby: DolbyData? = null,
+    /** Hi-Res 无损（30251 FLAC）：单条而不是数组，同样有独立的节点。 */
+    val flac: FlacData? = null
+)
+
+/** dash.dolby：type 1=普通杜比，2=全景杜比；audio 是伴音流列表（元素结构同 [DashAudio]）。 */
+@Serializable
+data class DolbyData(
+    val type: Int = 0,
+    val audio: List<DashAudio>? = null
+)
+
+/** dash.flac：display 控制播放器是否显示 Hi-Res 切换入口，audio 为唯一那条无损轨。 */
+@Serializable
+data class FlacData(
+    val display: Boolean = false,
+    val audio: DashAudio? = null
 )
 
 @Serializable
@@ -45,9 +66,21 @@ data class DashVideo(
     @SerialName("base_url") val baseUrlAlt: String = ""
 )
 
-/** 本次返回的全部 dash 音频轨（供音质面板展示可用性；服务端按登录/会员态过滤，未登录通常只有 64K/132K）。 */
-fun PlayUrlDto.toAudioOptions(): List<DashAudio> =
-    data?.dash?.audio?.filter { it.resolvedUrl().isNotBlank() }.orEmpty()
+/**
+ * 本次返回的全部可播音频轨（供音质面板展示可用性 + 播放选轨）。
+ *
+ * 杜比（30250/30255）与 Hi-Res（30251）不在 `dash.audio` 里，分别躺在 `dash.dolby.audio`
+ * 和 `dash.flac.audio`；只读 `dash.audio` 会让大会员也永远看不到这两档（2026-11 反馈）。
+ * 服务端仍按登录/会员态过滤：没权益时这两个节点为空，列表自然回落到 64K/132K/192K。
+ */
+fun PlayUrlDto.toAudioOptions(): List<DashAudio> {
+    val dash = data?.dash ?: return emptyList()
+    return buildList {
+        addAll(dash.audio.orEmpty())
+        addAll(dash.dolby?.audio.orEmpty())
+        dash.flac?.audio?.let { add(it) }
+    }.filter { it.resolvedUrl().isNotBlank() }
+}
 
 /**
  * 按偏好档位选轨（[pickAudio] 语义）：偏好 132K 则 132K/64K 中取 132K；

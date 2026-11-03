@@ -169,10 +169,11 @@ class PlayerManagerTest {
         var nextUrl: String? = "http://example.com/audio.mp3"
         var urlSequence: List<String?>? = null
         var resolveCalls = 0
-        override suspend fun resolve(bvid: String, cid: Long): String? {
+        override suspend fun resolve(bvid: String, cid: Long): ResolvedAudio? {
             resolveCalls++
             val seq = urlSequence
-            return if (seq != null) seq.getOrElse(resolveCalls - 1) { seq.last() } else nextUrl
+            val url = if (seq != null) seq.getOrElse(resolveCalls - 1) { seq.last() } else nextUrl
+            return url?.let { ResolvedAudio(it) }
         }
         override suspend fun tracksOf(bvid: String): List<Track> = emptyList()
         override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
@@ -223,6 +224,22 @@ class PlayerManagerTest {
         assertEquals(1, fakePlayer.mediaItems.size)
         assertEquals(0, fakePlayer.startIndex)
         assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    /** 换档必须换缓存键：FLAC 与 AAC 共用 bvid:cid 会把旧档字节按新格式解析（EOF 播放失败） */
+    @Test
+    fun `quality switch rebuilds item with new cache key`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        playerManager.play(tracks, 0)
+        assertEquals("BV1:1:30232", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+
+        prefs.setAudioQuality(30251)
+        assertTrue(playerManager.refreshCurrentUrl())
+
+        assertEquals("BV1:1:30251", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
         playerManager.release()
     }
 
@@ -1092,8 +1109,8 @@ class PlayerManagerTest {
         // loading should be false after success
         assertEquals(false, playerManager.state.value.isLoading)
         assertEquals(true, playerManager.state.value.isPlaying)
-        // customCacheKey should be bvid:cid for cache hit across URL expiry
-        assertEquals("BV99:123", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+        // customCacheKey = bvid:cid:quality：URL 过期仍能命中，但换音质必须换键（编码不同）
+        assertEquals("BV99:123:30232", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
         assertEquals("BV99:123", fakePlayer.mediaItems.first().mediaId)
         playerManager.release()
     }
@@ -1156,7 +1173,7 @@ class PlayerManagerTest {
         runCurrent()
         // 换回同一个惰性 item 再 prepare：DataSource 打开时会重新解析直链
         assertEquals(1, fakePlayer.replaceCalls)
-        assertEquals("BV1:1", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+        assertEquals("BV1:1:30232", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
         assertTrue(PlayUrlPipeline.isLazyUri(fakePlayer.mediaItems.first().localConfiguration!!.uri))
         assertEquals(before.mediaId, fakePlayer.mediaItems.first().mediaId)
         playerManager.release()

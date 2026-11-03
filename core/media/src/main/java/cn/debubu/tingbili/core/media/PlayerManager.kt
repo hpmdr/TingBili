@@ -520,7 +520,8 @@ class PlayerManager @Inject constructor(
                 // 增/改：按最终顺序走一遍（B 站分 P 只增删不重排，走位必然对齐；
                 // 万一重排，对不上就停手：UI 照新，transport 不再动，绝不插出重复项）
                 val imageFormat = prefs.imageFormat.first()
-                added = spliceTransport(plan, imageFormat)
+                val audioQuality = prefs.audioQuality.first()
+                added = spliceTransport(plan, imageFormat, audioQuality)
             }
             // 队列真相唯一在 QueueManager（同步经 listener）；added 按新增 key 数报数，保持旧语义
             queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title, sourceFolderId)
@@ -540,6 +541,7 @@ class PlayerManager @Inject constructor(
     private fun spliceTransport(
         plan: RefreshPlan,
         imageFormat: ImageFormat,
+        audioQuality: Int,
     ): Int {
         val expected = plan.base.toMutableList()
         var playIdx = plan.playingTransportIdx
@@ -552,7 +554,7 @@ class PlayerManager @Inject constructor(
                     // 在播项不动（换 uri 会打断当前播放），它的通知标题最多滞后到切歌。
                     // 元数据变了但直链要等真正开播才解析，直接换惰性 item 即可
                     try {
-                        transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, i))
+                        transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, audioQuality, i))
                     } catch (_: Exception) {
                     }
                 }
@@ -560,7 +562,7 @@ class PlayerManager @Inject constructor(
             }
             if (expected.any { it.queueKey() == item.queueKey() }) break // 重排：停手保平安
             try {
-                transport.addMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, i))
+                transport.addMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, audioQuality, i))
             } catch (_: Exception) {
                 continue
             }
@@ -624,11 +626,14 @@ class PlayerManager @Inject constructor(
             val pos = _state.value.positionMs
             val wasPlaying = _state.value.isPlaying
             val imageFormat = prefs.imageFormat.first()
+            val audioQuality = prefs.audioQuality.first()
             queueManager.applyRefresh(plan.final, plan.playingFinalIdx, title, folderId)
             _state.update { it.copy(isPlaying = wasPlaying, positionMs = pos) }
             try {
                 transport.setMediaItems(
-                    plan.final.mapIndexed { i, track -> playUrlPipeline.buildItem(track, imageFormat, i) },
+                    plan.final.mapIndexed { i, track ->
+                        playUrlPipeline.buildItem(track, imageFormat, audioQuality, i)
+                    },
                     plan.playingFinalIdx,
                     pos,
                 )
@@ -758,8 +763,9 @@ class PlayerManager @Inject constructor(
         )
         randomMode = prefs.randomPlayMode.first()
         val imageFormat = prefs.imageFormat.first()
+        val audioQuality = prefs.audioQuality.first()
         transport.setMediaItems(
-            q.mapIndexed { i, track -> playUrlPipeline.buildItem(track, imageFormat, i) },
+            q.mapIndexed { i, track -> playUrlPipeline.buildItem(track, imageFormat, audioQuality, i) },
             safe,
             pos,
         )
@@ -881,6 +887,7 @@ class PlayerManager @Inject constructor(
             // 直链不再在这里批量解析：item 存惰性 URI，播到哪一集才解析哪一集。
             // 这样 67 P 的视频不会一起打接口触发风控，也能立刻起播。
             val imageFormat = prefs.imageFormat.first()
+            val audioQuality = prefs.audioQuality.first()
             val startIndex = safeIndex
             val playableTracks = resolved
             val resolvedStartPosition = startPositionMs
@@ -901,7 +908,9 @@ class PlayerManager @Inject constructor(
             // 新队列：顺序模式默认正序、随机开关默认关；把 transport 的旧随机状态清掉
             transport.shuffleModeEnabled = false
             transport.setMediaItems(
-                playableTracks.mapIndexed { i, track -> playUrlPipeline.buildItem(track, imageFormat, i) },
+                playableTracks.mapIndexed { i, track ->
+                    playUrlPipeline.buildItem(track, imageFormat, audioQuality, i)
+                },
                 startIndex,
                 resolvedStartPosition,
             )
@@ -1265,8 +1274,9 @@ class PlayerManager @Inject constructor(
             }
             // 惰性直链：失效旧档缓存，换惰性 item 再 prepare，DataSource 打开时按当前偏好重新解析
             val imageFormat = prefs.imageFormat.first()
+            val audioQuality = prefs.audioQuality.first()
             runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
-            transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, imageFormat, idx))
+            transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, imageFormat, audioQuality, idx))
             transport.prepare()
             transport.seekTo(pos)
             transport.play()
@@ -1286,7 +1296,11 @@ class PlayerManager @Inject constructor(
         if (idx !in queue.indices) return false
         // 旧档直链可能还是"新鲜"缓存，必须失效，否则换音质后仍复用旧 URL
         runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
-        transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, prefs.imageFormat.first(), idx))
+        val audioQuality = prefs.audioQuality.first()
+        transport.replaceMediaItem(
+            idx,
+            playUrlPipeline.buildItem(track, prefs.imageFormat.first(), audioQuality, idx),
+        )
         transport.prepare()
         transport.seekTo(pos)
         if (_state.value.isPlaying) transport.play()

@@ -21,9 +21,18 @@ fun isConnectivityError(t: Throwable?): Boolean {
     repeat(10) {
         c ?: return false
         if (c is UnknownHostException || c is ConnectException || c is SocketTimeoutException) return true
-        val msg = c.message.orEmpty()
-        if (CONNECTIVITY_MARK in msg || "Unable to resolve host" in msg) return true
+        if (isConnectivityErrorText(c.message)) return true
         c = c.cause
     }
     return false
+}
+
+/**
+ * 只剩文案时的断网判定（UI 层用）：播放错误传给界面时 cause 已丢失，
+ * 只留 [CONNECTIVITY_MARK] 或 OkHttp 的 "Unable to resolve host"。
+ * 与 [isConnectivityError] 共用同一套文案规则，避免两处判断漂移。
+ */
+fun isConnectivityErrorText(message: String?): Boolean {
+    val msg = message ?: return false
+    return CONNECTIVITY_MARK in msg || "Unable to resolve host" in msg
 }

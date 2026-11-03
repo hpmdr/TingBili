@@ -49,4 +49,20 @@ class ConnectivityErrorsTest {
     fun `null is not connectivity`() {
         assertFalse(isConnectivityError(null))
     }
+
+    @Test
+    fun `error text with mark is connectivity`() {
+        assertTrue(isConnectivityErrorText("${CONNECTIVITY_MARK}，请检查网络后重试"))
+    }
+
+    @Test
+    fun `error text of unresolved host is connectivity`() {
+        assertTrue(isConnectivityErrorText("Unable to resolve host \"api.bilibili.com\""))
+    }
+
+    @Test
+    fun `plain failure text is not connectivity`() {
+        assertFalse(isConnectivityErrorText("音源解析失败（可能触发风控），请稍后再试"))
+        assertFalse(isConnectivityErrorText(null))
+    }
 }

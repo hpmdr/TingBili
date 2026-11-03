@@ -17,6 +17,14 @@ data class PlayUrlCacheEntity(
     @PrimaryKey val key: String,
     val url: String,
     val fetchedAtMs: Long = 0L,
+    /**
+     * 实际选中音频档的标称码率（bps，0=未知）。
+     * Hi-Res 的 FLAC-in-MP4 容器头不写码率，ExoPlayer 的 Format.bitrate 是 LENGTH_UNSET，
+     * 播放信息页用这个值兜底（见 core:media AudioBitrateRegistry）。
+     */
+    val bandwidthBps: Int = 0,
+    /** 实际选中档的音质 code（30216..30251，0=未知，如 durl 兜底轨）；底部音质标签显示实际生效档用 */
+    val audioCode: Int = 0,
 ) {
     fun isFresh(nowMs: Long = System.currentTimeMillis()): Boolean =
         url.isNotBlank() && fetchedAtMs > 0L && nowMs - fetchedAtMs < TTL_MS

@@ -42,9 +42,9 @@ class PlayUrlPipelineTest {
         var nextUrl: String? = "http://example.com/a.mp3"
         var resolveCalls = 0
         var catalog: List<Track> = emptyList()
-        override suspend fun resolve(bvid: String, cid: Long): String? {
+        override suspend fun resolve(bvid: String, cid: Long): ResolvedAudio? {
             resolveCalls++
-            return nextUrl
+            return nextUrl?.let { ResolvedAudio(it) }
         }
         override suspend fun tracksOf(bvid: String): List<Track> = catalog
         override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
@@ -79,16 +79,27 @@ class PlayUrlPipelineTest {
             pageIndex = 17,
         )
         // 不传序号：退化到分 P 标题（兼容旧语义）
-        assertEquals("P17 · 295-308", pipeline.buildItem(part, ImageFormat.WEBP).mediaMetadata.title)
+        assertEquals(
+            "P17 · 295-308",
+            pipeline.buildItem(part, ImageFormat.WEBP, 30232).mediaMetadata.title,
+        )
         // 传队列下标：通知栏用队列序号（混播时 Px 各说各话）
-        assertEquals("03 · 295-308", pipeline.buildItem(part, ImageFormat.WEBP, 2).mediaMetadata.title)
+        assertEquals(
+            "03 · 295-308",
+            pipeline.buildItem(part, ImageFormat.WEBP, 30232, 2).mediaMetadata.title,
+        )
     }
 
     @Test
-    fun `buildItem carries lazy uri and stable cache key`() {
-        val item = pipeline.buildItem(track(7), ImageFormat.WEBP)
+    fun `buildItem carries lazy uri and quality-scoped cache key`() {
+        val item = pipeline.buildItem(track(7), ImageFormat.WEBP, 30232)
         assertEquals("BV1:7", item.mediaId)
-        assertEquals("BV1:7", item.localConfiguration?.customCacheKey)
+        // 音质进缓存键：换档（AAC→FLAC）不能复用上一档缓存字节
+        assertEquals("BV1:7:30232", item.localConfiguration?.customCacheKey)
+        assertEquals(
+            "BV1:7:30251",
+            pipeline.buildItem(track(7), ImageFormat.WEBP, 30251).localConfiguration?.customCacheKey,
+        )
         val uri = item.localConfiguration!!.uri
         assertTrue(PlayUrlPipeline.isLazyUri(uri))
         assertEquals("BV1", PlayUrlPipeline.bvidOf(uri))
@@ -99,7 +110,8 @@ class PlayUrlPipelineTest {
 
     @Test
     fun `fresh cache skips network`() {
-        cache.map["BV1:1"] = PlayUrlCacheEntity("BV1:1", "http://cached/x.mp3", System.currentTimeMillis())
+        cache.map["BV1:1"] =
+            PlayUrlCacheEntity("BV1:1", "http://cached/x.mp3", System.currentTimeMillis(), 96_000)
         assertEquals("http://cached/x.mp3", audioUrls.resolveBlocking("BV1", 1L))
         assertEquals(0, resolvers.resolveCalls)
     }

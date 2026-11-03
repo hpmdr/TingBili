@@ -478,15 +478,23 @@ fun PlayerScreen(
             onDismiss = { showSubtitleSheet = false },
         )
     }
-    // 阻塞式播放失败弹窗：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完）。
-    // 纯离线且还有自动重试机会时不弹（顶部横幅已解释）；网是好的还失败、或次数用完，才打断用户做决策。
+    // 阻塞式播放失败弹窗：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完 || 断网类错误）。
+    // 断网类错误即使仍离线也要弹（顶部横幅只讲"网络断开"，不讲起播失败）；
     // 返回键/点外部 = 知道了（只关框不清队列，同一错误不再自动重试打扰）。
     val playbackError = trackUi.errorMessage
     if (trackUi.showErrorDialog && playbackError != null) {
         AlertDialog(
             onDismissRequest = { vm.dismissPlaybackError() },
-            title = { Text("播放失败") },
-            text = { Text(playbackError) },
+            title = { Text(if (trackUi.isOfflineError) "网络已断开" else "播放失败") },
+            text = {
+                Text(
+                    if (trackUi.isOfflineError) {
+                        "$playbackError\n\n网络恢复后会自动重试，也可以现在点「重试」。"
+                    } else {
+                        playbackError
+                    },
+                )
+            },
             confirmButton = {
                 Row {
                     TextButton(
@@ -730,7 +738,18 @@ private fun PlaybackInfoSheet(
             PlaybackInfoRow("封装/编码", info.mimeType ?: "读取中…")
             val codecs = info.codecs
             if (codecs != null) PlaybackInfoRow("编码参数", codecs)
-            PlaybackInfoRow("码率", if (info.bitrateKbps != null) "${info.bitrateKbps} kbps" else "读取中…")
+            // 码率：容器写了就用真实值（AAC/E-AC-3）；没写（Hi-Res FLAC 是 VBR 且容器头
+            // 不含码率）先用接口档位标称值兜底；整集命中本地缓存连解析都不发生时，
+            // 给终态「无损 VBR」，不能永远停在「读取中…」误导成还在加载
+            PlaybackInfoRow(
+                "码率",
+                when {
+                    info.bitrateKbps != null ->
+                        "${info.bitrateKbps} kbps" + if (info.bitrateNominal) "（档位标称）" else ""
+                    info.mimeType?.startsWith("audio/flac") == true -> "无损 VBR（无固定码率）"
+                    else -> "读取中…"
+                },
+            )
             PlaybackInfoRow("采样率", if (info.sampleRateHz > 0) "${info.sampleRateHz} Hz" else "读取中…")
             PlaybackInfoRow("声道", if (info.channelCount > 0) info.channelCount.toString() else "读取中…")
             MoreGroupTitle("播放")

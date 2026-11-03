@@ -30,7 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @HiltViewModel
 class MainViewModel @Inject constructor(
     val playerManager: PlayerManager,
-    networkMonitor: NetworkMonitor,
+    private val networkMonitor: NetworkMonitor,
     private val prefs: PreferencesRepository,
     auth: AuthRepository,
     private val scrollTopBus: HomeScrollTopBus,
@@ -57,6 +57,9 @@ class MainViewModel @Inject constructor(
      * 本身已是带现值的 StateFlow，scaffold 直接订阅即可，翻转频率极低）。
      */
     val isOnline: kotlinx.coroutines.flow.StateFlow<Boolean> = networkMonitor.isOnline
+
+    /** 回到前台时校准一次在线状态：NetworkCallback 可能被省电丢弃，回前台重读兜底（微秒级内存查询）。 */
+    fun refreshNetworkState() = networkMonitor.refresh()
 
     fun requestOpenPlayer() { _openPlayer.value = true }
 

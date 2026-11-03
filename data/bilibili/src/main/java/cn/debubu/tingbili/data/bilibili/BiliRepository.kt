@@ -13,6 +13,7 @@ import cn.debubu.tingbili.data.bilibili.dto.SubtitleResult
 import cn.debubu.tingbili.data.bilibili.dto.ViewData
 import cn.debubu.tingbili.data.bilibili.dto.normalizeBiliImageUrl
 import cn.debubu.tingbili.data.bilibili.dto.DashAudio
+import cn.debubu.tingbili.data.bilibili.dto.selectAudio
 import cn.debubu.tingbili.data.bilibili.dto.toAudioOptions
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
@@ -196,12 +197,17 @@ class BiliRepository @Inject constructor(
         preferQuality: Int = AudioQuality.DEFAULT_CODE,
         /** true = 不带登录 Cookie 走游客身份（只在高档被风控时兜底，音质可能降级） */
         guest: Boolean = false,
+        /** 实际选中的音频轨回调：调用方用它的 bandwidth 给播放信息页做码率兜底 */
+        onAudioSelected: ((DashAudio) -> Unit)? = null,
     ): Result<String> = try {
         val dto = api.playUrl(bvid, cid, qn = preferQuality, guest = guest)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
-            val url = dto.toAudioUrl(preferQuality)
+            val selected = dto.selectAudio(preferQuality)
+            selected?.let { onAudioSelected?.invoke(it) }
+            val url = selected?.resolvedUrl()?.takeIf { it.isNotBlank() }
+                ?: dto.data?.durl?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
             if (url.isNullOrBlank()) {
                 Result.Error("no play url")
             } else {

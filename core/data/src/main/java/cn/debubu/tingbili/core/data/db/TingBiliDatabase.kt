@@ -16,8 +16,10 @@ import androidx.room.RoomDatabase
         PlayQueueSnapshotEntity::class,
     ],
     // v16：HistoryEntity 补 bvid/updatedAt 索引、FavoriteTrackEntity 补 (bvid,cid) 索引（REVIEW_REPORT E-07）。
-    // 单人测试期允许破坏性升级：不写 15→16 迁移，由 fallbackToDestructiveMigration 重建（升级即清库）。
-    version = 16,
+    // v17：PlayUrlCacheEntity 补 bandwidthBps 列（Hi-Res FLAC 容器无码率，播放信息页兜底用）。
+    // v18：PlayUrlCacheEntity 补 audioCode 列（底部音质标签显示实际生效档）。
+    //      简单加列，写手写迁移避免破坏性升级清掉收藏/历史。
+    version = 18,
     exportSchema = false,
 )
 abstract class TingBiliDatabase : RoomDatabase() {

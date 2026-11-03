@@ -82,11 +82,35 @@ object DatabaseModule {
         }
     }
 
+    /** v17：直链缓存补 bandwidthBps（Hi-Res FLAC 容器无码率，播放信息页兜底用）。 */
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `PlayUrlCacheEntity` ADD COLUMN `bandwidthBps` INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
+    /** v18：直链缓存补 audioCode（底部音质标签显示实际生效档）。 */
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `PlayUrlCacheEntity` ADD COLUMN `audioCode` INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): TingBiliDatabase =
         Room.databaseBuilder(ctx, TingBiliDatabase::class.java, "tingbili.db")
-            .addMigrations(MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+            .addMigrations(
+                MIGRATION_12_13,
+                MIGRATION_13_14,
+                MIGRATION_14_15,
+                MIGRATION_16_17,
+                MIGRATION_17_18,
+            )
             // 注意：不要再接 fallbackToDestructiveMigrationOnDowngrade(true)，
             // 它会把 requireMigration 重新设为 true，导致升级 fallback 失效。
             // 这个重载本身已设置 allowDestructiveMigrationOnDowngrade = true。

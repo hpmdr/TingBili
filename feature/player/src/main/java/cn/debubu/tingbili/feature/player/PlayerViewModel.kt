@@ -6,6 +6,7 @@ import cn.debubu.tingbili.core.data.Result
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
+import cn.debubu.tingbili.core.data.network.isConnectivityErrorText
 import cn.debubu.tingbili.core.data.db.DEFAULT_FOLDER_ID
 import cn.debubu.tingbili.core.data.repository.FavoritesRepository
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -40,6 +41,23 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/**
+ * 播放失败弹窗门控（纯函数，便于单测）：
+ * - 在线还失败 → 弹，让用户决策；
+ * - 自动重试已用完 → 弹，别让用户干等；
+ * - 断网类错误 → 即使仍离线也弹：顶部横幅只说"网络断开"，不讲这一集起播失败，
+ *   而旧的字幕区内联报错已移除（74ad19b），静默等于零反馈。
+ * 其它离线错误（风控/解析失败等）维持不弹，避免把深夜自动切歌的偶发失败做成阻塞框。
+ */
+internal fun shouldShowPlaybackErrorDialog(
+    errorMessage: String?,
+    isLoading: Boolean,
+    online: Boolean,
+    autoRetryExhausted: Boolean,
+): Boolean = errorMessage != null &&
+    !isLoading &&
+    (online || autoRetryExhausted || isConnectivityErrorText(errorMessage))
 
 data class PlayerUiState(
     val isPlaying: Boolean = false,
@@ -311,10 +329,13 @@ class PlayerViewModel @Inject constructor(
         val isLoading: Boolean = false,
         val errorMessage: String? = null,
         /**
-         * 阻塞弹窗开关：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完）。
-         * 纯离线且还有自动重试机会时不弹（顶部横幅已解释）；网是好的还失败、或次数用完，才打断用户做决策。
+         * 阻塞弹窗开关：errorMessage 非空 + 非加载中 +（在线 || 自动重试已用完 || 断网类错误）。
+         * 断网类错误即使仍离线也要弹：顶部横幅只说明"网络断开"，不讲这一集起播失败；
+         * 字幕区的内联报错已移除（74ad19b），再静默用户会以为"播放坏了却没人说"。
          */
         val showErrorDialog: Boolean = false,
+        /** 当前错误发生在离线状态且属于断网类：弹窗按"网络已断开"措辞展示。 */
+        val isOfflineError: Boolean = false,
         val sourceTitle: String? = null,
         val speed: Float = 1f,
         val repeatMode: Int = 0,
@@ -330,6 +351,7 @@ class PlayerViewModel @Inject constructor(
         prefs.stepSec,
         networkMonitor.isOnline,
     ) { p, stepSec, online ->
+        val connectivityError = isConnectivityErrorText(p.errorMessage)
         TrackUiState(
             track = p.currentTrack,
             queue = p.queue,
@@ -337,7 +359,13 @@ class PlayerViewModel @Inject constructor(
             isPlaying = p.isPlaying,
             isLoading = p.isLoading,
             errorMessage = p.errorMessage,
-            showErrorDialog = p.errorMessage != null && !p.isLoading && (online || p.autoRetryExhausted),
+            showErrorDialog = shouldShowPlaybackErrorDialog(
+                errorMessage = p.errorMessage,
+                isLoading = p.isLoading,
+                online = online,
+                autoRetryExhausted = p.autoRetryExhausted,
+            ),
+            isOfflineError = !online && connectivityError,
             sourceTitle = p.sourceTitle,
             speed = p.speed,
             repeatMode = p.repeatMode,
@@ -430,8 +458,13 @@ class PlayerViewModel @Inject constructor(
         cn.debubu.tingbili.core.media.AudioPipelineMonitor.audioFormat,
         prefs.audioOffload,
     ) { s, decoder, offload, format, offloadOn ->
+        // FLAC 容器头不带码率：用解析直链时服务端给的档位标称值兜底（见 AudioBitrateRegistry）
+        val nominalKbps = s.currentTrack?.let {
+            cn.debubu.tingbili.core.media.AudioBitrateRegistry.kbpsOf(it.bvid, it.cid)
+        }
         cn.debubu.tingbili.core.media.PipelineInfo.of(
-            decoder, offload.first, offload.second, offloadOn, format, s.speed
+            decoder, offload.first, offload.second, offloadOn, format, s.speed,
+            fallbackBitrateKbps = nominalKbps,
         )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), cn.debubu.tingbili.core.media.PipelineInfo())
@@ -614,10 +647,24 @@ class PlayerViewModel @Inject constructor(
     }
     // ---------- 音质（播放页底部第四入口；档位定义见 data:bilibili AudioQuality，对标 PiliPlus） ----------
 
-    /** 底部音质入口短标签（64K/132K/192K/杜比/Hi-Res）。 */
-    val audioQualityLabel: StateFlow<String> = prefs.audioQuality
-        .map { AudioQuality.fromCode(it).shortDesc }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioQuality.fromCode(AudioQuality.DEFAULT_CODE).shortDesc)
+    /**
+     * 底部音质入口短标签（64K/132K/192K/杜比/Hi-Res）。
+     * 显示**实际生效档**：解析直链时登记的选中档（偏好 Hi-Res 但视频只有 192K 时，
+     * 显示 192K 才是诚实的）；登记缺失（还没解析过直链）才回落到偏好值。
+     */
+    val audioQualityLabel: StateFlow<String> = combine(
+        player.state,
+        prefs.audioQuality,
+    ) { s, prefer ->
+        val effective = s.currentTrack?.let {
+            cn.debubu.tingbili.core.media.AudioBitrateRegistry.codeOf(it.bvid, it.cid)
+        }
+        AudioQuality.fromCode(effective ?: prefer).shortDesc
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        AudioQuality.fromCode(AudioQuality.DEFAULT_CODE).shortDesc,
+    )
 
     /** 音质面板行：canonical 全档位 × 服务端可用性 × 当前有效选择。 */
     data class AudioOptionUi(

@@ -20,6 +20,8 @@ data class PipelineInfo(
     val mimeType: String? = null,
     val codecs: String? = null,
     val bitrateKbps: Int? = null,
+    /** 码率是否来自接口的档位标称值（容器没写码率时的兜底，展示时要标注） */
+    val bitrateNominal: Boolean = false,
     val sampleRateHz: Int = 0,
     val channelCount: Int = 0,
     val speed: Float = 1f,
@@ -38,20 +40,26 @@ data class PipelineInfo(
             offloadEnabled: Boolean,
             format: Format?,
             speed: Float,
-        ): PipelineInfo = PipelineInfo(
-            decoderName = decoderName,
-            decoderKind = kindOfDecoder(decoderName),
-            offloadEnabled = offloadEnabled,
-            offloadSleeping = offloadSleeping,
-            offloadActive = offloadActive,
-            mimeType = format?.sampleMimeType,
-            codecs = format?.codecs,
-            bitrateKbps = format?.bitrate
+            /** 容器没写码率时的兜底（接口档位标称，kbps）；见 [AudioBitrateRegistry] */
+            fallbackBitrateKbps: Int? = null,
+        ): PipelineInfo {
+            val realBitrate = format?.bitrate
                 ?.takeIf { it != C.LENGTH_UNSET && it > 0 }
-                ?.div(1000),
-            sampleRateHz = format?.sampleRate ?: 0,
-            channelCount = format?.channelCount ?: 0,
-            speed = speed,
-        )
+                ?.div(1000)
+            return PipelineInfo(
+                decoderName = decoderName,
+                decoderKind = kindOfDecoder(decoderName),
+                offloadEnabled = offloadEnabled,
+                offloadSleeping = offloadSleeping,
+                offloadActive = offloadActive,
+                mimeType = format?.sampleMimeType,
+                codecs = format?.codecs,
+                bitrateKbps = realBitrate ?: fallbackBitrateKbps,
+                bitrateNominal = realBitrate == null && fallbackBitrateKbps != null,
+                sampleRateHz = format?.sampleRate ?: 0,
+                channelCount = format?.channelCount ?: 0,
+                speed = speed,
+            )
+        }
     }
 }

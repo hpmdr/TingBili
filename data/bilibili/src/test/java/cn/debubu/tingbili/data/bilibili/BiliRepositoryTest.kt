@@ -327,6 +327,38 @@ class BiliRepositoryTest {
         assertEquals(listOf(30216, 30232, 30280), (r as Result.Success).data.map { it.id })
     }
 
+    /**
+     * 大会员专属档不在 dash.audio：杜比在 dash.dolby.audio、Hi-Res 在 dash.flac.audio。
+     * 请求还必须带 fnval 的杜比位（16|256=272），否则服务端连这两个节点都不返回。
+     */
+    @Test
+    fun `playUrl asks dolby bit and parses dolby and flac nodes`() = runTest {
+        server.enqueue(jsonResponse(vipPlayUrlBody()))
+        val opts = repo.getAudioOptions("BV1xx", 1001)
+        assertTrue(opts is Result.Success)
+        assertEquals(listOf(30280, 30250, 30251), (opts as Result.Success).data.map { it.id })
+        assertTrue(server.takeRequest().path!!.contains("fnval=272"))
+
+        server.enqueue(jsonResponse(vipPlayUrlBody()))
+        var selectedTrack: cn.debubu.tingbili.data.bilibili.dto.DashAudio? = null
+        val hires = repo.getPlayUrl("BV1xx", 1001, 30251) { selectedTrack = it }
+        assertEquals("https://cdn.example.com/flac.m4s", (hires as Result.Success).data)
+        // 选中轨的 bandwidth 要回传给调用方，播放信息页拿它给 FLAC 兜底码率
+        assertEquals(30251, selectedTrack?.id)
+        assertEquals(1_200_000, selectedTrack?.bandwidth)
+
+        server.enqueue(jsonResponse(vipPlayUrlBody()))
+        val dolby = repo.getPlayUrl("BV1xx", 1001, 30250)
+        assertEquals("https://cdn.example.com/dolby.m4s", (dolby as Result.Success).data)
+    }
+
+    private fun vipPlayUrlBody() =
+        """{"code":0,"data":{"dash":{
+          "audio":[{"baseUrl":"https://cdn.example.com/192.m4s","id":30280,"bandwidth":203786}],
+          "dolby":{"type":2,"audio":[{"baseUrl":"https://cdn.example.com/dolby.m4s","id":30250,"bandwidth":448000}]},
+          "flac":{"display":true,"audio":{"baseUrl":"https://cdn.example.com/flac.m4s","id":30251,"bandwidth":1200000}}
+        }}}"""
+
     private fun viewBody(bvid: String) =
         """{"code":0,"data":{"bvid":"$bvid","title":"T","pic":"https://cover","owner":{"name":"u"},"pages":[{"cid":1,"page":1,"part":"P1","duration":60}],"duration":60}}"""
 

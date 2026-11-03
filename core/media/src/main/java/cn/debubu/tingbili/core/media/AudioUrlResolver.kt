@@ -35,28 +35,44 @@ class AudioUrlResolver @Inject constructor(
         val key = "$bvid:$cid"
         val now = System.currentTimeMillis()
         val cached = runCatching { runBlocking { cache.get(key) } }.getOrNull()
-        if (cached != null && cached.isFresh(now)) return cached.url
+        // 带宽为 0 的旧行（升级前写入）视为未登记，重解析一次把码率补上；
+        // 极少数 durl-only 老视频每播一次多打一次 playurl，可接受。
+        if (cached != null && cached.isFresh(now) && cached.bandwidthBps > 0) {
+            // 缓存命中也要登记：码率兜底 + 底部标签显示「实际生效档」都靠它
+            AudioBitrateRegistry.put(bvid, cid, cached.bandwidthBps, cached.audioCode)
+            return cached.url
+        }
 
         // 断网异常不吞成 null：先看有没有过期缓存能顶（不断播），没有才透传，
         // 调用方的错误链路认 isConnectivityError(cause) 做分类 + 网络恢复重试门控。
-        val fresh: String? = try {
+        val fresh: ResolvedAudio? = try {
             runBlocking { playUrls.resolve(bvid, cid) }
         } catch (e: Exception) {
             if (!isConnectivityError(e)) null
-            else cached?.url?.takeIf { it.isNotBlank() }?.let { return it }
-                ?: throw IOException("$CONNECTIVITY_MARK，请检查网络后重试", e)
+            else cached?.url?.takeIf { it.isNotBlank() }?.let {
+                AudioBitrateRegistry.put(bvid, cid, cached.bandwidthBps, cached.audioCode)
+                return it
+            } ?: throw IOException("$CONNECTIVITY_MARK，请检查网络后重试", e)
         }
-        if (!fresh.isNullOrBlank()) {
+        if (fresh != null && fresh.url.isNotBlank()) {
+            AudioBitrateRegistry.put(bvid, cid, fresh.bandwidthBps, fresh.audioCode)
             runCatching {
                 runBlocking {
-                    cache.putAll(listOf(PlayUrlCacheEntity(key, fresh, now)))
+                    cache.putAll(
+                        listOf(
+                            PlayUrlCacheEntity(key, fresh.url, now, fresh.bandwidthBps, fresh.audioCode)
+                        )
+                    )
                     cache.pruneExpired(now - PlayUrlCacheEntity.TTL_MS)
                 }
             }
-            return fresh
+            return fresh.url
         }
 
-        cached?.url?.takeIf { it.isNotBlank() }?.let { return it }
+        cached?.url?.takeIf { it.isNotBlank() }?.let {
+            AudioBitrateRegistry.put(bvid, cid, cached.bandwidthBps, cached.audioCode)
+            return it
+        }
         throw IOException("$RESOLVE_FAILED_MARK（可能触发风控），请稍后再试")
     }
 

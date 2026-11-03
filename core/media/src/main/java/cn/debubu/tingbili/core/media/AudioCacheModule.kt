@@ -18,7 +18,8 @@ import javax.inject.Singleton
  * - 位置：cacheDir/audio（随系统清理，可被用户清缓存）
  * - 大小：设置页可调（默认 500MB），LRU，超出自动逐出
  * - 数据库：StandaloneDatabaseProvider 记录已缓存片段
- * B 站音频 URL 会过期，MediaItem.customCacheKey 使用 bvid:cid，已在 PlayerManager 中设置，故命中率不受 URL 变化影响。
+ * B 站音频 URL 会过期，MediaItem.customCacheKey 使用 bvid:cid:音质，已在 PlayUrlPipeline 设置，
+ * 命中率不受 URL 变化影响；音质进键是必须的——不同档位编码不同，共用键会把旧档字节当新格式解析。
  * 注意：Media3 的淘汰器上限在构造时固定、不支持运行时调整，
  * 因此上限改动需重启应用生效（下次启动按新上限建缓存，超量部分由 LRU 逐出）。
  */

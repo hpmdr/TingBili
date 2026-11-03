@@ -5,6 +5,8 @@ import cn.debubu.tingbili.data.bilibili.dto.DashAudio
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlData
 import cn.debubu.tingbili.data.bilibili.dto.DashData
+import cn.debubu.tingbili.data.bilibili.dto.DolbyData
+import cn.debubu.tingbili.data.bilibili.dto.FlacData
 import cn.debubu.tingbili.data.bilibili.dto.pickAudio
 import cn.debubu.tingbili.data.bilibili.dto.selectAudio
 import cn.debubu.tingbili.data.bilibili.dto.toAudioOptions
@@ -82,6 +84,41 @@ class AudioQualityTest {
         val d = dto(DashAudio(baseUrl = "", id = 30232, bandwidth = 132000))
         assertEquals(0, d.toAudioOptions().size)
         assertNull(d.selectAudio())
+    }
+
+    /** 杜比/Hi-Res 不在 dash.audio：必须从 dash.dolby.audio 与 dash.flac.audio 合并进来 */
+    @Test
+    fun `dolby and flac nodes are merged into options`() {
+        val d = PlayUrlDto(
+            code = 0,
+            data = PlayUrlData(
+                dash = DashData(
+                    audio = listOf(audio(30280, 203786)),
+                    dolby = DolbyData(type = 2, audio = listOf(audio(30250, 448000))),
+                    flac = FlacData(display = true, audio = audio(30251, 1_200_000)),
+                )
+            )
+        )
+        assertEquals(listOf(30280, 30250, 30251), d.toAudioOptions().map { it.id })
+        assertEquals(30251, d.selectAudio(30251)?.id)
+        assertEquals(30250, d.selectAudio(30250)?.id)
+        assertEquals("https://cdn.example.com/30251.m4s", d.toAudioUrl(30251))
+    }
+
+    /** 无大会员：两个节点为空，选了 Hi-Res 也必须诚实回落到 192K */
+    @Test
+    fun `missing vip tracks fall back to highest normal tier`() {
+        val d = PlayUrlDto(
+            code = 0,
+            data = PlayUrlData(
+                dash = DashData(
+                    audio = listOf(audio(30232, 132000), audio(30280, 203786)),
+                    dolby = DolbyData(type = 0, audio = null),
+                    flac = FlacData(display = false, audio = null),
+                )
+            )
+        )
+        assertEquals(30280, d.selectAudio(30251)?.id)
     }
 
     @Test

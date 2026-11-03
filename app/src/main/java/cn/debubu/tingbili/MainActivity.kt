@@ -19,7 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +45,7 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +58,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -241,6 +244,15 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     if (startTab == null) return
     // 全局离线横幅数据源：低频状态（只在连接翻转时变），放壳顶层订阅没问题。
     val isOnline by mainViewModel.isOnline.collectAsStateWithLifecycle()
+    // 回前台校准一次在线状态：NetworkCallback 可能被省电 ROM 丢弃，亮屏回来主动查一次兜底
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) mainViewModel.refreshNetworkState()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val adaptiveInfo = currentWindowAdaptiveInfo()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
@@ -262,21 +274,9 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         inTabs to showMini
     }
 
-    // 离线横幅盖两分支（手机 Scaffold / 平板 MainTabsScaffold），放 NavHost 之外：
-    // 进出二级页不重建，转场动画不受影响；在线时整段消失，布局与之前完全一致。
-    Column(modifier = Modifier.fillMaxSize()) {
-        AnimatedVisibility(
-            visible = !isOnline,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
-        ) {
-            OfflineBanner(modifier = Modifier.fillMaxWidth())
-        }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) {
+    // 离线横幅盖两分支（手机 Scaffold / 平板 MainTabsScaffold），悬浮在顶部、零占位，
+    // 内容不被挤压下移；放 NavHost 之外：进出二级页不重建，转场动画不受影响。
+    Box(modifier = Modifier.fillMaxSize()) {
     if (layoutType == NavigationSuiteType.NavigationBar) {
         // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
         // 注意：NavHost 绝不能放在 inMainTabs 的 if/else 两分支里各调一次——
@@ -337,6 +337,16 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             pagerState = pagerState,
         )
     }
+        // 悬浮离线横幅：微信式顶部常驻提示，盖在内容上不占布局；statusBarsPadding 避开状态栏图标
+        AnimatedVisibility(
+            visible = !isOnline,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(),
+        ) {
+            OfflineBanner(modifier = Modifier.statusBarsPadding())
         }
     }
 }
