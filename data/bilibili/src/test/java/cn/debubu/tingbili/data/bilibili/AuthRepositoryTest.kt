@@ -112,9 +112,12 @@ class AuthRepositoryTest {
         )
         assertEquals("S1", ok?.sessdata)
         assertEquals(7L, ok?.uid)
-        // 陈旧 buvid/fingerprint 必须丢弃，只白名单回传
+        // buvid 保留在 extras（CookieHeaderProvider 要用账号绑定的那份，换新的会被风控 -351）；
+        // 但它由 provider 统一拼，不在 toCookieHeader 里重复；fingerprint 丢弃。
+        assertEquals("OLD", ok?.extras?.get("buvid3"))
         assertTrue(ok?.toCookieHeader()?.contains("buvid3") == false)
         assertTrue(ok?.toCookieHeader()?.contains("DedeUserID__ckMd5=C") == true)
+        assertTrue(ok?.toCookieHeader()?.contains("fingerprint") == false)
     }
 
     @Test

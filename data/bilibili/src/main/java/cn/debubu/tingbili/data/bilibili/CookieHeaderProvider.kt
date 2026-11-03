@@ -42,12 +42,30 @@ class CookieHeaderProvider @Inject constructor(
         return runBlocking { withTimeoutOrNull(AWAIT_SESSION_MS) { authRepository.awaitSession() } }
     }
 
-    internal fun build(session: BiliSession?, buvid: String?): String? =
-        listOfNotNull(session?.toCookieHeader(), buvid)
+    internal fun build(session: BiliSession?, buvid: String?): String? {
+        // buvid 的取法（2026-11 真机实测）：
+        // 1. 登录态优先用会话自带的那份：Cookie 导入的账号在浏览器里就和它绑定了，
+        //    换成 App 新生成的 buvid 打 playurl 会稳定吃 -351「受到神秘力量干扰」；
+        // 2. 登录态但没有自带 buvid（扫码登录/旧版导入）：干脆不发 buvid。
+        //    实测带 Cookie 的 playurl / WBI search 不带 buvid 都正常，反而不会撞 -351；
+        // 3. 游客才用本机生成的 buvid（search 等接口没有它容易 412）。
+        val effectiveBuvid = if (session == null) {
+            buvid
+        } else {
+            session.extras[BiliSession.KEY_BUVID3]?.takeIf { it.isNotBlank() }?.let { b3 ->
+                buildString {
+                    append("buvid3=").append(b3)
+                    session.extras[BiliSession.KEY_BUVID4]?.takeIf { it.isNotBlank() }
+                        ?.let { append("; buvid4=").append(it) }
+                }
+            }
+        }
+        return listOfNotNull(session?.toCookieHeader(), effectiveBuvid)
             .map { it.trim().trim(';') }
             .filter { it.isNotBlank() }
             .joinToString("; ")
             .ifBlank { null }
+    }
 
     companion object {
         const val REFRESH_MS = 60_000L
