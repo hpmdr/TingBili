@@ -40,6 +40,7 @@ class MediaControllerHandle @Inject constructor(
 
     override fun seekToNextMediaItem() { controller()?.seekToNextMediaItem() }
     override fun seekToPreviousMediaItem() { controller()?.seekToPreviousMediaItem() }
+    override val hasNextMediaItem: Boolean get() = controller()?.hasNextMediaItem() ?: false
 
     override fun addMediaItem(index: Int, item: MediaItem) {
         controller()?.addMediaItem(index, item)

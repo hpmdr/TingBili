@@ -697,13 +697,22 @@ class PlayerManager @Inject constructor(
         _state.update { it.copy(shuffleEnabled = enabled) }
     }
 
-    /** 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。 */
+    /**
+     * 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。
+     * 例外：洗牌模式下手动点选**另一集**时重建 transport（setMediaItems 生成新牌序 = 重洗，
+     * 用户预期「点一首新歌、剩余顺序换一批」）；重播当前集不重洗。
+     */
     fun playAt(index: Int, manual: Boolean = true) {
         if (index !in queue.indices) return
         if (manual) resetRestoreState()
         // 重试即清旧错：成功靠播放事件续上，失败由错误链重写，避免"恢复正常了还一直显示"
         _state.update { it.copy(errorMessage = null) }
-        if (transport.mediaItemCount == queue.size) {
+        val reshuffleOnPick = manual &&
+            queueManager.shuffleEnabled &&
+            randomMode == RandomPlayMode.SHUFFLE &&
+            index != currentIndex &&
+            transport.mediaItemCount == queue.size
+        if (!reshuffleOnPick && transport.mediaItemCount == queue.size) {
             transport.seekTo(index, 0L)
             transport.play()
             return
@@ -790,6 +799,20 @@ class PlayerManager @Inject constructor(
             effectiveScope().launch {
                 playMutex.withLock { rebuildTransport(target, 0L, startPlaying = true) }
             }
+        }
+    }
+
+    /**
+     * 洗牌整轮播完：重洗一轮，从随机一首接着播（单集队列则重播当前）。
+     * 走 rebuildTransport（setMediaItems 会生成新洗牌序）；只在整轮结束时发生，频率低。
+     */
+    private fun startNewShuffleRound() {
+        val q = queue
+        if (q.isEmpty()) return
+        val candidates = q.indices.filter { it != currentIndex }
+        val target = if (candidates.isEmpty()) currentIndex else candidates.random()
+        effectiveScope().launch {
+            playMutex.withLock { rebuildTransport(target, 0L, startPlaying = true) }
         }
     }
 
@@ -1111,6 +1134,14 @@ class PlayerManager @Inject constructor(
             }
             return
         }
+        // 洗牌走到牌序末尾（repeat off）：重洗一轮接着播，别让「下一曲」死在末尾
+        if (queueManager.shuffleEnabled &&
+            randomMode == RandomPlayMode.SHUFFLE &&
+            !transport.hasNextMediaItem
+        ) {
+            startNewShuffleRound()
+            return
+        }
         transport.seekToNextMediaItem()
         transport.play()
     }
@@ -1203,6 +1234,13 @@ class PlayerManager @Inject constructor(
             }
             // READY 后位置可信；BUFFERING 期间位置可能还在推进，交给轮询低频采样
             if (!buffering) syncPositionFromPlayer()
+        }
+        override fun onPlaybackEnded() {
+            // 洗牌整轮自然播完（repeat off 到队尾才 ended）：重洗一轮接着播
+            // 睡眠定时「到章停」到此为止，不续轮；repeat all 由 ExoPlayer 自己回卷，不会 ended
+            if (!queueManager.shuffleEnabled || randomMode != RandomPlayMode.SHUFFLE) return
+            if (_state.value.sleepEndOfChapter) return
+            startNewShuffleRound()
         }
         override fun onPositionDiscontinuity() {
             // 播放器权威事件（seek/切章/自动跳变）到达：解除抑制并按它对齐

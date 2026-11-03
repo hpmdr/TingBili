@@ -33,6 +33,8 @@ class PlaybackEventHandler(
         fun onTransition(index: Int, reason: Int)
         fun onPlayingChanged(isPlaying: Boolean)
         fun onPlayerStateChanged(buffering: Boolean)
+        /** 队列自然播完进入 ended（repeat off 到队尾才会触发）。 */
+        fun onPlaybackEnded() {}
         /** 播放器位置不连续（seek/切章/自动跳变）：调用方按播放器位置立即对表。 */
         fun onPositionDiscontinuity() {}
         /** error 为触发本次 fatal 的原始异常（重试耗尽时同样透传，便于调用方做断网分类）；纯本地失败为 null。 */
@@ -87,6 +89,7 @@ class PlaybackEventHandler(
                 // keep isPlaying in sync + 驱动加载态：buffering 时显示加载，ready/idle/ended 时收敛
                 val buffering = state == Player.STATE_BUFFERING
                 listener.onPlayerStateChanged(buffering)
+                if (state == Player.STATE_ENDED) listener.onPlaybackEnded()
                 if (state == Player.STATE_READY) resetRetry()
             }
 

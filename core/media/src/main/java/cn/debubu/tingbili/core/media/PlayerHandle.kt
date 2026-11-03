@@ -27,6 +27,8 @@ interface PlayerHandle {
     /** 按播放列表顺序跳到下一首/上一首（随机模式下由 ExoPlayer 决定落点）。 */
     fun seekToNextMediaItem() {}
     fun seekToPreviousMediaItem() {}
+    /** 是否还有下一首（按洗牌序/循环模式判定）。默认 true：替身沿用旧的无回卷行为。 */
+    val hasNextMediaItem: Boolean get() = true
     fun prepare()
     fun play()
     fun pause()
