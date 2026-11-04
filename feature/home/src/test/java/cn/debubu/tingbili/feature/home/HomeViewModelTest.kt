@@ -17,6 +17,7 @@ import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.BiliRepository
 import cn.debubu.tingbili.data.bilibili.dto.PlayUrlDto
 import cn.debubu.tingbili.data.bilibili.dto.RelatedDto
+import cn.debubu.tingbili.data.bilibili.dto.RelatedItem
 import cn.debubu.tingbili.data.bilibili.dto.SearchDto
 import cn.debubu.tingbili.data.bilibili.dto.SearchData
 import cn.debubu.tingbili.data.bilibili.dto.SearchItem
@@ -65,6 +66,13 @@ class HomeViewModelTest {
             SearchItem(bvid = "BV1xx", title = "音乐测试", author = "up1", pic = "https://cover", duration = "3:00"),
             SearchItem(bvid = "BV2yy", title = "音乐测试2", author = "up2", pic = "https://cover2", duration = "4:00")
         )
+        /** 第 2 页搜索回补结果（种子池耗尽回补场景用） */
+        var page2Result: List<SearchItem> = emptyList()
+        /** 搜索页码调用记录 */
+        val searchPageCalls = mutableListOf<Int>()
+        /** related 固定回包（对所有 bvid 返回同一批） */
+        var relatedResult: List<RelatedItem> = emptyList()
+        var relatedCalls = 0
         var viewResult: ViewDto = ViewDto(
             code = 0, data = ViewData(
                 bvid = "BV1xx", title = "My Video", pic = "https://cover",
@@ -74,12 +82,19 @@ class HomeViewModelTest {
         )
         override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto {
             lastSearchKeyword = keyword
-            // simulate paging: page 1 returns searchResult, page 2+ empty
-            val data = if (page == 1) SearchData(result = searchResult, page = page, numResults = searchResult.size, numPages = 1) else SearchData(result = emptyList(), page = page)
+            searchPageCalls.add(page)
+            val data = when {
+                page == 1 -> SearchData(result = searchResult, page = page, numResults = searchResult.size, numPages = 1)
+                page == 2 && page2Result.isNotEmpty() -> SearchData(result = page2Result, page = page, numResults = page2Result.size, numPages = 2)
+                else -> SearchData(result = emptyList(), page = page)
+            }
             return SearchDto(code = 0, data = data)
         }
         override suspend fun view(bvid: String): ViewDto = viewResult
-            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
+            override suspend fun related(bvid: String): RelatedDto {
+            relatedCalls++
+            return RelatedDto(code = 0, data = relatedResult)
+        }
         override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0, data = cn.debubu.tingbili.data.bilibili.dto.PlayUrlData(dash = cn.debubu.tingbili.data.bilibili.dto.DashData(audio = listOf(cn.debubu.tingbili.data.bilibili.dto.DashAudio(baseUrl = "https://audio.example.com/a.mp3")))))
         override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
         override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
@@ -234,57 +249,71 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
     }
 
     @Test
-    fun `HomePagingSource loads page`() = runTest {
-        val source = HomePagingSource(repo)
+    fun `SearchPagingSource loads first page via search`() = runTest {
+        var firstPage: List<Track>? = null
+        var firstTotal: Int? = null
+        val source = SearchPagingSource(repo, "有声小说") { tracks, total ->
+            firstPage = tracks; firstTotal = total
+        }
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
         val page = result as PagingSource.LoadResult.Page<Int, Track>
         assertEquals(2, page.data.size)
         assertEquals("BV1xx", page.data[0].bvid)
-        assertEquals(1, page.prevKey ?: 1) // prevKey null for page 1
-        // nextKey should be 2 when data non-empty
+        assertEquals(null, page.prevKey)
         assertEquals(2, page.nextKey)
+        assertEquals(2, firstPage?.size)
+        assertEquals(2, firstTotal)
+        assertEquals("有声小说", fakeApi.lastSearchKeyword)
+        // 纯搜索分页：不借用 related 扩展
+        assertEquals(0, fakeApi.relatedCalls)
     }
 
     @Test
-    fun `HomePagingSource uses recommended keyword`() = runTest {
-        val source = HomePagingSource(repo)
-        val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
-        assertTrue(result is PagingSource.LoadResult.Page)
-        assertTrue(HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS.contains(fakeApi.lastSearchKeyword))
-    }
-
-    @Test
-    fun `rotation restarts api page per keyword round`() = runTest {
-        val calls = mutableListOf<Pair<String, Int>>()
-        val api = object : BiliApi {
-            override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto {
-                calls.add(keyword to page)
-                return SearchDto(code = 0, data = SearchData(result = fakeApi.searchResult, page = page, numResults = 2, numPages = 9))
-            }
-            override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
-            override suspend fun related(bvid: String): RelatedDto = RelatedDto()
-            override suspend fun playUrl(bvid: String, cid: Long, fnval: Int, qn: Int?, guest: Boolean): PlayUrlDto = PlayUrlDto(code = 0)
-            override suspend fun subtitle(bvid: String, cid: Long): SubtitleDto = SubtitleDto(code = 0)
-            override suspend fun favFoldersAll(upMid: Long): cn.debubu.tingbili.data.bilibili.dto.FavFolderDto = cn.debubu.tingbili.data.bilibili.dto.FavFolderDto()
-            override suspend fun favMedias(mediaId: Long, pn: Int, ps: Int, keyword: String, order: String, type: Int, tid: Int, platform: String): cn.debubu.tingbili.data.bilibili.dto.FavDetailDto = cn.debubu.tingbili.data.bilibili.dto.FavDetailDto()
-            override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
-            override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
-        }
-        val kws = listOf("A", "B", "C", "D")
-        val source = HomePagingSource(BiliRepository(api), kws)
-        (1..6).forEach { pg ->
-            val r = source.load(PagingSource.LoadParams.Refresh(key = pg, loadSize = 20, placeholdersEnabled = false))
-            assertTrue(r is PagingSource.LoadResult.Page)
-        }
-        assertEquals(
-            listOf("A" to 1, "B" to 1, "C" to 1, "D" to 1, "A" to 2, "B" to 2),
-            calls
+    fun `SearchPagingSource page 2 requests search page 2`() = runTest {
+        fakeApi.page2Result = listOf(
+            SearchItem(bvid = "BV5zz", title = "有声书精选", author = "up5", pic = "", duration = "2:00")
         )
+        val source = SearchPagingSource(repo, "有声小说")
+        source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        val result = source.load(PagingSource.LoadParams.Append(key = 2, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(result is PagingSource.LoadResult.Page)
+        val page = result as PagingSource.LoadResult.Page<Int, Track>
+        assertEquals(listOf("BV5zz"), page.data.map { it.bvid })
+        assertEquals(1, page.prevKey)
+        assertEquals(3, page.nextKey)
+        assertTrue(2 in fakeApi.searchPageCalls)
+        // 纯搜索分页：不再借用 related 扩展
+        assertEquals(0, fakeApi.relatedCalls)
     }
 
     @Test
-    fun `HomePagingSource error propagates`() = runTest {
+    fun `SearchPagingSource ends when search returns nothing`() = runTest {
+        val source = SearchPagingSource(repo, "有声小说")
+        source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        val result = source.load(PagingSource.LoadParams.Append(key = 2, loadSize = 20, placeholdersEnabled = false))
+        assertTrue(result is PagingSource.LoadResult.Page)
+        val page = result as PagingSource.LoadResult.Page<Int, Track>
+        assertEquals(0, page.data.size)
+        assertEquals(null, page.nextKey)
+    }
+
+    @Test
+    fun `SearchPagingSource dedups bvids across pages but keeps paging`() = runTest {
+        // 第 2 页把第 1 页已展示的 BV 原样推回来：去重后页 2 为空，但仍保留 nextKey 继续往后翻
+        fakeApi.page2Result = listOf(
+            SearchItem(bvid = "BV1xx", title = "音乐测试", author = "up1", pic = "", duration = "3:00"),
+        )
+        val source = SearchPagingSource(repo, "有声小说")
+        source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
+        val result = source.load(PagingSource.LoadParams.Append(key = 2, loadSize = 20, placeholdersEnabled = false))
+        val page = result as PagingSource.LoadResult.Page<Int, Track>
+        assertEquals(0, page.data.size)
+        assertEquals(3, page.nextKey)
+    }
+
+    @Test
+    fun `SearchPagingSource error propagates`() = runTest {
         val errorApi = object : BiliApi {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto = throw RuntimeException("network error")
             override suspend fun view(bvid: String): ViewDto = ViewDto(code = 0)
@@ -297,7 +326,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         }
         val errRepo = BiliRepository(errorApi)
-        val source = HomePagingSource(errRepo)
+        val source = SearchPagingSource(errRepo, "有声小说")
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Error)
     }
@@ -316,7 +345,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
 
     @Test
     fun `getRefreshKey returns correctly`() = runTest {
-        val source = HomePagingSource(repo)
+        val source = SearchPagingSource(repo, "有声小说")
         val state = PagingState<Int, Track>(
             pages = listOf(
                 PagingSource.LoadResult.Page(data = listOf(Track("BV1", 1, "t", "a", "", 0, null)), prevKey = null, nextKey = 2)
@@ -348,7 +377,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
     @Test
     fun `first page saves snapshot`() = runTest {
         var saved: List<Track>? = null
-        val source = HomePagingSource(repo) { tracks, _ -> saved = tracks }
+        val source = SearchPagingSource(repo, "有声小说") { tracks, _ -> saved = tracks }
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Page)
         assertNotNull(saved)
@@ -386,23 +415,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
     }
 
     @Test
-    fun `HomePagingSource dedups bvids across pages`() = runTest {
-        // FakeBiliApi 对 page==1 不分关键词都返回同一批 BV：模拟“有声小说/有声书同池”重叠。
-        // 同一个 source 先后 load 第 1/2 页，第 2 页应被去重到空（nextKey 保留、可继续往后翻）。
-        val source = HomePagingSource(repo, listOf("有声小说", "有声书"))
-        val first = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
-        assertTrue(first is PagingSource.LoadResult.Page)
-        val page1 = first as PagingSource.LoadResult.Page<Int, Track>
-        assertEquals(2, page1.data.size)
-        val second = source.load(PagingSource.LoadParams.Append(key = 2, loadSize = 20, placeholdersEnabled = false))
-        assertTrue(second is PagingSource.LoadResult.Page)
-        val page2 = second as PagingSource.LoadResult.Page<Int, Track>
-        assertEquals(0, page2.data.size)
-        assertEquals(3, page2.nextKey)
-    }
-
-    @Test
-    fun `HomePagingSource maps 412 to rate-limited Error`() = runTest {
+    fun `SearchPagingSource maps 412 to rate-limited Error`() = runTest {
         val limitedApi = FakeBiliApi()
         val limitedRepo = BiliRepository(object : BiliApi {
             override suspend fun search(keyword: String, searchType: String, page: Int): SearchDto =
@@ -416,7 +429,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
             override suspend fun toview(pn: Int, ps: Int): cn.debubu.tingbili.data.bilibili.dto.ToviewDto = cn.debubu.tingbili.data.bilibili.dto.ToviewDto()
             override suspend fun historyCursor(type: String, ps: Int, max: Long, viewAt: Long): cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto = cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto()
         })
-        val source = HomePagingSource(limitedRepo)
+        val source = SearchPagingSource(limitedRepo, "有声小说")
         val result = source.load(PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false))
         assertTrue(result is PagingSource.LoadResult.Error)
         val err = (result as PagingSource.LoadResult.Error).throwable

@@ -9,8 +9,14 @@ import kotlinx.coroutines.delay
 
 /**
  * 首页唯一的列表数据源：一个关键词的搜索结果分页。
+ *
  * 推荐只是“进入页面时用默认/上次搜索词自动执行一次同样的搜索”，与手动搜索完全等价，
  * 所以全程只有这一条流、一个列表，不区分“推荐列表”和“搜索结果”。
+ *
+ * 风控（412 / `v_voucher` 软拦）在上游解决，不在这里绕路：
+ * - `WbiInterceptor` 负责 WBI 签名、搜索浏览器参数、设备 buvid（缺 buvid 必被软拦）；
+ * - `BiliRepository.throttleSearch()` 保证两次搜索至少间隔 800ms；
+ * - 真被限流时退避一次再抛 [BiliRateLimitedException]，由 UI 提示用户重试。
  *
  * @param onFirstPage 首屏加载成功回调（SWR 快照用），调用方负责落盘，异常内部吞掉不影响分页。
  */
@@ -44,7 +50,7 @@ class SearchPagingSource(
             val prevKey = if (page == 1) null else page - 1
             LoadResult.Page(data = tracks, prevKey = prevKey, nextKey = nextKey)
         } catch (e: BiliRateLimitedException) {
-            // 412 风控：先退避再交 Error，掐断连击风暴
+            // 412 / v_voucher 风控：先退避再交 Error，掐断连击风暴
             try {
                 delay(RATE_LIMIT_BACKOFF_MS)
             } catch (_: Exception) {
@@ -66,5 +72,8 @@ class SearchPagingSource(
 
     companion object {
         const val RATE_LIMIT_BACKOFF_MS = 2000L
+
+        /** 默认策展关键词（设置页兜底；与 PreferencesRepository.DEFAULT_HOME_KEYWORDS 一致） */
+        val DEFAULT_RECOMMEND_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
     }
 }

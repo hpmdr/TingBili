@@ -62,7 +62,7 @@ class HomeViewModel @Inject constructor(
 
     /** 首页策展关键词（设置页可增减）：搜索建议词 + 没有搜索历史时的兜底词 */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
-        viewModelScope, SharingStarted.Eagerly, HomePagingSource.DEFAULT_RECOMMEND_KEYWORDS
+        viewModelScope, SharingStarted.Eagerly, SearchPagingSource.DEFAULT_RECOMMEND_KEYWORDS
     )
 
     /** 搜索历史（本地，最近在前），建议区展示；第一条即上次搜索词 */
