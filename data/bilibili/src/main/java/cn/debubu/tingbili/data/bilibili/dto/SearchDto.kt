@@ -16,7 +16,12 @@ data class SearchData(
     val result: List<SearchItem> = emptyList(),
     val page: Int = 1,
     @SerialName("numResults") val numResults: Int = 0,
-    @SerialName("numPages") val numPages: Int = 0
+    @SerialName("numPages") val numPages: Int = 0,
+    /**
+     * 风控软拦凭据：服务端返回 code=0 但带 `v_voucher`、`result` 为空。
+     * 不识别就会被当成“没有结果”，用户只会看到一直空白（2026-11 实测登录态不带 buvid 必现）。
+     */
+    @SerialName("v_voucher") val vVoucher: String? = null,
 )
 
 @Serializable

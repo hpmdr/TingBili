@@ -2,13 +2,16 @@ package cn.debubu.tingbili.data.bilibili.di
 
 import cn.debubu.tingbili.data.bilibili.BiliApi
 import cn.debubu.tingbili.data.bilibili.SpaceApi
+import cn.debubu.tingbili.data.bilibili.BiliCookieStore
 import cn.debubu.tingbili.data.bilibili.BuvidProvider
 import cn.debubu.tingbili.data.bilibili.CookieHeaderProvider
 import cn.debubu.tingbili.data.bilibili.WbiInterceptor
 import cn.debubu.tingbili.data.bilibili.WbiSigner
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
@@ -36,13 +39,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideBuvidProvider(): BuvidProvider = BuvidProvider()
+    fun provideBuvidProvider(@ApplicationContext context: Context): BuvidProvider =
+        BuvidProvider(context)
 
     @Provides
     @Singleton
     fun provideOkHttp(
         wbiSigner: WbiSigner,
         cookieHeaders: CookieHeaderProvider,
+        cookieStore: BiliCookieStore,
+        buvidProvider: BuvidProvider,
     ): OkHttpClient =
         OkHttpClient.Builder()
             // 超时兜底：无超时时 412/弱网会 hang 住 load 协程堆积
@@ -51,8 +57,14 @@ object NetworkModule {
             .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .addInterceptor(
-                // 登录态 Cookie 优先（配额更高、风控更松），游客模式回落 buvid3/4
-                WbiInterceptor(wbiSigner, cookieProvider = cookieHeaders::get)
+                // 登录态 Cookie 优先（配额更高、风控更松），游客模式回落 buvid3/4；
+                // cookieStore 负责设备 Cookie 回存与合并（风控会话连续性）
+                WbiInterceptor(
+                    wbiSigner,
+                    cookieProvider = cookieHeaders::get,
+                    cookieStore = cookieStore,
+                    deviceCookieProvider = buvidProvider::cookie,
+                )
             )
             .build()
 

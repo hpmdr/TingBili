@@ -53,19 +53,31 @@ class BiliRepository @Inject constructor(
         }
     }
 
-    private fun checkSearchCode(dtoCode: Int, dtoMessage: String): String? {
-        if (dtoCode == 0) return null
+    /**
+     * 搜索类接口的风控判定。
+     *
+     * B 站有两种拦截形态：
+     * 1. code 412/-412（硬拦）；
+     * 2. **code=0 + data.v_voucher + result 为空**（软拦，最常见）。
+     * 第二种不识别就会被当成“没有结果”，界面一直空白；这里统一抛 [BiliRateLimitedException]，
+     * 由 PagingSource 退避后提示用户（PiliPlus 同款判定）。
+     */
+    private fun checkSearchCode(dtoCode: Int, dtoMessage: String, vVoucher: String? = null): String? {
         if (dtoCode == 412 || dtoCode == -412) {
             val detail = dtoMessage.ifBlank { "请求被拦截" }
             throw BiliRateLimitedException("请求太频繁（412），稍后再试：$detail")
         }
+        if (dtoCode == 0 && !vVoucher.isNullOrBlank()) {
+            throw BiliRateLimitedException("触发B站风控，请稍后再试")
+        }
+        if (dtoCode == 0) return null
         return dtoMessage.ifBlank { "search failed: code $dtoCode" }
     }
 
     suspend fun search(keyword: String): Result<List<Track>> = try {
         throttleSearch()
         val dto = api.search(keyword)
-        val err = checkSearchCode(dto.code, dto.message)
+        val err = checkSearchCode(dto.code, dto.message, dto.data?.vVoucher)
         if (err != null) {
             Result.Error(err)
         } else {
@@ -85,7 +97,7 @@ class BiliRepository @Inject constructor(
         if (keyword.isBlank()) return emptyList()
         throttleSearch()
         val dto = api.search(keyword, page = page)
-        val err = checkSearchCode(dto.code, dto.message)
+        val err = checkSearchCode(dto.code, dto.message, dto.data?.vVoucher)
         if (err != null) throw IllegalStateException(err)
         return dto.toTracks()
     }
@@ -95,7 +107,7 @@ class BiliRepository @Inject constructor(
         if (keyword.isBlank()) return emptyList<Track>() to 0
         throttleSearch()
         val dto = api.search(keyword, page = page)
-        val err = checkSearchCode(dto.code, dto.message)
+        val err = checkSearchCode(dto.code, dto.message, dto.data?.vVoucher)
         if (err != null) throw IllegalStateException(err)
         return dto.toTracks() to (dto.data?.numResults ?: 0)
     }

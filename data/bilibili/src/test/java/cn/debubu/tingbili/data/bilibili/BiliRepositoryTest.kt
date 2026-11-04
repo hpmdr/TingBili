@@ -73,6 +73,17 @@ class BiliRepositoryTest {
         assertEquals("BV1xx", tracks[0].bvid)
     }
 
+    /** 服务端软拦：code=0 但带 v_voucher + 空结果，不能当“搜不到”展示 */
+    @Test
+    fun `search treats v_voucher as rate limited`() = runTest {
+        server.enqueue(
+            jsonResponse("""{"code":0,"data":{"v_voucher":"voucher-token","result":[]}}""")
+        )
+        val r = repo.search("有声小说")
+        assertTrue(r is Result.Error)
+        assertTrue((r as Result.Error).msg.contains("风控"))
+    }
+
     @Test
     fun `search returns Error on non-zero code`() = runTest {
         server.enqueue(
