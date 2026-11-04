@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        NetworkMonitor 直接调用 ConnectivityManager.registerDefaultNetworkCallback / getActiveNetwork，
+        权限必须由提供方（本模块）声明：
+        - 之前只在 app 的 manifest 里声明，运行时合并后没问题，但 core:data 单模块 lint 看不到，
+          报 MissingPermission 导致 CI 的 ./gradlew lintDebug 一直是红的；
+        - 库模块声明后由 manifest merger 去重，不会和 app 的重复。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>
