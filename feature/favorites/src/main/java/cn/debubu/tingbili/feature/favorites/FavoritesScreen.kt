@@ -31,6 +31,7 @@ import cn.debubu.tingbili.core.data.db.BvFavoriteEntity
 import cn.debubu.tingbili.core.data.db.FavoriteFolderSummary
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.CreateFolderDialog
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
@@ -77,12 +78,7 @@ fun FavoritesScreen(
     var cancelTarget by remember { mutableStateOf<BvFavoriteEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(message) {
-        message?.let {
-            vm.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
 
     TingBiliScaffold(
         topBar = {

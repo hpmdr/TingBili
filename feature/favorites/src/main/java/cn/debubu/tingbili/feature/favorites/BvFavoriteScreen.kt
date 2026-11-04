@@ -58,6 +58,7 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.BackNavIcon
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderMultiPickerSheet
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
@@ -94,12 +95,7 @@ fun BvFavoriteScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(bvid) { vm.refresh() }
-    LaunchedEffect(message) {
-        message?.let {
-            vm.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
 
     val refreshing = refreshState is BvRefreshState.Refreshing
     val fav = favorite

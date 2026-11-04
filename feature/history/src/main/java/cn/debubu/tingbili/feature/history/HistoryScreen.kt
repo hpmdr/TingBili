@@ -47,6 +47,7 @@ import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.episodePageLabel
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.playedProgressLabel
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
@@ -67,12 +68,7 @@ fun HistoryScreen(
     val message by vm.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(message) {
-        message?.let {
-            vm.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
 
     TingBiliScaffold(
         topBar = {

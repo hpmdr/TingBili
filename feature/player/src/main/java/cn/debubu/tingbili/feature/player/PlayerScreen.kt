@@ -137,6 +137,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.SettingRadioRow
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
@@ -171,12 +172,7 @@ fun PlayerScreen(
     val isDefaultFavorite by vm.isDefaultFavorite.collectAsStateWithLifecycle()
     val favoriteFolders by vm.favoriteFolders.collectAsStateWithLifecycle()
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
-    LaunchedEffect(refreshMessage) {
-        refreshMessage?.let {
-            vm.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(refreshMessage, snackbarHostState, vm::consumeMessage)
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
     val headerTitle = playerHeaderTitle(trackUi.track)
 
@@ -421,11 +417,12 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(8.dp))
     }
+        // 抬到进度条上方：88dp 会压在进度条和播放键上，提示看不清也挡操作
         TingBiliSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 210.dp),
         )
     }
 

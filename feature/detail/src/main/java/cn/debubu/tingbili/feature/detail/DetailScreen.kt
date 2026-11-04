@@ -51,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -121,12 +122,7 @@ fun DetailScreen(
     }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(message) {
-        message?.let {
-            viewModel.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(message, snackbarHostState, viewModel::consumeMessage)
 
     TingBiliScaffold(
         topBar = {

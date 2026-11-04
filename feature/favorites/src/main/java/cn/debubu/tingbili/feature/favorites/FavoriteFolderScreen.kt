@@ -55,6 +55,7 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.BackNavIcon
 import cn.debubu.tingbili.core.ui.component.CreateFolderDialog
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
@@ -85,12 +86,7 @@ fun FavoriteFolderScreen(
     var showDelete by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<FavoriteTrackEntity?>(null) }
 
-    LaunchedEffect(message) {
-        message?.let {
-            vm.consumeMessage()
-            snackbarHostState.showSnackbar(it)
-        }
-    }
+    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
 
     val isDefault = folder?.isDefault == true
 
