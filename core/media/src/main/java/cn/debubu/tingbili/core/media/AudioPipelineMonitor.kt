@@ -30,8 +30,10 @@ object AudioPipelineMonitor {
 
     fun onDecoderInitialized(name: String) {
         decoderNameState.value = name
-        // 出现 CPU 解码器 = 这一轨没走 offload，撤销粘性标记
+        // 出现 CPU 解码器 = 这一轨没走 offload，撤销粘性标记与瞬时标记
+        // （瞬时值也必须一起清：否则"先 sleeping 后回落 CPU"的组合会让倍速被永久锁死）
         offloadEverActiveState.value = false
+        offloadSleepingState.value = false
     }
 
     fun onOffloadSleepingChanged(sleeping: Boolean) {

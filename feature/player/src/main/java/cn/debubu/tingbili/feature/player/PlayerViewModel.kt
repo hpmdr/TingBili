@@ -642,7 +642,10 @@ class PlayerViewModel @Inject constructor(
         val cur = player.state.value.speed
         val next = steps.firstOrNull { it > cur + 0.01f } ?: steps.first()
         viewModelScope.launch {
-            if (!player.setSpeed(next)) _message.value = "DSP 省电生效中不支持倍速，已保持 1.0x"
+            // 拦截原因是 offload 生效：必须明确告知，否则用户只会觉得"点倍速没反应"
+            if (!player.setSpeed(next)) {
+                _message.value = "DSP 省电生效中不支持倍速，可在设置里关闭 DSP 省电"
+            }
         }
     }
     // ---------- 音质（播放页底部第四入口；档位定义见 data:bilibili AudioQuality，对标 PiliPlus） ----------

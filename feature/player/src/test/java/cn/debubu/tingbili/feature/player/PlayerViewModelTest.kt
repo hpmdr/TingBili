@@ -449,7 +449,7 @@ class PlayerViewModelTest {
         vm.cycleSpeed()
         runCurrent()
         advanceTimeBy(100)
-        assertEquals("DSP 省电生效中不支持倍速，已保持 1.0x", vm.message.value)
+        assertEquals("DSP 省电生效中不支持倍速，可在设置里关闭 DSP 省电", vm.message.value)
         assertEquals(null, player.state.value.errorMessage)
         assertEquals(1f, player.state.value.speed)
         AudioPipelineMonitor.onOffloadSleepingChanged(false)

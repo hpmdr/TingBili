@@ -16,7 +16,17 @@ import kotlinx.coroutines.launch
 class AudioPipelinePolicy(
     private val prefs: PreferencesRepository,
     private val transport: PlayerHandle,
-    private val isOffloadActive: () -> Boolean = { AudioPipelineMonitor.offloadSleeping.value },
+    /**
+     * 判定“DSP 是否正接管这一轨”。必须用**粘性**标记 [AudioPipelineMonitor.offloadEverActive]，
+     * 不能只看 [AudioPipelineMonitor.offloadSleeping] 瞬时值：
+     * 不少机型（高通尤其明显）只在缓冲满的瞬间回调 sleeping=true，之后立刻回落 false，
+     * 但音频仍在 DSP 里播。只看瞬时值会误判成“已回落 CPU”，于是放行倍速
+     * → ExoPlayer 在 offload 下改不了速，表现为“点倍速没反应也没提示”（2026-11 反馈）。
+     * 真正回落 CPU 时 onDecoderInitialized 会清掉粘性标记，所以不会误锁。
+     */
+    private val isOffloadActive: () -> Boolean = {
+        AudioPipelineMonitor.offloadEverActive.value || AudioPipelineMonitor.offloadSleeping.value
+    },
 ) {
     interface Listener {
         fun currentSpeed(): Float

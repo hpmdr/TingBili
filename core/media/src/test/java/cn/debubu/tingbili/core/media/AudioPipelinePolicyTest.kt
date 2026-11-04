@@ -70,7 +70,8 @@ class AudioPipelinePolicyTest {
         transport = FakeTransport()
         listener = FakeListener()
         policy = AudioPipelinePolicy(prefs, transport)
-        AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        // 粘性标记是 object 单例，跨用例会残留；每例从"本轨尚未接管"开始
+        AudioPipelineMonitor.resetTrackState()
     }
 
     @Test
@@ -96,6 +97,38 @@ class AudioPipelinePolicyTest {
         val r = policy.requestSpeed(1.5f)
         assertTrue(r is AudioPipelinePolicy.SpeedResult.BlockedByOffload)
         assertEquals(1f, transport.speed, 0.001f)
+        policy.release()
+    }
+
+    /**
+     * 高通机型回归：sleeping 只在缓冲满时短暂为真，随后回落 false，但音频仍在 DSP 里。
+     * 只看瞬时值会放行倍速（ExoPlayer offload 改不了速 → 用户看到"没反应也没提示"）。
+     */
+    @Test
+    fun `sticky offload blocks speed after sleeping falls back`() = runTest {
+        policy.attach(this, listener)
+        prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(false)
+        runCurrent()
+        assertEquals(false, AudioPipelineMonitor.offloadSleeping.value)
+        val r = policy.requestSpeed(1.25f)
+        assertTrue(r is AudioPipelinePolicy.SpeedResult.BlockedByOffload)
+        assertEquals(1f, transport.speed, 0.001f)
+        policy.release()
+    }
+
+    /** 真正回落 CPU（解码器换了 → onDecoderInitialized 清粘性）后倍速恢复可用 */
+    @Test
+    fun `cpu fallback clears sticky and allows speed`() = runTest {
+        policy.attach(this, listener)
+        prefs.setAudioOffload(true)
+        AudioPipelineMonitor.onOffloadSleepingChanged(true)
+        AudioPipelineMonitor.onDecoderInitialized("c2.android.aac.decoder")
+        runCurrent()
+        val r = policy.requestSpeed(1.25f)
+        assertTrue(r is AudioPipelinePolicy.SpeedResult.Applied)
+        assertEquals(1.25f, transport.speed, 0.001f)
         policy.release()
     }
 
