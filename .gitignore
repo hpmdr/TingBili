@@ -34,6 +34,9 @@ keystore.properties
 # AI 工作流内部记录（不入库）
 .superpowers/
 .codebuddy/
+.workbuddy/
+# 文件管理器回收站（删除文件时可能落在仓库根）
+.Trash-*/
 .pi/
 .mimocode/
 
