@@ -35,6 +35,8 @@ interface BiliApi {
 
     // 音质直通：qn 传音频偏好 id（如 30232/30280/30251），服务端按登录/会员态鉴权返回可用档；
     // 不传则服务端给默认档，客户端再按偏好 rank 二次精选（见 selectAudio），双保险不断播。
+    // 注意：**不要**改用 /x/player/wbi/playurl——2026-11 实测同一 cookie 下 wbi 路径
+    // 返回 code 0 但 dash.audio 为空（静默降级，杜比/Hi-Res/普通档全没了），web 路径正常。
     @GET("/x/player/playurl")
     suspend fun playUrl(
         @Query("bvid") bvid: String,
