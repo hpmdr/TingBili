@@ -20,5 +20,18 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+
+        <!--
+            睡眠定时到点（AlarmManager allow-while-idle）：
+            纯协程 delay 走 uptime，Doze + DSP offload 下整夜不执行，必须由系统闹钟投递。
+            静态注册才能在进程被回收后把 App 拉起来执行暂停。
+        -->
+        <receiver
+            android:name="cn.debubu.tingbili.core.media.SleepTimerAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="cn.debubu.tingbili.action.SLEEP_TIMER_ALARM" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

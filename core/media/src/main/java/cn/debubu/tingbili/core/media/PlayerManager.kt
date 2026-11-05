@@ -264,6 +264,8 @@ class PlayerManager @Inject constructor(
                 prefs.setSleepFinishChapter(finishChapter)
             override suspend fun clear() = prefs.clearSleepTimerState()
         },
+        // Doze 会忽略 wakelock、推迟普通闹钟；到点必须靠系统 allow-while-idle 闹钟叫醒
+        alarm = AlarmManagerSleepScheduler(appContext),
     )
 
     private val sleepListener = object : SleepTimer.Listener {
@@ -399,6 +401,9 @@ class PlayerManager @Inject constructor(
      */
     fun onUiVisible() {
         reconcileMediaItem()
+        // 兜底：协程倒计时可能整夜没跑（Doze/冻结），回前台按墙钟把睡眠定时追平，
+        // 避免"已经过点却还在播，解锁瞬间才归零"
+        sleepTimer.syncDeadline()
         val beforeSync = _state.value.positionMs
         val sleptMs = consumeDeepSleepDelta()
         val underrunDelta = consumeUnderrunDelta()
@@ -1035,8 +1040,10 @@ class PlayerManager @Inject constructor(
         effectiveScope().launch { historyTracker.flush() }
     }
 
-    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) =
+    fun startSleepTimer(seconds: Int, finishChapter: Boolean = false) {
+        Log.i("TingBiliSleep", "start ${seconds}s finishChapter=$finishChapter at=${clock()}")
         sleepTimer.start(seconds, finishChapter)
+    }
 
     /** 冷启动/进程重建后恢复定时：未来→继续倒计时；已过期→直接停或转尾；无落盘→忽略 */
     suspend fun restoreSleepTimer() = sleepTimer.restore()
@@ -1048,6 +1055,12 @@ class PlayerManager @Inject constructor(
     fun setSleepFinishChapter(v: Boolean) = sleepTimer.setFinishChapter(v)
 
     fun cancelSleepTimer() = sleepTimer.cancel()
+
+    /** 系统闹钟到点（[SleepTimerAlarmReceiver]）：按墙钟 deadline 决定停还是补预约。 */
+    fun onSleepAlarmFired() {
+        Log.i("TingBiliSleep", "alarm fired at=${clock()} remain=${_state.value.sleepRemainSec}")
+        sleepTimer.syncDeadline()
+    }
 
     // currentKey 已收进 SleepTimer.Listener.chapter() 快照，此处不再需要
 

@@ -16,6 +16,11 @@ import kotlinx.coroutines.launch
 class SleepTimer(
     private val clock: () -> Long,
     private val store: Store,
+    /**
+     * 系统级到点提醒（生产：AlarmManager allow-while-idle）。
+     * 协程倒计时只负责显示与"唤醒后追平"，真正保证到点执行的是它。
+     */
+    private val alarm: SleepAlarmScheduler = SleepAlarmScheduler.None,
 ) {
     /** 持久化口：调用方用 PreferencesRepository 实现，读失败给缺省（与旧逻辑一致）。 */
     interface Store {
@@ -58,6 +63,9 @@ class SleepTimer(
     private var listener: Listener? = null
     private var job: Job? = null
 
+    /** 当前倒计时的绝对 deadline（墙钟毫秒）；0 = 没有倒计时在进行。 */
+    private var deadlineMs = 0L
+
     /** 绑定协程作用域与监听；重复绑定先取消旧任务（单测 testScope 切换时用）。 */
     fun attach(scope: CoroutineScope, listener: Listener) {
         job?.cancel()
@@ -80,6 +88,9 @@ class SleepTimer(
         job?.cancel()
         val total = seconds.coerceAtLeast(60)
         val deadline = clock() + total * 1000L
+        deadlineMs = deadline
+        // 先预约系统闹钟：即使随后进程被冻结/深睡，到点也有人叫醒我们
+        alarm.schedule(deadline)
         emit(SleepUiState(remainSec = total, totalSec = total, finishChapter = finishChapter, endOfChapter = false))
         scope?.launch {
             try {
@@ -138,6 +149,9 @@ class SleepTimer(
                 if (finish) enterChapterTail() else fire()
                 return
             }
+            // 进程重启后补预约：系统闹钟多半已随进程死亡丢失，恢复倒计时必须重新挂上
+            deadlineMs = deadline
+            alarm.schedule(deadline)
             emit(SleepUiState(remainSec = remain, totalSec = total.coerceAtLeast(remain), finishChapter = finish, endOfChapter = false))
             job?.cancel()
             job = scope?.launch { launchCountdown(deadline) }
@@ -183,6 +197,9 @@ class SleepTimer(
             fire()
             return
         }
+        // 转入"播完本章"后不再按墙上时间触发，撤掉系统闹钟
+        deadlineMs = 0L
+        alarm.cancel()
         emit(state.copy(remainSec = null, totalSec = null, endOfChapter = true))
         scope?.launch {
             try {
@@ -206,9 +223,36 @@ class SleepTimer(
         }
     }
 
+    /**
+     * 权威校验（系统闹钟到点 / 回到前台时调用）。
+     *
+     * 协程倒计时在 Doze 里可能整夜没跑，UI 的剩余时间是陈旧的；这里以墙钟 deadline 为准：
+     * - 未到点：只把显示追平，不动系统闹钟（它仍然有效）；
+     * - 已到点：立即补执行 fire / 章尾（协程冻结期间没人做这件事）。
+     * 幂等：没有进行中的倒计时时是空操作。
+     */
+    fun syncDeadline() {
+        val deadline = deadlineMs
+        if (deadline <= 0L) return
+        val remainMs = deadline - clock()
+        if (remainMs > 0L) {
+            // 可能是系统提前几秒投递（批处理/时钟抖动），预约已被消费 → 必须补挂，否则整单不响
+            alarm.schedule(deadline)
+            if (state.remainSec != null) {
+                emit(state.copy(remainSec = (remainMs / 1000).toInt().coerceAtLeast(1)))
+            }
+            return
+        }
+        deadlineMs = 0L
+        if (state.endOfChapter) return
+        scope?.launch { if (state.finishChapter) enterChapterTail() else fire() }
+    }
+
     fun cancel() {
         job?.cancel()
         job = null
+        deadlineMs = 0L
+        alarm.cancel()
         scope?.launch {
             try {
                 store.clear()
@@ -219,6 +263,8 @@ class SleepTimer(
     }
 
     private suspend fun fire() {
+        deadlineMs = 0L
+        alarm.cancel()
         scope?.launch {
             try {
                 store.clear()
