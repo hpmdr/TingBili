@@ -2,19 +2,25 @@ package cn.debubu.tingbili.feature.mine
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.debubu.tingbili.core.data.BuildConfig
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.update.UpdateChecker
+import cn.debubu.tingbili.core.data.update.UpdateDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「通用设置」：B 站图片格式、首页推荐词。 */
+/** 「通用设置」：B 站图片格式、首页推荐词、版本更新。 */
 @HiltViewModel
 class GeneralSettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository,
+    private val update: UpdateDataSource,
 ) : ViewModel() {
 
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(
@@ -55,5 +61,77 @@ class GeneralSettingsViewModel @Inject constructor(
             .distinct()
             .ifEmpty { listOf(PreferencesRepository.DEFAULT_HOME_KEYWORDS.first()) }
         viewModelScope.launch { prefs.setHomeKeywords(cleaned) }
+    }
+    // ── 版本更新（只比发布时间，不比 tag 字符串）─────────────────────
+
+    val autoCheckUpdate: StateFlow<Boolean> = prefs.autoCheckUpdate.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setAutoCheckUpdate(v: Boolean) {
+        viewModelScope.launch { prefs.setAutoCheckUpdate(v) }
+    }
+
+    sealed interface UpdateUiState {
+        data object Idle : UpdateUiState
+        data object Checking : UpdateUiState
+        data object UpToDate : UpdateUiState
+        data object Failed : UpdateUiState
+        data class Available(
+            val tag: String,
+            val body: String,
+            val apkUrl: String?,
+            val publishedSec: Long,
+        ) : UpdateUiState
+    }
+
+    private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
+    val updateState = _updateState.asStateFlow()
+
+    /** 手动检查：失败/已是最新由界面 Snackbar 提示；有新版弹 [UpdateUiState.Available]。 */
+    fun checkUpdate() {
+        if (_updateState.value == UpdateUiState.Checking) return
+        viewModelScope.launch {
+            _updateState.value = UpdateUiState.Checking
+            val now = System.currentTimeMillis()
+            val rel = update.fetchLatest().getOrNull()
+            prefs.setLastUpdateCheckMs(now)
+            if (rel == null) {
+                _updateState.value = UpdateUiState.Failed
+                return@launch
+            }
+            val remoteSec = UpdateChecker.publishedAtSec(rel.publishedAt)
+            if (remoteSec == null || !UpdateChecker.isNewer(remoteSec, BuildConfig.BUILD_TIME)) {
+                _updateState.value = UpdateUiState.UpToDate
+                return@launch
+            }
+            _updateState.value = UpdateUiState.Available(
+                tag = rel.tag,
+                body = rel.body.orEmpty(),
+                apkUrl = UpdateChecker.pickApkUrl(rel.assets),
+                publishedSec = remoteSec,
+            )
+        }
+    }
+
+    /** "不再提醒此版"：只记发布时间，tag 重发（时间变）照弹。 */
+    fun skipRelease() {
+        val cur = _updateState.value as? UpdateUiState.Available ?: return
+        viewModelScope.launch {
+            prefs.setSkippedReleaseSec(cur.publishedSec)
+            _updateState.value = UpdateUiState.Idle
+        }
+    }
+
+    /** Snackbar 展示后复位 UpToDate/Failed；弹窗走 dismissUpdate。 */
+    fun consumeUpdateMessage() {
+        val cur = _updateState.value
+        if (cur == UpdateUiState.UpToDate || cur == UpdateUiState.Failed) {
+            _updateState.value = UpdateUiState.Idle
+        }
+    }
+
+    fun dismissUpdate() {
+        _updateState.value = UpdateUiState.Idle
     }
 }

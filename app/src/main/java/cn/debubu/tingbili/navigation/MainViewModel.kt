@@ -1,17 +1,23 @@
 package cn.debubu.tingbili.navigation
 
+import android.content.Context
+import android.content.pm.ApplicationInfo
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.debubu.tingbili.core.data.BuildConfig
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.toTrack
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import cn.debubu.tingbili.core.data.repository.FavoritesRepository
+import cn.debubu.tingbili.core.data.update.UpdateChecker
+import cn.debubu.tingbili.core.data.update.UpdateDataSource
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.HomeScrollTopBus
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +27,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -35,6 +42,8 @@ class MainViewModel @Inject constructor(
     auth: AuthRepository,
     private val scrollTopBus: HomeScrollTopBus,
     private val favoritesRepository: FavoritesRepository,
+    private val update: UpdateDataSource,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     /**
@@ -51,6 +60,55 @@ class MainViewModel @Inject constructor(
      */
     private val _openPlayer = MutableStateFlow(false)
     val openPlayerRequest = _openPlayer.asStateFlow()
+
+    /**
+     * 启动自动检查出的新版（null = 无事）。弹窗由 MainTabsScaffold 渲染，
+     * 下载走浏览器直链（免站内安装链路），见 [UpdateChecker]。
+     */
+    data class UpdatePrompt(
+        val tag: String,
+        val body: String,
+        val apkUrl: String?,
+        val publishedSec: Long,
+    )
+
+    private val _pendingUpdate = MutableStateFlow<UpdatePrompt?>(null)
+    val pendingUpdate = _pendingUpdate.asStateFlow()
+
+    fun dismissUpdate() {
+        _pendingUpdate.value = null
+    }
+
+    /** "不再提醒此版"：只记发布时间，tag 重发（时间变）照弹。 */
+    fun skipUpdate() {
+        viewModelScope.launch {
+            _pendingUpdate.value?.let { prefs.setSkippedReleaseSec(it.publishedSec) }
+            _pendingUpdate.value = null
+        }
+    }
+
+    /**
+     * 启动自动检查：debug 跳过（本地 BUILD_TIME 永远最新），每天最多一次，
+     * 关掉开关/用户跳过此版/失败都静默（手动入口在通用设置）。
+     */
+    private suspend fun autoCheckUpdate() {
+        val debuggable = (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) return
+        if (!prefs.autoCheckUpdate.first()) return
+        val now = System.currentTimeMillis()
+        if (now - prefs.lastUpdateCheckMs.first() < UpdateChecker.AUTO_CHECK_INTERVAL_MS) return
+        prefs.setLastUpdateCheckMs(now)
+        val rel = update.fetchLatest().getOrNull() ?: return
+        val remoteSec = UpdateChecker.publishedAtSec(rel.publishedAt) ?: return
+        if (remoteSec == prefs.skippedReleaseSec.first()) return
+        if (!UpdateChecker.isNewer(remoteSec, BuildConfig.BUILD_TIME)) return
+        _pendingUpdate.value = UpdatePrompt(
+            tag = rel.tag,
+            body = rel.body.orEmpty(),
+            apkUrl = UpdateChecker.pickApkUrl(rel.assets),
+            publishedSec = remoteSec,
+        )
+    }
 
     /**
      * 全局在线状态（透传单例 NetworkMonitor，不断包一层 stateIn：
@@ -99,6 +157,7 @@ class MainViewModel @Inject constructor(
                 HomeRoute
             }
         }
+        viewModelScope.launch { autoCheckUpdate() }
         // 播放列表跟随来源收藏夹：夹内增删 P / 改名 / 拖拽排序后，播放页章节实时对齐
         viewModelScope.launch {
             playerManager.state

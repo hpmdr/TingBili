@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.feature.mine
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,6 +18,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -26,12 +29,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
@@ -44,12 +49,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingRow
+import cn.debubu.tingbili.core.ui.component.SettingDivider
+import cn.debubu.tingbili.core.ui.component.SettingSwitchRow
 import cn.debubu.tingbili.core.ui.component.SettingSectionLabel
 import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
+import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.UpdateAvailableDialog
+import cn.debubu.tingbili.core.ui.util.openUrlInBrowser
+import cn.debubu.tingbili.core.data.update.UpdateChecker
+import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
 /** 二级页：通用设置（B 站图片格式 / 首页推荐词 / 关于）。 */
@@ -61,6 +74,26 @@ fun GeneralSettingsScreen(
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
+    val autoCheck by vm.autoCheckUpdate.collectAsStateWithLifecycle()
+    val updateState by vm.updateState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val version = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) {
+            "1.0"
+        }
+    }
+    val updateMessage = when (updateState) {
+        is GeneralSettingsViewModel.UpdateUiState.UpToDate -> "已是最新版本"
+        is GeneralSettingsViewModel.UpdateUiState.Failed -> "检查更新失败，请检查网络"
+        else -> null
+    }
+    MessageSnackbarEffect(updateMessage, snackbarHostState) {
+        vm.consumeUpdateMessage()
+    }
     var showImageSheet by remember { mutableStateOf(false) }
     var showKeywordsSheet by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
@@ -77,15 +110,22 @@ fun GeneralSettingsScreen(
             )
         },
     ) { innerPadding ->
-        Column(
+        // Snackbar 宿主走 Box 悬浮（对齐 MeScreen 实测可用的写法）：
+        // 脚手架 snackbarHost 槽在本机构造下经真机验证不渲染（日志证明 show 完整跑完但树里无节点），
+        // 先用悬浮方案保证可见，后续再追槽位问题。
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(innerPadding),
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = cn.debubu.tingbili.core.ui.MiniPlayerClearance)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
             Column {
                 SettingSectionLabel("图片")
                 SettingsGroup {
@@ -115,6 +155,32 @@ fun GeneralSettingsScreen(
             }
 
             Column {
+                SettingSectionLabel("版本更新")
+                SettingsGroup {
+                    SettingRow(
+                        icon = Icons.Filled.SystemUpdateAlt,
+                        accent = SettingAccent.GREEN,
+                        title = "检查更新",
+                        subtitle = if (updateState == GeneralSettingsViewModel.UpdateUiState.Checking) {
+                            "正在检查…"
+                        } else {
+                            "当前 v$version"
+                        },
+                        onClick = { vm.checkUpdate() },
+                    )
+                    SettingDivider()
+                    SettingSwitchRow(
+                        icon = Icons.Filled.Refresh,
+                        accent = SettingAccent.CYAN,
+                        title = "启动时自动检查",
+                        subtitle = "每天最多一次",
+                        checked = autoCheck,
+                        onCheckedChange = { vm.setAutoCheckUpdate(it) },
+                    )
+                }
+            }
+
+            Column {
                 SettingSectionLabel("关于")
                 SettingsGroup {
                     SettingRow(
@@ -126,6 +192,13 @@ fun GeneralSettingsScreen(
                     )
                 }
             }
+            }
+            TingBiliSnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
+            )
         }
     }
 
@@ -151,6 +224,22 @@ fun GeneralSettingsScreen(
     }
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+    val available = updateState as? GeneralSettingsViewModel.UpdateUiState.Available
+    if (available != null) {
+        UpdateAvailableDialog(
+            tag = available.tag,
+            body = available.body,
+            onSkipRelease = { vm.skipRelease() },
+            onDismiss = { vm.dismissUpdate() },
+            onDownload = {
+                vm.dismissUpdate()
+                val url = available.apkUrl ?: UpdateChecker.RELEASES_PAGE
+                if (!openUrlInBrowser(context, url)) {
+                    scope.launch { snackbarHostState.showSnackbar("无法打开浏览器") }
+                }
+            },
+        )
     }
 }
 

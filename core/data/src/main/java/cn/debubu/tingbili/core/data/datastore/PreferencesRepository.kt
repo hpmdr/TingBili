@@ -350,6 +350,31 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it.remove(SEARCH_HISTORY_JSON) }
     }
 
+    // ── 更新检查 ─────────────────────────────────────────────
+    /** 启动自动检查开关（默认开；关掉后只剩手动入口）。 */
+    val autoCheckUpdate: Flow<Boolean> = ds.data.map { it[AUTO_CHECK_UPDATE] ?: true }
+
+    suspend fun setAutoCheckUpdate(v: Boolean) {
+        ds.edit { it[AUTO_CHECK_UPDATE] = v }
+    }
+
+    /** 上次检查（自动/手动）的墙钟毫秒，自动检查每天最多一次。 */
+    val lastUpdateCheckMs: Flow<Long> = ds.data.map { it[LAST_UPDATE_CHECK_MS] ?: 0L }
+
+    suspend fun setLastUpdateCheckMs(v: Long) {
+        ds.edit { it[LAST_UPDATE_CHECK_MS] = v }
+    }
+
+    /**
+     * 用户点过"不再提醒"的远端发布时间（秒）。只记时间不记 tag：
+     * tag 手滑打错重发时时间会变，照样能再弹。
+     */
+    val skippedReleaseSec: Flow<Long> = ds.data.map { it[SKIPPED_RELEASE_SEC] ?: 0L }
+
+    suspend fun setSkippedReleaseSec(v: Long) {
+        ds.edit { it[SKIPPED_RELEASE_SEC] = v }
+    }
+
     companion object {
         val STEP_SEC = intPreferencesKey("step_sec")
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
@@ -404,5 +429,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val LAST_POSITION_MS = longPreferencesKey("last_position_ms")
         val LAST_SOURCE_TITLE = stringPreferencesKey("last_source_title")
         val PLAYURL_CACHE_JSON = stringPreferencesKey("playurl_cache_json")
+        val AUTO_CHECK_UPDATE = androidx.datastore.preferences.core.booleanPreferencesKey("auto_check_update")
+        val LAST_UPDATE_CHECK_MS = longPreferencesKey("last_update_check_ms")
+        val SKIPPED_RELEASE_SEC = longPreferencesKey("skipped_release_sec")
     }
 }

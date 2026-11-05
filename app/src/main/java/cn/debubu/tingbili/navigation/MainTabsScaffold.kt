@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +42,9 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import cn.debubu.tingbili.core.data.update.UpdateChecker
+import cn.debubu.tingbili.core.ui.component.UpdateAvailableDialog
+import cn.debubu.tingbili.core.ui.util.openUrlInBrowser
 
 /** 主页 4 Tab 的壳：窄屏底栏 + 贴底 mini 条；宽屏 Rail + 右下 mini 条 */
 @Composable
@@ -173,6 +177,28 @@ fun MainTabsScaffold(
             }
         }
     }
+    UpdatePromptSlot(viewModel)
+}
+
+/**
+ * 启动自动检查弹窗槽：订阅下沉到本组件（pendingUpdate 平时为 null 不重组），
+ * 壳体（含 NavHost）不跟随失效——高频/低频状态都不许在壳顶层订阅（F4a）。
+ */
+@Composable
+private fun UpdatePromptSlot(viewModel: MainViewModel) {
+    val prompt by viewModel.pendingUpdate.collectAsStateWithLifecycle()
+    val cur = prompt ?: return
+    val context = LocalContext.current
+    UpdateAvailableDialog(
+        tag = cur.tag,
+        body = cur.body,
+        onSkipRelease = { viewModel.skipUpdate() },
+        onDismiss = { viewModel.dismissUpdate() },
+        onDownload = {
+            viewModel.dismissUpdate()
+            openUrlInBrowser(context, cur.apkUrl ?: UpdateChecker.RELEASES_PAGE)
+        },
+    )
 }
 
 /**
