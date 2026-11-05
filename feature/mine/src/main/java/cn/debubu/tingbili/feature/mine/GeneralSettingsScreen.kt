@@ -367,11 +367,6 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    "非哔哩哔哩官方应用，与 B 站无关；内容与账号数据均来自哔哩哔哩，如有侵权请联系删除。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } },
