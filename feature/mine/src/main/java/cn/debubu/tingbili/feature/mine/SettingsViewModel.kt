@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「播放设置」：步长 + 字幕字号 + 睡眠偏好 + 解码开关 + 默认音质（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与推荐词在通用设置，缓存在存储设置。 */
+/** 「播放设置」：步长 + 字幕字号 + 睡眠偏好 + 解码开关 + 默认音质（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与推荐词在其他设置，缓存在存储设置。 */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository

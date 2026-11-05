@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「通用设置」：B 站图片格式、首页推荐词、版本更新。 */
+/** 「其他设置」：B 站图片格式、首页推荐词、版本更新。 */
 @HiltViewModel
 class GeneralSettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository,

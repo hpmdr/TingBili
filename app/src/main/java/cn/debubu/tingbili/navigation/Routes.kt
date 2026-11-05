@@ -34,7 +34,7 @@ object SettingsRoute
 @Serializable
 object StorageRoute
 
-/** 二级页：通用设置（图片格式 / 首页推荐词 / 关于）。 */
+/** 二级页：其他设置（图片格式 / 首页推荐词 / 版本更新）。 */
 @Serializable
 object GeneralRoute
 

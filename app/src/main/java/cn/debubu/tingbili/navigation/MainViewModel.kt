@@ -89,7 +89,7 @@ class MainViewModel @Inject constructor(
 
     /**
      * 启动自动检查：debug 跳过（本地 BUILD_TIME 永远最新），每天最多一次，
-     * 关掉开关/用户跳过此版/失败都静默（手动入口在通用设置）。
+     * 关掉开关/用户跳过此版/失败都静默（手动入口在其他设置）。
      */
     private suspend fun autoCheckUpdate() {
         val debuggable = (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0

@@ -413,7 +413,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         const val DEFAULT_CACHE_MAX_MB = 500
         /** 构造期读镜像缺失时的兜底上限：只在 DataStore 预热未完成的极端情况下才会用到 */
         const val PRIME_BLOCK_TIMEOUT_MS = 80L
-        val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
+        val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "音乐合辑", "恐怖有声")
         const val MIN_CACHE_MAX_MB = 100
         const val MAX_CACHE_MAX_MB = 2048
         /** 图片盘缓存上限封顶（方案一：图片按音频上限 1/4 派生，见 imageCacheMaxMb） */

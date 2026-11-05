@@ -29,8 +29,10 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,7 +81,7 @@ private val BiliBlue = Color(0xFF00A1D6)
 
 /**
  * 「我的」Tab（B 站风格）：
- * 沉浸式渐变头部 → 悬浮四宫格数据卡 → 设置入口（外观 / 播放 / 存储 / 通用）→ 登录按钮。
+ * 沉浸式渐变头部 → 悬浮四宫格数据卡 → 设置入口（外观 / 播放 / 存储 / 其他）→ 登录按钮 + 关于。
  */
 @Composable
 fun MeScreen(
@@ -107,6 +111,7 @@ fun MeScreen(
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
 
     val placeholder: (String) -> Unit = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
 
@@ -163,7 +168,7 @@ fun MeScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            SettingSectionLabel("空间与通用")
+            SettingSectionLabel("空间与其他")
             SettingsGroup {
                 SettingRow(
                     icon = Icons.Filled.Download,
@@ -177,9 +182,17 @@ fun MeScreen(
                 SettingRow(
                     icon = Icons.Filled.Tune,
                     accent = SettingAccent.PURPLE,
-                    title = "通用设置",
+                    title = "其他设置",
                     subtitle = "${imageFormat.name} · ${homeKeywords.size}个推荐词",
                     onClick = onOpenGeneral
+                )
+                SettingDivider()
+                SettingRow(
+                    icon = Icons.Filled.Info,
+                    accent = SettingAccent.CYAN,
+                    title = "关于",
+                    subtitle = "版本信息 · 免责声明",
+                    onClick = { showAbout = true },
                 )
             }
 
@@ -214,6 +227,10 @@ fun MeScreen(
                 .align(Alignment.BottomCenter)
                 .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
         )
+    }
+
+    if (showAbout) {
+        AboutDialog(onDismiss = { showAbout = false })
     }
 
     if (showLogoutConfirm) {
@@ -504,7 +521,34 @@ private fun themeModeLabel(mode: cn.debubu.tingbili.core.data.model.ThemeMode): 
     else -> "默认粉"
 }
 
-// ── 关于对话框 ────────────────────────────────────────
+// ── 关于对话框（原在其他设置内，现独立到「我的」页） ──
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val version = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) {
+            "1.0"
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("关于") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } },
+    )
+}
 
 // 纯格式化函数，不该标 @Composable（会触发 lint NonObservableLocale，也让 read 出现在组合期）
 private fun formatCacheGb(bytes: Long): String = when {

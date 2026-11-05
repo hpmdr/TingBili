@@ -17,11 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Tag
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,7 +40,6 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,7 +62,7 @@ import cn.debubu.tingbili.core.data.update.UpdateChecker
 import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：通用设置（B 站图片格式 / 首页推荐词 / 关于）。 */
+/** 二级页：其他设置（B 站图片格式 / 首页推荐词 / 版本更新）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(
@@ -96,12 +93,11 @@ fun GeneralSettingsScreen(
     }
     var showImageSheet by remember { mutableStateOf(false) }
     var showKeywordsSheet by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
 
     TingBiliScaffold(
         topBar = {
             TingBiliTopAppBar(
-                title = "通用设置",
+                title = "其他设置",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -180,18 +176,6 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            Column {
-                SettingSectionLabel("关于")
-                SettingsGroup {
-                    SettingRow(
-                        icon = Icons.Filled.Info,
-                        accent = SettingAccent.CYAN,
-                        title = "关于",
-                        subtitle = "版本信息 · 免责声明",
-                        onClick = { showAbout = true },
-                    )
-                }
-            }
             }
             TingBiliSnackbarHost(
                 hostState = snackbarHostState,
@@ -221,9 +205,6 @@ fun GeneralSettingsScreen(
             },
             onDismiss = { showKeywordsSheet = false },
         )
-    }
-    if (showAbout) {
-        AboutDialog(onDismiss = { showAbout = false })
     }
     val available = updateState as? GeneralSettingsViewModel.UpdateUiState.Available
     if (available != null) {
@@ -344,31 +325,4 @@ private fun imageFormatLabel(format: ImageFormat): String = when (format) {
     ImageFormat.AVIF -> "AVIF"
     ImageFormat.WEBP -> "WebP"
     ImageFormat.JPEG -> "JPEG"
-}
-
-@Composable
-private fun AboutDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val version = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (_: Exception) {
-            "1.0"
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("关于") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } },
-    )
 }

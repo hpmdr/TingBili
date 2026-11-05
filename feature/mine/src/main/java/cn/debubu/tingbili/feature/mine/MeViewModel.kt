@@ -43,7 +43,7 @@ class MeViewModel @Inject constructor(
         viewModelScope, SharingStarted.WhileSubscribed(5000), DarkMode.FOLLOW_SYSTEM
     )
 
-    /** 设置入口动态副标题用：播放步长 / 字幕缩放 / 音质偏好 / 图片格式 / 推荐词 / 缓存上限 / 主题模式 */
+    /** 设置入口动态副标题用：播放步长 / 字幕缩放 / 音质偏好 / 图片格式 / 推荐词 / 缓存上限 / 主题模式（其他设置） */
     val stepSec: StateFlow<Int> = prefs.stepSec.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), 15
     )
@@ -56,7 +56,7 @@ class MeViewModel @Inject constructor(
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ImageFormat.AVIF
     )
-    /** 首页推荐词数量（通用设置副标题用） */
+    /** 首页推荐词数量（其他设置副标题用） */
     val homeKeywords: StateFlow<List<String>> = prefs.homeKeywords.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesRepository.DEFAULT_HOME_KEYWORDS
     )

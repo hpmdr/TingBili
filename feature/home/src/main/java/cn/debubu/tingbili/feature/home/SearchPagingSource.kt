@@ -74,6 +74,6 @@ class SearchPagingSource(
         const val RATE_LIMIT_BACKOFF_MS = 2000L
 
         /** 默认策展关键词（设置页兜底；与 PreferencesRepository.DEFAULT_HOME_KEYWORDS 一致） */
-        val DEFAULT_RECOMMEND_KEYWORDS = listOf("有声小说", "恐怖有声", "悬疑小说", "多人有声")
+        val DEFAULT_RECOMMEND_KEYWORDS = listOf("有声小说", "音乐合辑", "恐怖有声")
     }
 }
