@@ -51,7 +51,8 @@ fun TingBiliTheme(
     }
 }
 
-internal fun brandedColorScheme(seed: Color, dark: Boolean, amoled: Boolean = true): ColorScheme {
+/** seed 派生整套 tonal：自定义取色器的实时预览与落库共用它，所见即所得。 */
+fun brandedColorScheme(seed: Color, dark: Boolean, amoled: Boolean = true): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     val primary = if (dark) blend(seed, Color.White, 0.12f) else seed
     val onPrimary = contentColor(primary)
