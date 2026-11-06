@@ -55,9 +55,25 @@ data class DashAudio(
     @SerialName("baseUrl") val baseUrl: String = "",
     @SerialName("base_url") val baseUrlAlt: String = "",
     val id: Int = 0,
-    val bandwidth: Int = 0
+    val bandwidth: Int = 0,
+    /**
+     * 主链之外的备链（PiliPlus 选线路同款数据源）。
+     * 同一接口不同版本两种写法都出现过，都收；显式 null 按缺失处理。
+     */
+    @SerialName("backup_url") val backupUrlSnake: List<String>? = null,
+    @SerialName("backupUrl") val backupUrlCamel: List<String>? = null
 ) {
     fun resolvedUrl(): String = if (baseUrl.isNotBlank()) baseUrl else baseUrlAlt
+
+    /**
+     * 主链优先、备链按服务端原序跟上；去空去重。
+     * 同一 CDN 有时会同时出现在两种写法里，distinct 收敛。
+     */
+    fun allUrls(): List<String> =
+        (listOf(resolvedUrl()) + backupUrlSnake.orEmpty() + backupUrlCamel.orEmpty())
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
 }
 
 @Serializable

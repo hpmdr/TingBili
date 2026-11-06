@@ -12,10 +12,10 @@ import cn.debubu.tingbili.core.media.CatalogResolver
 import cn.debubu.tingbili.core.media.PlayUrlResolver
 import cn.debubu.tingbili.core.media.ResolvedAudio
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
-import cn.debubu.tingbili.data.bilibili.dto.DashAudio
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 
@@ -32,6 +32,9 @@ class BiliMediaResolvers @Inject constructor(
     @Volatile
     private var guestUntilMs = 0L
 
+    /** 主链挂掉后暂存的备链（@Singleton 常驻内存；键带音质偏好，进程重启即失效回网络）。 */
+    private val backupPool = CdnBackupPool()
+
     /**
      * 解析直链按用户音质偏好选档（播放页底部音质入口/默认 132K），失败回落调用方跳过，不断播。
      * 登录态被风控（412「神秘力量」）时退游客身份：音质可能降级，但能继续放；
@@ -43,18 +46,19 @@ class BiliMediaResolvers @Inject constructor(
         } catch (_: Exception) {
             AudioQuality.DEFAULT_CODE
         }
-        val coolingDown = System.currentTimeMillis() < guestUntilMs
-        // 实际选中档（标称码率 + 音质 code）带回给调用方：码率兜底 + 底部标签显示实际生效档
-        var bandwidthBps = 0
-        var audioCode = 0
-        val rememberBitrate: (DashAudio) -> Unit = {
-            bandwidthBps = it.bandwidth
-            audioCode = it.id
+        val backupKey = "$bvid:$cid:$prefer"
+        // 主链上次挂掉暂存的备链：播放失败重试会先删磁盘缓存再重解析，
+        // 这里直接给下一条备链，不用再打一次 playurl（原地换线路）。
+        // 键带偏好档：换音质会删缓存重解析，新档必须走网络拿新直链，不能吃旧档备链。
+        backupPool.poll(backupKey)?.let {
+            android.util.Log.i("TingBiliPlay", "backup $backupKey -> ${it.url}")
+            return it
         }
+        val coolingDown = System.currentTimeMillis() < guestUntilMs
         var r = if (coolingDown) {
-            repo.getPlayUrl(bvid, cid, prefer, guest = true, onAudioSelected = rememberBitrate)
+            repo.getPlayUrls(bvid, cid, prefer, guest = true)
         } else {
-            repo.getPlayUrl(bvid, cid, prefer, onAudioSelected = rememberBitrate)
+            repo.getPlayUrls(bvid, cid, prefer)
         }
         if (r is Result.Error) {
             android.util.Log.w("TingBiliPlay", "resolve $bvid:$cid qn=$prefer failed: ${r.msg}")
@@ -64,9 +68,7 @@ class BiliMediaResolvers @Inject constructor(
             if (isConnectivityError(r.throwable)) throw IOException("$CONNECTIVITY_MARK，请稍后重试", r.throwable)
             if (!coolingDown && isRiskControlled(r.msg)) {
                 guestUntilMs = System.currentTimeMillis() + RISK_COOLDOWN_MS
-                bandwidthBps = 0
-                audioCode = 0
-                r = repo.getPlayUrl(bvid, cid, prefer, guest = true, onAudioSelected = rememberBitrate)
+                r = repo.getPlayUrls(bvid, cid, prefer, guest = true)
                 android.util.Log.i(
                     "TingBiliPlay",
                     "guest retry $bvid:$cid -> ${if (r is Result.Success) "ok" else (r as Result.Error).msg}",
@@ -77,8 +79,15 @@ class BiliMediaResolvers @Inject constructor(
             throw IOException("$CONNECTIVITY_MARK，请稍后重试", r.throwable)
         }
         return when (r) {
-            is Result.Success -> r.data.takeIf { it.isNotBlank() }
-                ?.let { ResolvedAudio(it, bandwidthBps, audioCode) }
+            is Result.Success -> {
+                val c = r.data
+                // 实际选中档（标称码率 + 音质 code）带回给调用方：码率兜底 + 底部标签显示实际生效档
+                backupPool.stage(
+                    backupKey,
+                    c.urls.drop(1).map { ResolvedAudio(it, c.bandwidthBps, c.audioCode) },
+                )
+                ResolvedAudio(c.urls.first(), c.bandwidthBps, c.audioCode, c.urls.drop(1))
+            }
             is Result.Error -> null
         }
     }
@@ -102,4 +111,44 @@ class BiliMediaResolvers @Inject constructor(
         cover.takeIf { it.isNotBlank() }
             ?.biliImage(BiliImageVariant.ListThumb, format)
             ?.let(Uri::parse)
+}
+
+/**
+ * CDN 备链暂存：主链建连超时/403 后的自动兜底（PiliPlus 选线路的数据源，自动版）。
+ *
+ * 生产链路：首次解析把备链 stage 进来；播放失败时 PlayerManager 删磁盘缓存行并重建
+ * 惰性 item，DataSource 重开时再次 resolve，这里 poll 出下一条备链直接用，不用重新
+ * 打 playurl（省一次鉴权往返，也避开"新 playurl 又分到同一个坏节点"）。
+ * 进程重启/备链取完/过期（与直链磁盘缓存同 TTL）后自动回落到网络重解析。
+ * 只在内存里，不进 Room：键带音质偏好，换档不会吃到旧档备链。
+ */
+class CdnBackupPool(internal val nowMs: () -> Long = System::currentTimeMillis) {
+    private data class Entry(val queued: ArrayDeque<ResolvedAudio>, val stagedAtMs: Long)
+
+    private val map = ConcurrentHashMap<String, Entry>()
+
+    /** 记下本次解析的备链；同 key 直接覆盖（重解析/换档以上次为准）。 */
+    fun stage(key: String, backups: List<ResolvedAudio>) {
+        if (backups.isEmpty()) return
+        if (map.size >= MAX_KEYS) map.clear()
+        map[key] = Entry(ArrayDeque(backups), nowMs())
+    }
+
+    /** 取下一条备链；取完或过期自动清理并返回 null（调用方走网络重解析）。 */
+    fun poll(key: String): ResolvedAudio? {
+        val e = map[key] ?: return null
+        if (nowMs() - e.stagedAtMs >= TTL_MS) {
+            map.remove(key)
+            return null
+        }
+        val next = e.queued.removeFirstOrNull()
+        if (e.queued.isEmpty()) map.remove(key)
+        return next
+    }
+
+    companion object {
+        /** 与 PlayUrlCacheEntity.TTL_MS 对齐：备链和主链同一批过期 */
+        const val TTL_MS = 90 * 60 * 1000L
+        const val MAX_KEYS = 500
+    }
 }

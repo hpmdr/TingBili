@@ -200,8 +200,9 @@ class BiliRepository @Inject constructor(
     }
 
     /**
-     * 取音频直链：qn 下发偏好档位做服务端鉴权，返回后再按偏好 rank 二次精选（见 selectAudio）。
+     * 取音频直链（主链）：qn 下发偏好档位做服务端鉴权，返回后再按偏好 rank 二次精选（见 selectAudio）。
      * 默认偏好 132K（免登录可得最佳档）；服务端只给低档时诚实回落，不断播。
+     * 备链语义见 [getPlayUrls]；这里只给主链，保持老调用方行为不变。
      */
     suspend fun getPlayUrl(
         bvid: String,
@@ -211,19 +212,45 @@ class BiliRepository @Inject constructor(
         guest: Boolean = false,
         /** 实际选中的音频轨回调：调用方用它的 bandwidth 给播放信息页做码率兜底 */
         onAudioSelected: ((DashAudio) -> Unit)? = null,
-    ): Result<String> = try {
+    ): Result<String> =
+        when (val r = getPlayUrls(bvid, cid, preferQuality, guest, onAudioSelected)) {
+            is Result.Success -> Result.Success(r.data.urls.first())
+            is Result.Error -> r
+        }
+
+    /**
+     * 取音频候选直链：首元素恒为主链，其后是 playurl 备链（PiliPlus 选线路同款数据源）。
+     * 主链的 CDN 节点挂掉（建连超时/403）时调用方按序切备链，不用重新鉴权。
+     */
+    suspend fun getPlayUrls(
+        bvid: String,
+        cid: Long,
+        preferQuality: Int = AudioQuality.DEFAULT_CODE,
+        guest: Boolean = false,
+        onAudioSelected: ((DashAudio) -> Unit)? = null,
+    ): Result<PlayCandidates> = try {
         val dto = api.playUrl(bvid, cid, qn = preferQuality, guest = guest)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
             val selected = dto.selectAudio(preferQuality)
             selected?.let { onAudioSelected?.invoke(it) }
-            val url = selected?.resolvedUrl()?.takeIf { it.isNotBlank() }
-                ?: dto.data?.durl?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
-            if (url.isNullOrBlank()) {
+            val urls = selected?.allUrls().orEmpty()
+                .ifEmpty {
+                    listOfNotNull(
+                        dto.data?.durl?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
+                    )
+                }
+            if (urls.isEmpty()) {
                 Result.Error("no play url")
             } else {
-                Result.Success(url)
+                Result.Success(
+                    PlayCandidates(
+                        urls = urls,
+                        bandwidthBps = selected?.bandwidth ?: 0,
+                        audioCode = selected?.id ?: 0,
+                    )
+                )
             }
         }
     } catch (e: Exception) {
@@ -352,3 +379,13 @@ class BiliRepository @Inject constructor(
 
 /** B 站搜索风控（412）：调用方应退避重试，不要连点。 */
 class BiliRateLimitedException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
+
+/**
+ * 一次 playurl 解析出的全部候选直链：[urls] 首元素恒为主链，其后是备链（原序）。
+ * [bandwidthBps]/[audioCode] 是实际选中档（码率兜底 + 底部标签显示实际生效档）。
+ */
+data class PlayCandidates(
+    val urls: List<String>,
+    val bandwidthBps: Int = 0,
+    val audioCode: Int = 0,
+)

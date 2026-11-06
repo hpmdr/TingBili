@@ -15,6 +15,8 @@ data class ResolvedAudio(
     val url: String,
     val bandwidthBps: Int = 0,
     val audioCode: Int = 0,
+    /** 主链之外的备链（首元素恒为主链 [url]，此处只放备链；失败重试按序消费） */
+    val backupUrls: List<String> = emptyList(),
 )
 
 interface PlayUrlResolver {

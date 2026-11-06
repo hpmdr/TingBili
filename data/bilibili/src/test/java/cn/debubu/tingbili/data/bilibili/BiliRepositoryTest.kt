@@ -288,6 +288,49 @@ class BiliRepositoryTest {
         assertTrue(r is Result.Error)
     }
 
+    /** 备链两种写法都收：主链优先、备链保原序，去空去重 */
+    @Test
+    fun `getPlayUrls returns primary plus backups in order`() = runTest {
+        server.enqueue(
+            jsonResponse(
+                """{"code":0,"data":{"dash":{"audio":[{""" +
+                    """"baseUrl":"https://primary.example.com/a.m4s","id":30232,"bandwidth":132000,""" +
+                    """"backup_url":["https://b1.example.com/a.m4s"," https://b2.example.com/a.m4s "],""" +
+                    """"backupUrl":["https://b2.example.com/a.m4s","","https://b3.example.com/a.m4s"]""" +
+                    """}],"video":[]},"durl":[]}}"""
+            )
+        )
+        val r = repo.getPlayUrls("BV1xx", 1001)
+        assertTrue(r is Result.Success)
+        val c = (r as Result.Success).data
+        assertEquals(
+            listOf(
+                "https://primary.example.com/a.m4s",
+                "https://b1.example.com/a.m4s",
+                "https://b2.example.com/a.m4s",
+                "https://b3.example.com/a.m4s",
+            ),
+            c.urls,
+        )
+        assertEquals(132000, c.bandwidthBps)
+        assertEquals(30232, c.audioCode)
+    }
+
+    /** 老入口行为不变：只给主链，不感知备链 */
+    @Test
+    fun `getPlayUrl still returns primary only`() = runTest {
+        server.enqueue(
+            jsonResponse(
+                """{"code":0,"data":{"dash":{"audio":[{""" +
+                    """"baseUrl":"https://primary.example.com/a.m4s","id":30232,""" +
+                    """"backup_url":["https://b1.example.com/a.m4s"]}],"video":[]},"durl":[]}}"""
+            )
+        )
+        val r = repo.getPlayUrl("BV1xx", 1001)
+        assertTrue(r is Result.Success)
+        assertEquals("https://primary.example.com/a.m4s", (r as Result.Success).data)
+    }
+
     private fun jsonResponse(body: String) = MockResponse()
         .setBody(body)
         .setResponseCode(200)
