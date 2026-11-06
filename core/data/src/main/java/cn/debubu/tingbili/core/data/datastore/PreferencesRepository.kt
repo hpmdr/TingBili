@@ -410,12 +410,12 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         const val MAX_SEARCH_HISTORY = 15
         val CACHE_MAX_MB = intPreferencesKey("cache_max_mb")
         val HAS_FAVORITE_EVER = androidx.datastore.preferences.core.booleanPreferencesKey("has_favorite_ever")
-        const val DEFAULT_CACHE_MAX_MB = 500
+        const val DEFAULT_CACHE_MAX_MB = 2048
         /** 构造期读镜像缺失时的兜底上限：只在 DataStore 预热未完成的极端情况下才会用到 */
         const val PRIME_BLOCK_TIMEOUT_MS = 80L
         val DEFAULT_HOME_KEYWORDS = listOf("有声小说", "音乐合辑", "恐怖有声")
-        const val MIN_CACHE_MAX_MB = 100
-        const val MAX_CACHE_MAX_MB = 2048
+        const val MIN_CACHE_MAX_MB = 1024
+        const val MAX_CACHE_MAX_MB = 4096
         /** 图片盘缓存上限封顶（方案一：图片按音频上限 1/4 派生，见 imageCacheMaxMb） */
         const val IMAGE_CACHE_MAX_MB = 256
 

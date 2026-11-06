@@ -188,29 +188,29 @@ class StorageSettingsViewModelTest {
         assertEquals(1024, prefs.cacheMaxMb.first())
     }
 
-    @Test fun `cache max coerced in range 100 to 2048`() = runTest(dispatcher) {
+    @Test fun `cache max coerced in range 1024 to 4096`() = runTest(dispatcher) {
         val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         vm.setCacheMaxMb(10000)
         advanceUntilIdle()
-        assertEquals(2048, prefs.cacheMaxMb.first())
+        assertEquals(4096, prefs.cacheMaxMb.first())
         vm.setCacheMaxMb(1)
         advanceUntilIdle()
-        assertEquals(100, prefs.cacheMaxMb.first())
+        assertEquals(1024, prefs.cacheMaxMb.first())
     }
 
     @Test fun `limit options snap to nearest`() = runTest(dispatcher) {
-        assertEquals(listOf(500, 1000, 1500, 2000), StorageSettingsViewModel.LIMIT_OPTIONS_MB)
+        assertEquals(listOf(1024, 2048, 3072, 4096), StorageSettingsViewModel.LIMIT_OPTIONS_MB)
         assertEquals(0, StorageSettingsViewModel.nearestLimitIdx(100))
-        assertEquals(0, StorageSettingsViewModel.nearestLimitIdx(500))
-        assertEquals(1, StorageSettingsViewModel.nearestLimitIdx(1000))
-        assertEquals(3, StorageSettingsViewModel.nearestLimitIdx(2048))
+        assertEquals(0, StorageSettingsViewModel.nearestLimitIdx(1024))
+        assertEquals(1, StorageSettingsViewModel.nearestLimitIdx(2048))
+        assertEquals(3, StorageSettingsViewModel.nearestLimitIdx(4096))
     }
 
     @Test fun `limit labels`() = runTest(dispatcher) {
-        assertEquals("500MB", StorageSettingsViewModel.limitLabel(500))
-        assertEquals("1000MB", StorageSettingsViewModel.limitLabel(1000))
-        assertEquals("1.5GB", StorageSettingsViewModel.limitLabel(1500))
-        assertEquals("2GB", StorageSettingsViewModel.limitLabel(2000))
+        assertEquals("1GB", StorageSettingsViewModel.limitLabel(1024))
+        assertEquals("2GB", StorageSettingsViewModel.limitLabel(2048))
+        assertEquals("3GB", StorageSettingsViewModel.limitLabel(3072))
+        assertEquals("4GB", StorageSettingsViewModel.limitLabel(4096))
     }
 
     @Test fun `stats exposed from manager`() = runTest(dispatcher) {

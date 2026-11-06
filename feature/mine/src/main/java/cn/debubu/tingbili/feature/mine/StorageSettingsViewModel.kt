@@ -34,14 +34,14 @@ class StorageSettingsViewModel @Inject constructor(
     }
 
     companion object {
-        /** 上限滑杆档位（MB）：步长 500MB，用户拍板 */
-        val LIMIT_OPTIONS_MB = listOf(500, 1000, 1500, 2000)
+        /** 上限滑杆档位（MB）：1GB / 2GB / 3GB / 4GB，用户拍板 */
+        val LIMIT_OPTIONS_MB = listOf(1024, 2048, 3072, 4096)
 
-        /** 存量值就近吸附到档位（老用户 100/200 等档外值也能正常显示） */
+        /** 存量值就近吸附到档位（老用户 500 等档外值也能正常显示） */
         fun nearestLimitIdx(mb: Int): Int =
             LIMIT_OPTIONS_MB.withIndex().minByOrNull { (_, o) -> kotlin.math.abs(o - mb) }?.index ?: 0
 
-        /** 档位短标签：500MB / 1GB / 1.5GB / 2GB（档外老值如 100MB 也能显示） */
+        /** 档位短标签：1GB / 2GB / 3GB / 4GB（档外老值如 500MB 也能显示） */
         fun limitLabel(mb: Int): String = if (mb < 1024) "${mb}MB" else {
             val tenth = (mb * 10 + 512) / 1024
             if (tenth % 10 == 0) "${tenth / 10}GB" else "${tenth / 10}.${tenth % 10}GB"
