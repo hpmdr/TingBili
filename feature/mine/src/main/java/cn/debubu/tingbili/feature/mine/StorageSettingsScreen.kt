@@ -217,8 +217,7 @@ private fun CacheLimitSheet(
         TingBiliChoiceOption(
             value = mb,
             title = StorageSettingsViewModel.limitLabel(mb),
-            supportingText = "音频 ${StorageSettingsViewModel.limitLabel(mb)} · 图片 ${StorageSettingsViewModel.limitLabel(imageMb)}" +
-                if (imageMb >= PreferencesRepository.IMAGE_CACHE_MAX_MB) "（封顶）" else "",
+            supportingText = "音频 ${StorageSettingsViewModel.limitLabel(mb)} · 图片 ${StorageSettingsViewModel.limitLabel(imageMb)}",
         )
     }
     TingBiliChoiceSheet(
