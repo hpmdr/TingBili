@@ -417,7 +417,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         const val MIN_CACHE_MAX_MB = 1024
         const val MAX_CACHE_MAX_MB = 4096
         /** 图片盘缓存上限封顶（方案一：图片按音频上限 1/4 派生，见 imageCacheMaxMb） */
-        const val IMAGE_CACHE_MAX_MB = 256
+        const val IMAGE_CACHE_MAX_MB = 1024
 
         /**
          * 图片盘缓存派生上限 = 音频上限的 1/4，上封顶 [IMAGE_CACHE_MAX_MB]。

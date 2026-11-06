@@ -58,7 +58,7 @@ class TingBiliApp : Application(), SingletonImageLoader.Factory {
     /**
      * Coil 全局图片加载器：只收紧磁盘上限，其余（解码器/网络/内存）全部走 Coil 默认。
      *
-     * 图片盘上限 = 音频上限的 1/4（封顶 256MB，见 [PreferencesRepository.imageCacheMaxMb]）。
+     * 图片盘上限 = 音频上限的 1/4（封顶 1024MB，见 [PreferencesRepository.imageCacheMaxMb]）。
      * 目录沿用 Coil 默认（`cacheDir/coil3_disk_cache`），存量缓存跨版本保留；
      * 上限构造时固定，调整后需重启生效（与音频缓存同约束）。
      */
