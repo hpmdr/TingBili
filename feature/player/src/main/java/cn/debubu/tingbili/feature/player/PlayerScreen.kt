@@ -1621,7 +1621,7 @@ private fun FullscreenLyricsList(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = centerPadding),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(
@@ -1630,6 +1630,14 @@ private fun FullscreenLyricsList(
                 key = { idx, line -> "$idx-${line.timeMs}" },
             ) { idx, line ->
                 val isCurrent = idx == state.currentLyricIndex
+                // 与小卡 MiniLyricCard 同款三档灰：已播/远期 0.7，未来 3 行内全亮
+                val lyricColor = if (isCurrent) {
+                    MaterialTheme.colorScheme.primary
+                } else if (idx < state.currentLyricIndex || idx > state.currentLyricIndex + 3) {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
                 Text(
                     text = line.text,
                     style = if (isCurrent) {
@@ -1641,11 +1649,13 @@ private fun FullscreenLyricsList(
                             fontSize = MaterialTheme.typography.bodyMedium.fontSize * state.subtitleScale,
                         )
                     },
-                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                    color = lyricColor,
                     textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     // 不铺满整行：只有文字（含少量内边距）可点，行两侧空白留给“点空白退出”
+                    // （小卡是 fillMaxWidth 整行宽，这里为保退出手势不能照搬）
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(enabled = !isLoading) { onSeekLyric(line) }
