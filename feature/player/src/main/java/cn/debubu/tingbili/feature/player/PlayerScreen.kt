@@ -1589,13 +1589,14 @@ private fun FullscreenLyricsList(
                 onClickLabel = "收起全屏字幕",
             ) { onExit() },
     ) {
-        // 上下各留半屏内边距，首尾行也能居中
-        val centerPadding = maxHeight / 2
-        // 闭环居中：先粗定位把目标行弄进布局，再按实测位置 scrollBy 精调到正中。
+        // 当前行锚在 1/3 高度（上方留 1/3、下方留 2/3 给下文）：首尾行也能顶到锚线
+        val topPadding = maxHeight * (1f / 3f)
+        val bottomPadding = maxHeight * (2f / 3f)
+        // 闭环锚定：先粗定位把目标行弄进布局，再按实测位置 scrollBy 精调到 1/3 线。
         // 不依赖 scrollToItem 的 offset 语义（真机证明其负偏移在冷/热布局下都落不到中央，
         // 只会把目标行晾在底边），scrollBy 是纯相对位移无歧义；到首尾时自然钳制。
         // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态只滚一次会定错位置
-        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, centerPadding, followSuspended) {
+        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, topPadding, bottomPadding, followSuspended) {
             // 用户正在看别处：别抢滚动；恢复时 key 变化会重跑，自然回到高亮行
             if (followSuspended) return@LaunchedEffect
             val idx = state.currentLyricIndex
@@ -1610,8 +1611,9 @@ private fun FullscreenLyricsList(
                 val info = listState.layoutInfo
                 val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
                     ?: return@LaunchedEffect
-                val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
-                val delta = (item.offset + item.size / 2 - viewportCenter).toFloat()
+                val viewportHeight = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+                val anchor = info.viewportStartOffset + viewportHeight / 3f
+                val delta = (item.offset + item.size / 2 - anchor).toFloat()
                 if (delta != 0f) listState.scroll { scrollBy(delta) }
             } catch (_: Exception) {
                 // 切歌/切字幕轨时列表并发变化，忽略本次跟随
@@ -1620,7 +1622,7 @@ private fun FullscreenLyricsList(
         androidx.compose.foundation.lazy.LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = centerPadding),
+            contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
             verticalArrangement = Arrangement.spacedBy(2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -1680,22 +1682,7 @@ private fun FullscreenLyricsList(
             }
         }
         }
-        // 显式退出入口：不依赖“点空白”的可发现性，读屏也能聚焦
-        Surface(
-            onClick = onExit,
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 6.dp),
-        ) {
-            Text(
-                text = "收起全屏字幕 ⌄",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
+        // 顶部药丸已去掉（会压住第一屏字幕）：退出靠点空白处，读屏走外层容器的“收起全屏字幕”操作
     }
 }
 
