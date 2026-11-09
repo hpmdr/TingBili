@@ -138,6 +138,7 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
 import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.SettingRadioRow
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
@@ -199,7 +200,14 @@ fun PlayerScreen(
         ?.takeIf { it.isNotBlank() }
         ?.biliImage(BiliImageVariant.LargeCover, imageFormat)
     // 纯色背景：曾试过“全屏模糊封面 + 渐变罩子”，罩子压完几乎看不见，还多一层全屏 RenderEffect，已移除
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // Snackbar 位置用 M3 推荐：Scaffold snackbarHost 槽位（底部叠在内容上），不再手写 bottom=210dp 抬高。
+    // 播放页无 mini 条、无底栏，槽位即标准底部，盖住辅助栏 4s 是 M3 允许的 overlay。
+    TingBiliScaffold(
+        snackbarHost = { TingBiliSnackbarHost(hostState = snackbarHostState) },
+    ) { innerPadding ->
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(innerPadding)
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -417,13 +425,7 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(8.dp))
     }
-        // 抬到进度条上方：88dp 会压在进度条和播放键上，提示看不清也挡操作
-        TingBiliSnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 210.dp),
-        )
+    }
     }
 
     if (showFavoriteSheet && trackUi.track != null) {
