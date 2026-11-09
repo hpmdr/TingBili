@@ -191,6 +191,7 @@ class PlayerManagerTest {
     private lateinit var fakePlayQueue: FakePlayQueueDao
     private lateinit var prefs: PreferencesRepository
     private lateinit var fakeResolvers: FakeMediaResolvers
+    private lateinit var fakeCache: FakePlayUrlCacheDao
     private lateinit var playerManager: PlayerManager
 
     @Before
@@ -209,7 +210,8 @@ class PlayerManagerTest {
         prefs = PreferencesRepository(dataStore)
         fakeResolvers = FakeMediaResolvers()
         fakeNetwork = FakeNetworkMonitor()
-        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, FakePlayUrlCacheDao(), fakePlayQueue, context, fakeNetwork)
+        fakeCache = FakePlayUrlCacheDao()
+        playerManager = PlayerManager(fakePlayer, fakeHistory, prefs, fakeResolvers, fakeResolvers, fakeResolvers, fakeCache, fakePlayQueue, context, fakeNetwork)
         AudioPipelineMonitor.onOffloadSleepingChanged(false)
     }
 
@@ -240,6 +242,43 @@ class PlayerManagerTest {
         assertTrue(playerManager.refreshCurrentUrl())
 
         assertEquals("BV1:1:30251", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
+        playerManager.release()
+    }
+
+    /** B 回归：杀进程重启后内存登记表是空的，磁盘直链缓存必须预热回来，否则底部标签回落到偏好（Hi-Res）撒谎 */
+    @Test
+    fun `prewarm restores actual quality from disk cache`() = runTest {
+        AudioBitrateRegistry.clear()
+        val now = System.currentTimeMillis()
+        fakeCache.putAll(
+            listOf(
+                cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity(
+                    "BV1:1", "http://example.com/a192.m4s", now, 85000, 30280
+                )
+            )
+        )
+        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", 10_000, null))
+        assertEquals(30280, AudioBitrateRegistry.codeOf("BV1", 1))
+        AudioBitrateRegistry.clear()
+        playerManager.release()
+    }
+
+    /** 内存已有本轮解析结果时，磁盘旧行不得覆盖 */
+    @Test
+    fun `prewarm does not overwrite fresh memory entry`() = runTest {
+        AudioBitrateRegistry.clear()
+        AudioBitrateRegistry.put("BV1", 1, 90000, 30280)
+        val now = System.currentTimeMillis()
+        fakeCache.putAll(
+            listOf(
+                cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity(
+                    "BV1:1", "http://example.com/old.m4s", now, 64000, 30216
+                )
+            )
+        )
+        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", 10_000, null))
+        assertEquals(30280, AudioBitrateRegistry.codeOf("BV1", 1))
+        AudioBitrateRegistry.clear()
         playerManager.release()
     }
 

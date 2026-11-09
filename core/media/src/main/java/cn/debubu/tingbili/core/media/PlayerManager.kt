@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -316,6 +317,22 @@ class PlayerManager @Inject constructor(
             restoreLastPlayback()
             restoreSleepTimer()
         }
+        // B 修复：磁盘直链缓存预热内存登记表。
+        // 背景：CacheDataSource 命中 SimpleCache 时根本不走 ResolvingDataSource，
+        // resolveBlocking 不被调用，AudioBitrateRegistry 永远是空，底部音质标签只能
+        // 回落到偏好（偏好 Hi-Res 但本集只有 192K 时就撒谎显示 Hi-Res）。
+        // 这里跟随 currentTrack，用磁盘里上次的实际选中档预热，缓存直放也有实际档可显示。
+        // 内存已有本轮解析结果时不覆盖（磁盘是旧的，内存是最新的）。
+        scope.launch {
+            var lastKey: String? = null
+            state.collect { st ->
+                val t = st.currentTrack ?: return@collect
+                val key = "${t.bvid}:${t.cid}"
+                if (key == lastKey) return@collect
+                lastKey = key
+                prewarmAudioCode(t)
+            }
+        }
         // 随机方式改了且当前队列开着随机：立即换下发策略（洗牌 / 纯随机）
         scope.launch {
             prefs.randomPlayMode.collect { mode ->
@@ -331,6 +348,23 @@ class PlayerManager @Inject constructor(
                 }
             } catch (_: Exception) {
             }
+        }
+    }
+
+    /**
+     * 用磁盘直链缓存预热内存登记表（见 init 注释）。
+     * 即使过期也用：展示用的是 audioCode（实际选中档），直链本身过期不影响档位诚实性；
+     * bandwidth 兜底同理。单测可直接调。
+     */
+    internal suspend fun prewarmAudioCode(track: Track) {
+        if (AudioBitrateRegistry.codeOf(track.bvid, track.cid) != null) return
+        try {
+            val cached = withContext(Dispatchers.IO) { playUrlCache.get("${track.bvid}:${track.cid}") }
+                ?: return
+            if (cached.audioCode > 0 || cached.bandwidthBps > 0) {
+                AudioBitrateRegistry.put(track.bvid, track.cid, cached.bandwidthBps, cached.audioCode)
+            }
+        } catch (_: Exception) {
         }
     }
 
