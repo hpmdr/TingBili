@@ -52,7 +52,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 
-/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码开关 / 默认音质入口）。 */
+/** 二级页：播放设置（播放分组：步长 / 字幕 / 随机 / 默认音质 + 睡眠偏好 / 解码开关）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -127,6 +127,15 @@ fun SettingsScreen(
                         },
                         onClick = { showRandomModeSheet = true },
                     )
+                    SettingDivider()
+                    SettingRow(
+                        icon = Icons.Filled.HighQuality,
+                        accent = SettingAccent.PINK,
+                        title = "默认音质",
+                        subtitle = "高档需登录/会员，拿不到自动回落",
+                        value = AudioQuality.fromCode(audioQuality).shortDesc,
+                        onClick = onOpenQuality,
+                    )
                 }
             }
 
@@ -187,19 +196,6 @@ fun SettingsScreen(
                 }
             }
 
-            Column {
-                SettingSectionLabel("音质")
-                SettingsGroup {
-                    SettingRow(
-                        icon = Icons.Filled.HighQuality,
-                        accent = SettingAccent.PINK,
-                        title = "默认音质",
-                        subtitle = "高档需登录/会员，拿不到自动回落",
-                        value = AudioQuality.fromCode(audioQuality).shortDesc,
-                        onClick = onOpenQuality,
-                    )
-                }
-            }
         }
     }
 
