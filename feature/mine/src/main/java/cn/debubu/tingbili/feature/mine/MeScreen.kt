@@ -1,6 +1,7 @@
 package cn.debubu.tingbili.feature.mine
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -45,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +53,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -72,7 +76,6 @@ import cn.debubu.tingbili.core.ui.theme.LocalDarkTheme
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
-import kotlinx.coroutines.launch
 
 // 品牌色（B 站粉），暗色头部渐变按参考设计走深邃低饱和色
 private val BiliPink = Color(0xFFFB7299)
@@ -96,7 +99,6 @@ fun MeScreen(
     vm: MeViewModel = hiltViewModel()
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val darkTheme = LocalDarkTheme.current
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
@@ -113,8 +115,6 @@ fun MeScreen(
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
 
-    val placeholder: (String) -> Unit = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -127,7 +127,6 @@ fun MeScreen(
             darkTheme = darkTheme,
             totalListenMs = totalListenMs,
             session = session,
-            onBadgeClick = { placeholder("听书专属版：敬请期待") },
             onToggleDark = { vm.toggleDarkMode(darkTheme) },
             onUserClick = { if (session == null) onOpenLogin() },
         )
@@ -255,7 +254,6 @@ private fun MeHeader(
     darkTheme: Boolean,
     totalListenMs: Long,
     session: cn.debubu.tingbili.data.bilibili.auth.BiliSession?,
-    onBadgeClick: () -> Unit,
     onToggleDark: () -> Unit,
     onUserClick: () -> Unit,
 ) {
@@ -276,32 +274,23 @@ private fun MeHeader(
             .fillMaxWidth()
             .background(gradient, RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 32.dp)
+            .padding(start = 20.dp, end = 12.dp, top = 4.dp, bottom = 32.dp)
     ) {
-        // 顶部快捷操作行
+        // 顶栏：左侧页标题 + 右侧明暗切换，两边都有东西就不“孤悬”了
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(if (darkTheme) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.2f))
-                    .clickable(onClick = onBadgeClick)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.Headphones,
-                    contentDescription = null,
-                    tint = if (darkTheme) BiliPink else Color.White,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text("听书专属版", color = onHeaderColor, fontSize = 12.sp)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "我的",
+                color = onHeaderColor,
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            // offset 把 48dp 点击区的多余内边距补回视觉 20dp
+            Box(modifier = Modifier.offset(x = 8.dp)) {
                 // 明暗快捷切换：亮色显示月亮（点击切深色），深色显示太阳（点击切浅色）
                 HeaderIconButton(
                     icon = if (darkTheme) Icons.Filled.WbSunny else Icons.Filled.DarkMode,
@@ -311,9 +300,10 @@ private fun MeHeader(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // 用户信息（已登录显示头像昵称，未登录显示引导；未登录时点击进登录页）
+        // 用户信息：头像 + 三行左对齐文字（昵称 / UID / 收听时长）
+        // 三行共用同一个 Column(Start)，pill 只包内容不撑满，左边缘天然对齐
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clickable(
@@ -322,7 +312,7 @@ private fun MeHeader(
             ),
         ) {
             if (session != null && session.face.isNotBlank()) {
-                // 头像走统一 Avatar 档，别直接拉 B 站原图（64dp 用原图纯浪费流量/内存）
+                // 头像走统一 Avatar 档，别直接拉 B 站原图（68dp 用原图纯浪费流量/内存）
                 val imageFormat = LocalImageFormat.current
                 val faceUrl = remember(session.face, imageFormat) {
                     session.face.biliImage(BiliImageVariant.Avatar, imageFormat)
@@ -331,67 +321,83 @@ private fun MeHeader(
                     model = faceUrl,
                     contentDescription = "用户头像",
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(68.dp)
                         .clip(CircleShape)
+                        .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape)
                 )
             } else {
                 // 默认头像：白圈 + 人形
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(68.dp)
                         .clip(CircleShape)
-                        .background(if (darkTheme) BiliPink.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.85f)),
+                        .background(if (darkTheme) BiliPink.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.9f))
+                        .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Filled.Person,
                         contentDescription = "未登录头像",
                         tint = BiliPink,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(38.dp)
                     )
                 }
             }
             Spacer(Modifier.width(16.dp))
-            Column {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.Start
+            ) {
                 Text(
                     text = session?.userName?.ifBlank { null } ?: "未登录",
                     color = onHeaderColor,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 20.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = if (session != null) "UID ${session.uid}" else "登录后同步你的收藏与历史",
                     color = onHeaderColor.copy(alpha = 0.75f),
-                    fontSize = 12.sp
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.15f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.Headphones,
-                        contentDescription = null,
-                        tint = Color(0xFFFCD34D),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        text = if (totalListenMs > 0L) {
-                            val hours = totalListenMs / 3600000.0
-                            if (hours >= 1.0) "已累计听视频 %.1f 小时".format(hours)
-                            else "已累计听视频 ${totalListenMs / 60000} 分钟"
-                        } else {
-                            "开始收听，积累你的收听时长"
-                        },
-                        color = onHeaderColor.copy(alpha = 0.9f),
-                        fontSize = 11.sp
-                    )
+                Spacer(Modifier.height(8.dp))
+                // 第三行：整行跟头部主题色，数字用主题 primary 加粗强调（不再写死黄色/白色）
+                // 和昵称/UID 同一起点 x，不套 pill、不加图标，三行文字严格左对齐
+                val numberColor = MaterialTheme.colorScheme.primary
+                val listenText = remember(totalListenMs, onHeaderColor, numberColor) {
+                    if (totalListenMs <= 0L) {
+                        AnnotatedString("开始收听，积累你的收听时长")
+                    } else {
+                        val hours = totalListenMs / 3600000.0
+                        val number = if (hours >= 1.0) "%.1f".format(hours)
+                        else (totalListenMs / 60000).toString()
+                        val unit = if (hours >= 1.0) "小时" else "分钟"
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = onHeaderColor)) { append("已累计听视频 ") }
+                            withStyle(
+                                SpanStyle(
+                                    color = numberColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            ) { append(number) }
+                            withStyle(SpanStyle(color = onHeaderColor)) { append(" $unit") }
+                        }
+                    }
                 }
+                Text(
+                    text = listenText,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
