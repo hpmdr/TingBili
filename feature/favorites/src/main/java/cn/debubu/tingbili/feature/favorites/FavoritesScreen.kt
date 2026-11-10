@@ -14,7 +14,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,10 +31,9 @@ import cn.debubu.tingbili.core.data.db.BvFavoriteEntity
 import cn.debubu.tingbili.core.data.db.FavoriteFolderSummary
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.CreateFolderDialog
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
 /** 统一列表项：手动收藏夹或 BV 收藏，按「最近添加」倒序混排。 */
@@ -76,9 +75,14 @@ fun FavoritesScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var showCreate by remember { mutableStateOf(false) }
     var cancelTarget by remember { mutableStateOf<BvFavoriteEntity?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(message) {
+        message?.let {
+            vm.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -108,7 +112,6 @@ fun FavoritesScreen(
                 },
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { padding ->
         if (!loaded) {
             Box(

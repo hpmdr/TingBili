@@ -277,8 +277,7 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
     // 离线横幅盖两分支（手机 Scaffold / 平板 MainTabsScaffold），悬浮在顶部、零占位，
     // 内容不被挤压下移；放 NavHost 之外：进出二级页不重建，转场动画不受影响。
     Box(modifier = Modifier.fillMaxSize()) {
-    if (layoutType == NavigationSuiteType.NavigationBar) {
-        // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
+    if (layoutType == NavigationSuiteType.NavigationBar) {        // 手机：Scaffold 与 NavHost 常驻，底栏只在主页 Tab 显示。
         // 注意：NavHost 绝不能放在 inMainTabs 的 if/else 两分支里各调一次——
         // 那样每次进出二级页都会重建 NavHost，内部 AnimatedContent 丢掉旧状态，
         // 转场动画会被直接跳过（之前“看不到动画”就是这个原因）。
@@ -348,6 +347,18 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         ) {
             OfflineBanner(modifier = Modifier.statusBarsPadding())
         }
+        // 全局 Snackbar：整个 App 只此一处，位置在顶栏下方（见 GlobalSnackbarTopOffset）。
+        // 底部都是操作栏/列表，盖住会挡操作；发消息走 TingBiliMessageBus，各页面无需自己挂。
+        cn.debubu.tingbili.core.ui.component.GlobalSnackbarHost(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = cn.debubu.tingbili.core.ui.component.GlobalSnackbarTopOffset)
+                .padding(horizontal = 16.dp),
+        )
+        // 启动自动检查的「发现新版本」弹窗：与离线横幅同层，手机/平板两条壳共用。
+        // 订阅下沉到独立 composable（pendingUpdate 平时为 null，不重组整壳）。
+        cn.debubu.tingbili.navigation.UpdatePromptSlot(mainViewModel)
     }
 }
 

@@ -1,7 +1,6 @@
 package cn.debubu.tingbili.core.data.update
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,22 +19,6 @@ class UpdateCheckerTest {
         assertNull(UpdateChecker.publishedAtSec(""))
         assertNull(UpdateChecker.publishedAtSec("v1.2.3"))
         assertNull(UpdateChecker.publishedAtSec("2023-13-99T99:99:99Z"))
-    }
-
-    @Test fun `newer beyond tolerance`() {
-        assertTrue(UpdateChecker.isNewer(remotePublishedSec = 1_000_061L, localBuildSec = 1_000_000L))
-    }
-
-    @Test fun `same build second is not newer`() {
-        assertFalse(UpdateChecker.isNewer(remotePublishedSec = 1_000_000L, localBuildSec = 1_000_000L))
-    }
-
-    @Test fun `clock skew within tolerance is not newer`() {
-        assertFalse(UpdateChecker.isNewer(remotePublishedSec = 1_000_030L, localBuildSec = 1_000_000L))
-    }
-
-    @Test fun `older release is not newer`() {
-        assertFalse(UpdateChecker.isNewer(remotePublishedSec = 999_000L, localBuildSec = 1_000_000L))
     }
 
     @Test fun `picks apk and skips sha256`() {

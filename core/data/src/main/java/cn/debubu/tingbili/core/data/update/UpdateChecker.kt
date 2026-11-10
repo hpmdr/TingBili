@@ -18,8 +18,8 @@ object UpdateChecker {
     /** 容差：打包机与 GitHub 时钟差 + 同一秒打出包的抖动，60s 内视为同一版本。 */
     const val TOLERANCE_SEC = 60L
 
-    /** 自动检查节流：每天最多一次（手动入口不受限）。 */
-    const val AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
+    /** 自动检查节流：每 12 小时最多一次（手动入口不受限）。 */
+    const val AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
 
     /** "2026-11-04T12:34:56Z" → 秒；draft/解析失败返回 null（调用方视为无更新）。 */
     fun publishedAtSec(iso: String): Long? =
@@ -28,9 +28,6 @@ object UpdateChecker {
         } catch (_: Exception) {
             null
         }
-
-    fun isNewer(remotePublishedSec: Long, localBuildSec: Long): Boolean =
-        remotePublishedSec > localBuildSec + TOLERANCE_SEC
 
     /**
      * 从 assets 挑安装包直链：TingBili_{version}_android.apk。

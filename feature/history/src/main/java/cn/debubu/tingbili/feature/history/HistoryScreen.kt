@@ -26,7 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,9 +47,8 @@ import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.model.episodePageLabel
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.playedProgressLabel
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -66,9 +65,14 @@ fun HistoryScreen(
     val startingResume by vm.startingResume.collectAsStateWithLifecycle()
     val pendingKey by vm.pendingKey.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(message) {
+        message?.let {
+            vm.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -82,7 +86,6 @@ fun HistoryScreen(
                 }
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         if (list.isEmpty()) {
             Box(

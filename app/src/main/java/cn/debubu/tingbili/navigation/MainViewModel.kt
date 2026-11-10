@@ -11,6 +11,7 @@ import cn.debubu.tingbili.core.data.model.ThemeMode
 import cn.debubu.tingbili.core.data.model.toTrack
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
 import cn.debubu.tingbili.core.data.repository.FavoritesRepository
+import cn.debubu.tingbili.core.data.update.AutoUpdateGate
 import cn.debubu.tingbili.core.data.update.UpdateChecker
 import cn.debubu.tingbili.core.data.update.UpdateDataSource
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -88,26 +89,43 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * 启动自动检查：debug 跳过（本地 BUILD_TIME 永远最新），每天最多一次，
+     * 启动自动检查：debug 跳过（本地 BUILD_TIME 永远最新），每 12 小时最多一次，
      * 关掉开关/用户跳过此版/失败都静默（手动入口在其他设置）。
      */
     private suspend fun autoCheckUpdate() {
         val debuggable = (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (debuggable) return
-        if (!prefs.autoCheckUpdate.first()) return
         val now = System.currentTimeMillis()
-        if (now - prefs.lastUpdateCheckMs.first() < UpdateChecker.AUTO_CHECK_INTERVAL_MS) return
+        if (!AutoUpdateGate.shouldFetch(
+                debuggable = debuggable,
+                autoCheckEnabled = prefs.autoCheckUpdate.first(),
+                nowMs = now,
+                lastCheckMs = prefs.lastUpdateCheckMs.first(),
+            )
+        ) return
         prefs.setLastUpdateCheckMs(now)
         val rel = update.fetchLatest().getOrNull() ?: return
-        val remoteSec = UpdateChecker.publishedAtSec(rel.publishedAt) ?: return
-        if (remoteSec == prefs.skippedReleaseSec.first()) return
-        if (!UpdateChecker.isNewer(remoteSec, BuildConfig.BUILD_TIME)) return
+        val remoteSec = UpdateChecker.publishedAtSec(rel.publishedAt)
+        if (!AutoUpdateGate.shouldPrompt(
+                skippedReleaseSec = prefs.skippedReleaseSec.first(),
+                localVersion = localVersionName(),
+                remoteTag = rel.tag,
+                remotePublishedSec = remoteSec,
+                localBuildSec = BuildConfig.BUILD_TIME,
+            )
+        ) return
         _pendingUpdate.value = UpdatePrompt(
             tag = rel.tag,
             body = rel.body.orEmpty(),
             apkUrl = UpdateChecker.pickApkUrl(rel.assets),
-            publishedSec = remoteSec,
+            publishedSec = remoteSec ?: 0L,
         )
+    }
+
+    /** 本地 versionName；取不到按空串（tag 不同即视为新版，交给时间条件兜底）。 */
+    private fun localVersionName(): String = try {
+        appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName.orEmpty()
+    } catch (_: Exception) {
+        ""
     }
 
     /**

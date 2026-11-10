@@ -38,11 +38,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -51,8 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -120,9 +118,13 @@ fun DetailScreen(
         if (header <= 0) return
         scope.launch { listState.scrollToItemCentered(header + target) }
     }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    MessageSnackbarEffect(message, snackbarHostState, viewModel::consumeMessage)
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(message) {
+        message?.let {
+            viewModel.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -135,7 +137,6 @@ fun DetailScreen(
                 }
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when (val s = state) {

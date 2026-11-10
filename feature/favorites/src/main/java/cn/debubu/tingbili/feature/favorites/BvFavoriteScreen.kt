@@ -33,7 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,11 +58,10 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.BackNavIcon
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderMultiPickerSheet
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -92,10 +91,15 @@ fun BvFavoriteScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(bvid) { vm.refresh() }
-    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(message) {
+        message?.let {
+            vm.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
 
     val refreshing = refreshState is BvRefreshState.Refreshing
     val fav = favorite
@@ -145,7 +149,6 @@ fun BvFavoriteScreen(
                 },
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { padding ->
         if (fav == null) {
             when (val state = refreshState) {

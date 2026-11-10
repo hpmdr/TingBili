@@ -257,9 +257,17 @@ class BiliRepository @Inject constructor(
         Result.Error(e.message ?: "playurl failed", e)
     }
 
-    /** 音质面板用：本次服务端实际返回的可用音频轨（id/带宽），展示可用性与当前有效档。 */
-    suspend fun getAudioOptions(bvid: String, cid: Long): Result<List<DashAudio>> = try {
-        val dto = api.playUrl(bvid, cid)
+    /**
+     * 音质面板用：本次服务端实际返回的可用音频轨（id/带宽），展示可用性与当前有效档。
+     * qn 必须与播放请求（[getPlayUrls]）同口径传偏好 code，否则服务端按默认档鉴权，
+     * 面板会漏掉高档（偏好 Hi-Res 时面板只显示 192K，与实际播放不符）。
+     */
+    suspend fun getAudioOptions(
+        bvid: String,
+        cid: Long,
+        preferQuality: Int = AudioQuality.DEFAULT_CODE,
+    ): Result<List<DashAudio>> = try {
+        val dto = api.playUrl(bvid, cid, qn = preferQuality)
         if (dto.code != 0) {
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {

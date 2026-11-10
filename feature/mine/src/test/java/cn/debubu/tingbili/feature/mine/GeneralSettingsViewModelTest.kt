@@ -53,6 +53,7 @@ class GeneralSettingsViewModelTest {
     }
 
     private val update = FakeUpdate()
+    private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @After
     fun tearDown() {
@@ -60,14 +61,14 @@ class GeneralSettingsViewModelTest {
     }
 
     @Test fun `image format persists`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.setImageFormat(ImageFormat.JPEG)
         advanceUntilIdle()
         assertEquals(ImageFormat.JPEG, prefs.imageFormat.first())
     }
 
     @Test fun `add and remove keyword`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.addHomeKeyword("白夜行")
         advanceUntilIdle()
         assertTrue(prefs.homeKeywords.first().contains("白夜行"))
@@ -77,7 +78,7 @@ class GeneralSettingsViewModelTest {
     }
 
     @Test fun `remove keeps at least one`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         advanceUntilIdle()
         val cur = prefs.homeKeywords.first()
         assertTrue(cur.isNotEmpty())
@@ -86,14 +87,14 @@ class GeneralSettingsViewModelTest {
         assertTrue(prefs.homeKeywords.first().isNotEmpty())
     }
     @Test fun `bulk keywords are trimmed and deduplicated`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.setHomeKeywords(listOf("  悬疑  ", "", "悬疑", "有声书"))
         advanceUntilIdle()
         assertEquals(listOf("悬疑", "有声书"), prefs.homeKeywords.first())
     }
 
     @Test fun `bulk keywords keep one when all blank`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.setHomeKeywords(listOf(" ", ""))
         advanceUntilIdle()
         assertEquals(1, prefs.homeKeywords.first().size)
@@ -103,7 +104,7 @@ class GeneralSettingsViewModelTest {
         update.result = Result.success(
             GitHubRelease(tag = "v9.9.9", body = "- x", publishedAt = "2999-01-01T00:00:00Z")
         )
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.checkUpdate()
         advanceUntilIdle()
         val st = vm.updateState.value
@@ -115,7 +116,7 @@ class GeneralSettingsViewModelTest {
         update.result = Result.success(
             GitHubRelease(tag = "v0.0.1", publishedAt = "2020-01-01T00:00:00Z")
         )
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.checkUpdate()
         advanceUntilIdle()
         assertEquals(
@@ -126,7 +127,7 @@ class GeneralSettingsViewModelTest {
 
     @Test fun `manual check failure shows failed`() = runTest(dispatcher) {
         update.result = Result.failure(IOException("offline"))
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.checkUpdate()
         advanceUntilIdle()
         assertEquals(
@@ -139,7 +140,7 @@ class GeneralSettingsViewModelTest {
         update.result = Result.success(
             GitHubRelease(tag = "v9.9.9", publishedAt = "2999-01-01T00:00:00Z")
         )
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.checkUpdate()
         advanceUntilIdle()
         vm.skipRelease()
@@ -152,7 +153,7 @@ class GeneralSettingsViewModelTest {
     }
 
     @Test fun `auto check switch persists`() = runTest(dispatcher) {
-        val vm = GeneralSettingsViewModel(prefs, update)
+        val vm = GeneralSettingsViewModel(prefs, update, context)
         vm.setAutoCheckUpdate(false)
         advanceUntilIdle()
         assertEquals(false, prefs.autoCheckUpdate.first())

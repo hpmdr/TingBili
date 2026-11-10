@@ -658,9 +658,12 @@ class PlayerViewModel @Inject constructor(
     val audioQualityLabel: StateFlow<String> = combine(
         player.state,
         prefs.audioQuality,
-    ) { s, prefer ->
+        // 注册表写入后版本号递增，驱动这里重组刷新标签（map 本身不是响应式的）
+        cn.debubu.tingbili.core.media.AudioBitrateRegistry.version,
+    ) { s, prefer, _ ->
         val effective = s.currentTrack?.let {
-            cn.debubu.tingbili.core.media.AudioBitrateRegistry.codeOf(it.bvid, it.cid)
+            // 目标档优先（暂停态切换后立即反馈），否则实际生效档
+            cn.debubu.tingbili.core.media.AudioBitrateRegistry.displayCodeOf(it.bvid, it.cid)
         }
         AudioQuality.fromCode(effective ?: prefer).shortDesc
     }.stateIn(
@@ -706,12 +709,15 @@ class PlayerViewModel @Inject constructor(
         audioOptionsKey = key
         _audioOptions.value = AudioOptionsUi.Loading
         viewModelScope.launch {
-            val prefer = prefs.audioQuality.first()
-            when (val r = repo.getAudioOptions(cur.bvid, cur.cid)) {
+            // qn 口径 = 当前实际生效档（注册表优先）：设置页改了偏好但还没重新加载时，
+            // 服务端按旧生效档鉴权，面板列表与正在播的档位一致，不会列出拿不到的档。
+            val effective = cn.debubu.tingbili.core.media.AudioBitrateRegistry.codeOf(cur.bvid, cur.cid)
+            val prefer = effective ?: prefs.audioQuality.first()
+            when (val r = repo.getAudioOptions(cur.bvid, cur.cid, prefer)) {
                 is Result.Error -> _audioOptions.value = AudioOptionsUi.Error(r.msg.ifBlank { "音质列表获取失败" })
                 is Result.Success -> {
                     audioRawTracks = r.data
-                    _audioOptions.value = buildOptions(r.data, prefer, isLoggedIn.value)
+                    _audioOptions.value = buildOptions(r.data, prefer, effective, isLoggedIn.value)
                 }
             }
         }
@@ -719,10 +725,18 @@ class PlayerViewModel @Inject constructor(
 
     /**
      * 面板只列本视频实际拿到的档位（服务端已按登录/会员态过滤，未登录通常只有 64K/132K），
-     * 从高到低排，✓ 落在按偏好选中的有效档。拿不到更高档时屏端用底部“登录解锁”入口引导
-     * （见 AudioQualitySheet showLoginHint），列表里不再出现点不了的档位。
+     * 从高到低排，✓ 落在**实际生效档**（[effectiveCode] 来自解析登记，优先于按偏好推算）。
+     * 拿不到更高档时屏端用底部“登录解锁”入口引导（见 AudioQualitySheet showLoginHint），
+     * 列表里不再出现点不了的档位。
+     *
+     * @param effectiveCode 实际生效档（注册表优先）；为空时才按偏好推算
      */
-    private fun buildOptions(raw: List<DashAudio>, prefer: Int, loggedIn: Boolean): AudioOptionsUi.Ready {
+    private fun buildOptions(
+        raw: List<DashAudio>,
+        prefer: Int,
+        effectiveCode: Int?,
+        loggedIn: Boolean,
+    ): AudioOptionsUi.Ready {
         if (raw.isEmpty()) {
             val q = AudioQuality.fromCode(prefer)
             return AudioOptionsUi.Ready(
@@ -734,7 +748,9 @@ class PlayerViewModel @Inject constructor(
             .sortedWith(compareByDescending<DashAudio> { AudioQuality.fromCode(it.id).rank }.thenByDescending { it.bandwidth })
             .distinctBy { it.id }
             .distinctBy { AudioQuality.fromCode(it.id).desc } // 同名档（如双杜比码）只留一行
-        val effective = deduped.pickAudio(prefer)?.id
+        // 实际生效档优先：设置页改了偏好但当前还在播旧档时，✓ 落在旧档（与底部标签一致）
+        val effective = effectiveCode?.takeIf { code -> deduped.any { it.id == code } }
+            ?: deduped.pickAudio(prefer)?.id
         val rows = deduped
             .map { a ->
                 val q = AudioQuality.fromCode(a.id)
@@ -746,7 +762,7 @@ class PlayerViewModel @Inject constructor(
                     // 故不再展示带宽；真实解码码率以播放信息页的"码率"为准。
                     subTitle = "",
                     locked = false,
-                    selected = a.id == (effective ?: prefer),
+                    selected = a.id == effective,
                 )
             }
         return AudioOptionsUi.Ready(rows, effective)
@@ -754,7 +770,8 @@ class PlayerViewModel @Inject constructor(
 
     /**
      * 选中档位：高档需登录，未登录返回 false（已写提示，屏端跳登录页）；
-     * 已登录则落盘偏好→本集不断播换链→面板本地重算有效档。返回 true 表示已受理。
+     * 已登录则落盘偏好→[PlayerManager.refreshCurrentUrl]（播放中立即换链，暂停中记目标档）
+     * →面板本地重算有效档。返回 true 表示已受理。
      */
     fun selectAudioQuality(code: Int): Boolean {
         val q = AudioQuality.fromCode(code)
@@ -764,12 +781,14 @@ class PlayerViewModel @Inject constructor(
         }
         viewModelScope.launch {
             prefs.setAudioQuality(code)
-            // 面板即时反馈：本地按新偏好重算有效档（服务端实际档位以换链结果为准）
+            // 面板即时反馈：本地按新偏好重算有效档（服务端实际档位以换链结果为准）。
+            // 播放页切换是「立即生效」语义：✓ 直接落在用户点的这档。
             if (audioRawTracks.isNotEmpty()) {
-                _audioOptions.value = buildOptions(audioRawTracks, code, isLoggedIn.value)
+                _audioOptions.value = buildOptions(audioRawTracks, code, code, isLoggedIn.value)
             }
             val ok = player.refreshCurrentUrl()
-            _message.value = if (ok) "已切换为${q.desc}" else "切换失败，已保留当前播放"
+            // 成功不提示：面板 ✓ 与底部标签已即时变化，本身就是反馈；只报失败。
+            if (!ok) _message.value = "切换失败，已保留当前播放"
         }
         return true
     }

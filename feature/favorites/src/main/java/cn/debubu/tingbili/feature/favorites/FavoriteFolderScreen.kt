@@ -32,7 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,10 +55,9 @@ import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.MiniPlayerClearance
 import cn.debubu.tingbili.core.ui.component.BackNavIcon
 import cn.debubu.tingbili.core.ui.component.CreateFolderDialog
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
@@ -79,14 +78,19 @@ fun FavoriteFolderScreen(
     val focus by vm.focus.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
     var showMenu by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<FavoriteTrackEntity?>(null) }
 
-    MessageSnackbarEffect(message, snackbarHostState, vm::consumeMessage)
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(message) {
+        message?.let {
+            vm.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
 
     val isDefault = folder?.isDefault == true
 
@@ -130,7 +134,6 @@ fun FavoriteFolderScreen(
                 },
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { padding ->
         val current = folder
         if (current == null) {

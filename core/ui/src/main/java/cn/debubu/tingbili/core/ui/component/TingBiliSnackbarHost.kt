@@ -2,6 +2,7 @@ package cn.debubu.tingbili.core.ui.component
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -25,7 +26,10 @@ fun TingBiliSnackbarHost(
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(14.dp)
-    SnackbarHost(hostState = hostState, modifier = modifier) { data ->
+    SnackbarHost(
+        hostState = hostState,
+        modifier = modifier.shadow(6.dp, shape, clip = false),
+    ) { data ->
         Snackbar(
             snackbarData = data,
             shape = shape,

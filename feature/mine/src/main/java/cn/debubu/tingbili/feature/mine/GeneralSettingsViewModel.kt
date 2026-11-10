@@ -1,18 +1,22 @@
 package cn.debubu.tingbili.feature.mine
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.BuildConfig
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.data.update.AutoUpdateGate
 import cn.debubu.tingbili.core.data.update.UpdateChecker
 import cn.debubu.tingbili.core.data.update.UpdateDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -21,6 +25,7 @@ import kotlinx.coroutines.launch
 class GeneralSettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository,
     private val update: UpdateDataSource,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     val imageFormat: StateFlow<ImageFormat> = prefs.imageFormat.stateIn(
@@ -101,7 +106,16 @@ class GeneralSettingsViewModel @Inject constructor(
                 return@launch
             }
             val remoteSec = UpdateChecker.publishedAtSec(rel.publishedAt)
-            if (remoteSec == null || !UpdateChecker.isNewer(remoteSec, BuildConfig.BUILD_TIME)) {
+            // 手动入口也认"不再提醒此版"：否则每次点检查都把用户刚拒掉的版本弹回来。
+            val skipped = prefs.skippedReleaseSec.first()
+            if (!AutoUpdateGate.shouldPrompt(
+                    skippedReleaseSec = skipped,
+                    localVersion = localVersionName(),
+                    remoteTag = rel.tag,
+                    remotePublishedSec = remoteSec,
+                    localBuildSec = BuildConfig.BUILD_TIME,
+                )
+            ) {
                 _updateState.value = UpdateUiState.UpToDate
                 return@launch
             }
@@ -109,9 +123,16 @@ class GeneralSettingsViewModel @Inject constructor(
                 tag = rel.tag,
                 body = rel.body.orEmpty(),
                 apkUrl = UpdateChecker.pickApkUrl(rel.assets),
-                publishedSec = remoteSec,
+                publishedSec = remoteSec ?: 0L,
             )
         }
+    }
+
+    /** 本地 versionName；取不到按空串（tag 不同即视为新版，交给时间条件兜底）。 */
+    private fun localVersionName(): String = try {
+        appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName.orEmpty()
+    } catch (_: Exception) {
+        ""
     }
 
     /** "不再提醒此版"：只记发布时间，tag 重发（时间变）照弹。 */

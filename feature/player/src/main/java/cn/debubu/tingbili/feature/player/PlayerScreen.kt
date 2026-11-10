@@ -84,7 +84,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
@@ -137,9 +136,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.SettingRadioRow
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.formatDurationMs
@@ -158,8 +156,6 @@ fun PlayerScreen(
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val snackbarScope = rememberCoroutineScope()
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     // 注意：进度流（1Hz）不在这里订阅——它只被「进度条 / 辅助栏 / 定时弹层」用，
     // 顶层订阅会让整个播放页 body 每秒重跑一次（REVIEW_REPORT B-03）。
@@ -172,8 +168,14 @@ fun PlayerScreen(
     val isRefreshing by vm.isRefreshing.collectAsStateWithLifecycle()
     val isDefaultFavorite by vm.isDefaultFavorite.collectAsStateWithLifecycle()
     val favoriteFolders by vm.favoriteFolders.collectAsStateWithLifecycle()
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
     val refreshMessage by vm.message.collectAsStateWithLifecycle()
-    MessageSnackbarEffect(refreshMessage, snackbarHostState, vm::consumeMessage)
+    LaunchedEffect(refreshMessage) {
+        refreshMessage?.let {
+            vm.consumeMessage()
+            TingBiliMessageBus.show(it)
+        }
+    }
     // 顶栏=合集名（“在听哪本书”）；章节行在封面下方，显示 “P1 · 章节名”
     val headerTitle = playerHeaderTitle(trackUi.track)
 
@@ -200,11 +202,8 @@ fun PlayerScreen(
         ?.takeIf { it.isNotBlank() }
         ?.biliImage(BiliImageVariant.LargeCover, imageFormat)
     // 纯色背景：曾试过“全屏模糊封面 + 渐变罩子”，罩子压完几乎看不见，还多一层全屏 RenderEffect，已移除
-    // Snackbar 位置用 M3 推荐：Scaffold snackbarHost 槽位（底部叠在内容上），不再手写 bottom=210dp 抬高。
-    // 播放页无 mini 条、无底栏，槽位即标准底部，盖住辅助栏 4s 是 M3 允许的 overlay。
-    TingBiliScaffold(
-        snackbarHost = { TingBiliSnackbarHost(hostState = snackbarHostState) },
-    ) { innerPadding ->
+    // 提示走全局总线（TingBiliMessageBus）：整个 App 只有一个 Snackbar 宿主，挂在壳层顶栏下方。
+    TingBiliScaffold { innerPadding ->
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(innerPadding)
     ) {
@@ -281,9 +280,7 @@ fun PlayerScreen(
                     onCardClick = {
                         when (lyrUi.subtitleLoadState) {
                             SubtitleLoadState.Ready -> lyricFullscreen = true
-                            SubtitleLoadState.Empty -> snackbarScope.launch {
-                                snackbarHostState.showSnackbar("暂无字幕")
-                            }
+                            SubtitleLoadState.Empty -> TingBiliMessageBus.show("暂无字幕")
                             SubtitleLoadState.NoAuth -> onLoginClick()
                             SubtitleLoadState.Error -> vm.retrySubtitles()
                             SubtitleLoadState.Loading -> Unit

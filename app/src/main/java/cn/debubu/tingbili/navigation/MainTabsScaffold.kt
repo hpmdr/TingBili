@@ -177,15 +177,17 @@ fun MainTabsScaffold(
             }
         }
     }
-    UpdatePromptSlot(viewModel)
 }
 
 /**
  * 启动自动检查弹窗槽：订阅下沉到本组件（pendingUpdate 平时为 null 不重组），
  * 壳体（含 NavHost）不跟随失效——高频/低频状态都不许在壳顶层订阅（F4a）。
+ *
+ * 调用点在 MainActivity 的 AdaptiveMainScaffold 外层 Box：手机壳与平板壳共用同一个槽
+ * （原先只在平板壳里挂了，窄屏手机检查到新版也没人渲染）。
  */
 @Composable
-private fun UpdatePromptSlot(viewModel: MainViewModel) {
+fun UpdatePromptSlot(viewModel: MainViewModel) {
     val prompt by viewModel.pendingUpdate.collectAsStateWithLifecycle()
     val cur = prompt ?: return
     val context = LocalContext.current

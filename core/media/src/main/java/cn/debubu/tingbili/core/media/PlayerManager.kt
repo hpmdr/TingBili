@@ -1110,6 +1110,22 @@ class PlayerManager @Inject constructor(
             }
             return
         }
+        // 暂停态切换过音质：目标档已记、旧缓存已删，按新偏好重建当前集再播（不复用旧档）
+        val track = _state.value.currentTrack
+        val pending = track?.let { AudioBitrateRegistry.displayCodeOf(it.bvid, it.cid) }
+        if (track != null && pending != null) {
+            val idx = currentIndex
+            if (idx in queue.indices) {
+                val pos = _state.value.positionMs
+                effectiveScope().launch {
+                    playMutex.withLock {
+                        runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
+                        rebuildTransport(idx, pos, startPlaying = true)
+                    }
+                }
+                return
+            }
+        }
         transport.play()
         _state.update { it.copy(isPlaying = true) }
         positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
@@ -1332,25 +1348,31 @@ class PlayerManager @Inject constructor(
         }
     }
     /**
-     * 音质切换：偏好已由调用方先落盘；换回惰性 item 并 prepare，
-     * DataSource 打开时按新偏好重新解析直链（沿用 onRetryRecover 的不断播 swap 模式）。
+     * 音质切换（播放页手动切）：偏好已由调用方先落盘。
+     *
+     * - **播放中**：立即删缓存 → 换惰性 item → prepare → 继续播，DataSource 打开时按新偏好重新解析；
+     * - **暂停中**：只删缓存 + 记目标档（标签立即变），**不 prepare**，等 [resume] 时按新偏好重建加载。
+     *
      * 无在播返回 false；正常返回 true。
      */
     suspend fun refreshCurrentUrl(): Boolean {
         val track = _state.value.currentTrack ?: return false
-        val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
         val idx = currentIndex
         if (idx !in queue.indices) return false
         // 旧档直链可能还是"新鲜"缓存，必须失效，否则换音质后仍复用旧 URL
         runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
         val audioQuality = prefs.audioQuality.first()
+        AudioBitrateRegistry.setPending(track.bvid, track.cid, audioQuality)
+        // 暂停态：不 prepare，目标档已够标签反馈；等用户点播放时 resume() 按新偏好重建
+        if (!_state.value.isPlaying) return true
+        val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
         transport.replaceMediaItem(
             idx,
             playUrlPipeline.buildItem(track, prefs.imageFormat.first(), audioQuality, idx),
         )
         transport.prepare()
         transport.seekTo(pos)
-        if (_state.value.isPlaying) transport.play()
+        transport.play()
         return true
     }
 

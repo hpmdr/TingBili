@@ -27,14 +27,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
@@ -53,9 +53,8 @@ import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
-import cn.debubu.tingbili.core.ui.component.MessageSnackbarEffect
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
 import cn.debubu.tingbili.core.ui.component.UpdateAvailableDialog
 import cn.debubu.tingbili.core.ui.util.openUrlInBrowser
 import cn.debubu.tingbili.core.data.update.UpdateChecker
@@ -73,8 +72,6 @@ fun GeneralSettingsScreen(
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     val autoCheck by vm.autoCheckUpdate.collectAsStateWithLifecycle()
     val updateState by vm.updateState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val version = remember {
         try {
@@ -88,8 +85,12 @@ fun GeneralSettingsScreen(
         is GeneralSettingsViewModel.UpdateUiState.Failed -> "检查更新失败，请检查网络"
         else -> null
     }
-    MessageSnackbarEffect(updateMessage, snackbarHostState) {
-        vm.consumeUpdateMessage()
+    // 更新提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
+    LaunchedEffect(updateMessage) {
+        updateMessage?.let {
+            vm.consumeUpdateMessage()
+            TingBiliMessageBus.show(it)
+        }
     }
     var showImageSheet by remember { mutableStateOf(false) }
     var showKeywordsSheet by remember { mutableStateOf(false) }
@@ -106,9 +107,6 @@ fun GeneralSettingsScreen(
             )
         },
     ) { innerPadding ->
-        // Snackbar 宿主走 Box 悬浮（对齐 MeScreen 实测可用的写法）：
-        // 脚手架 snackbarHost 槽在本机构造下经真机验证不渲染（日志证明 show 完整跑完但树里无节点），
-        // 先用悬浮方案保证可见，后续再追槽位问题。
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -169,7 +167,7 @@ fun GeneralSettingsScreen(
                         icon = Icons.Filled.Refresh,
                         accent = SettingAccent.CYAN,
                         title = "启动时自动检查",
-                        subtitle = "每天最多一次",
+                        subtitle = "每 12 小时最多一次",
                         checked = autoCheck,
                         onCheckedChange = { vm.setAutoCheckUpdate(it) },
                     )
@@ -177,12 +175,6 @@ fun GeneralSettingsScreen(
             }
 
             }
-            TingBiliSnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
-            )
         }
     }
 
@@ -217,7 +209,7 @@ fun GeneralSettingsScreen(
                 vm.dismissUpdate()
                 val url = available.apkUrl ?: UpdateChecker.RELEASES_PAGE
                 if (!openUrlInBrowser(context, url)) {
-                    scope.launch { snackbarHostState.showSnackbar("无法打开浏览器") }
+                    TingBiliMessageBus.show("无法打开浏览器")
                 }
             },
         )

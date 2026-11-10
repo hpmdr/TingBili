@@ -14,7 +14,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // 更新检查基准：打包瞬间墙钟（秒）。每次 configuration 重新求值；
         // debug 包跳过自动检查，手动检查时本地永远最新，所以无影响。
-        buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis() / 1000}L")
+        //
+        // BUILD_TIME_OVERRIDE 只给真机验证用（debug 包被自动检查跳过、本地 versionName 又是
+        // 占位符 "1.0"，两个条件都凑不出来，没法在测试机上复现「发现新版本」）。
+        // 不设该变量时行为与原来完全一致；发版流水线不会设置它。
+        val buildTimeSec = System.getenv("BUILD_TIME_OVERRIDE")?.toLongOrNull()
+            ?: (System.currentTimeMillis() / 1000L)
+        buildConfigField("long", "BUILD_TIME", "${buildTimeSec}L")
     }
 
     compileOptions {

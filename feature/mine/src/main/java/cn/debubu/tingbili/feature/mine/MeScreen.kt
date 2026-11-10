@@ -38,7 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,7 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingDivider
 import cn.debubu.tingbili.core.ui.theme.LocalDarkAmoled
@@ -98,7 +98,6 @@ fun MeScreen(
     onOpenLogin: () -> Unit = {},
     vm: MeViewModel = hiltViewModel()
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
     val darkTheme = LocalDarkTheme.current
     val historyToday by vm.historyTodayCount.collectAsStateWithLifecycle()
     val cacheBytes by vm.cacheBytes.collectAsStateWithLifecycle()
@@ -220,12 +219,6 @@ fun MeScreen(
             Spacer(Modifier.height(24.dp))
         }
         }
-        TingBiliSnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
-        )
     }
 
     if (showAbout) {

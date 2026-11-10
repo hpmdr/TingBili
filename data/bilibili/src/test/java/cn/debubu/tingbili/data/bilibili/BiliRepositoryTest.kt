@@ -381,6 +381,14 @@ class BiliRepositoryTest {
         assertEquals(listOf(30216, 30232, 30280), (r as Result.Success).data.map { it.id })
     }
 
+    /** 面板必须与播放请求同 qn 口径，否则服务端按默认档返回，漏掉高档（偏好 Hi-Res 时只显示 192K） */
+    @Test
+    fun `getAudioOptions sends prefer qn like playback`() = runTest {
+        server.enqueue(jsonResponse(playUrlBody()))
+        repo.getAudioOptions("BV1xx", 1001, 30251)
+        assertTrue(server.takeRequest().path!!.contains("qn=30251"))
+    }
+
     /**
      * 大会员专属档不在 dash.audio：杜比在 dash.dolby.audio、Hi-Res 在 dash.flac.audio。
      * 请求还必须带 fnval 的杜比位（16|256=272），否则服务端连这两个节点都不返回。

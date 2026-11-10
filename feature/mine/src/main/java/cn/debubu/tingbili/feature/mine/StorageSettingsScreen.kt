@@ -22,7 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,7 +47,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliConfirmDialog
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.TingBiliSnackbarHost
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
 /** 二级页：存储与缓存（用量总览 / 分别清理 / 音频上限 / 全部清空，单页）。 */
@@ -60,15 +60,15 @@ fun StorageSettingsScreen(
     val stats by vm.cacheStats.collectAsStateWithLifecycle()
     val cacheMaxMb by vm.cacheMaxMb.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     var showClearAll by remember { mutableStateOf(false) }
     var showLimitSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.refreshCacheStats() }
+    // 一次性提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
     LaunchedEffect(notice) {
         notice?.let {
             vm.consumeNotice()
-            snackbarHostState.showSnackbar(it)
+            TingBiliMessageBus.show(it)
         }
     }
 
@@ -83,7 +83,6 @@ fun StorageSettingsScreen(
                 },
             )
         },
-        snackbarHost = { TingBiliSnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
