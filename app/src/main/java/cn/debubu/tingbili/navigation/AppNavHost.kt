@@ -25,6 +25,7 @@ import cn.debubu.tingbili.feature.space.SpaceScreen
 import cn.debubu.tingbili.feature.player.PlayerScreen
 import cn.debubu.tingbili.feature.favorites.BvFavoriteScreen
 import cn.debubu.tingbili.feature.favorites.FavoriteFolderScreen
+import cn.debubu.tingbili.feature.mine.AboutScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
 import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
@@ -101,6 +102,9 @@ fun AppRootNavHost(
         }
         composable<GeneralRoute> {
             GeneralSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable<AboutRoute> {
+            AboutScreen(onBack = { navController.popBackStack() })
         }
         composable<AudioDecodersRoute> {
             AudioDecodersScreen(onBack = { navController.popBackStack() })

@@ -59,6 +59,7 @@ fun MainTabsPager(
                     onOpenSettings = { navController.navigate(SettingsRoute) },
                     onOpenStorage = { navController.navigate(StorageRoute) },
                     onOpenGeneral = { navController.navigate(GeneralRoute) },
+                    onOpenAbout = { navController.navigate(AboutRoute) },
                     onOpenBiliFav = { navController.navigate(BiliFavoritesRoute) },
                     onOpenBiliHistory = { navController.navigate(BiliHistoryRoute) },
                     onOpenBiliToview = { navController.navigate(BiliToviewRoute) },

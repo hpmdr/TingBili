@@ -324,6 +324,21 @@ class NavigationTest {
     }
 
     @Test
+    fun `aboutRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = MeRoute) {
+                composable<MeRoute> { Text("me") }
+                composable<AboutRoute> { Text("about") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(AboutRoute) }
+        composeTestRule.onNodeWithText("about").assertIsDisplayed()
+    }
+
+    @Test
     fun `upSpaceRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {

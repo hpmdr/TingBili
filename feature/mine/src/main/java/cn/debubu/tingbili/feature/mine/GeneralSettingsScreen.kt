@@ -17,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,7 +29,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,15 +49,10 @@ import cn.debubu.tingbili.core.ui.component.SettingsGroup
 import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
-import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
-import cn.debubu.tingbili.core.ui.component.UpdateAvailableDialog
-import cn.debubu.tingbili.core.ui.util.openUrlInBrowser
-import cn.debubu.tingbili.core.data.update.UpdateChecker
-import kotlinx.coroutines.launch
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：其他设置（B 站图片格式 / 首页推荐词 / 版本更新）。 */
+/** 二级页：其他设置（B 站图片格式 / 首页推荐词）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(
@@ -70,28 +61,6 @@ fun GeneralSettingsScreen(
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
-    val autoCheck by vm.autoCheckUpdate.collectAsStateWithLifecycle()
-    val updateState by vm.updateState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val version = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (_: Exception) {
-            "1.0"
-        }
-    }
-    val updateMessage = when (updateState) {
-        is GeneralSettingsViewModel.UpdateUiState.UpToDate -> "已是最新版本"
-        is GeneralSettingsViewModel.UpdateUiState.Failed -> "检查更新失败，请检查网络"
-        else -> null
-    }
-    // 更新提示走全局总线：发消息即可，显示位置/队列由壳层唯一宿主负责
-    LaunchedEffect(updateMessage) {
-        updateMessage?.let {
-            vm.consumeUpdateMessage()
-            TingBiliMessageBus.show(it)
-        }
-    }
     var showImageSheet by remember { mutableStateOf(false) }
     var showKeywordsSheet by remember { mutableStateOf(false) }
 
@@ -148,32 +117,6 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            Column {
-                SettingSectionLabel("版本更新")
-                SettingsGroup {
-                    SettingRow(
-                        icon = Icons.Filled.SystemUpdateAlt,
-                        accent = SettingAccent.GREEN,
-                        title = "检查更新",
-                        subtitle = if (updateState == GeneralSettingsViewModel.UpdateUiState.Checking) {
-                            "正在检查…"
-                        } else {
-                            "当前 v$version"
-                        },
-                        onClick = { vm.checkUpdate() },
-                    )
-                    SettingDivider()
-                    SettingSwitchRow(
-                        icon = Icons.Filled.Refresh,
-                        accent = SettingAccent.CYAN,
-                        title = "启动时自动检查",
-                        subtitle = "每 12 小时最多一次",
-                        checked = autoCheck,
-                        onCheckedChange = { vm.setAutoCheckUpdate(it) },
-                    )
-                }
-            }
-
             }
         }
     }
@@ -196,22 +139,6 @@ fun GeneralSettingsScreen(
                 showKeywordsSheet = false
             },
             onDismiss = { showKeywordsSheet = false },
-        )
-    }
-    val available = updateState as? GeneralSettingsViewModel.UpdateUiState.Available
-    if (available != null) {
-        UpdateAvailableDialog(
-            tag = available.tag,
-            body = available.body,
-            onSkipRelease = { vm.skipRelease() },
-            onDismiss = { vm.dismissUpdate() },
-            onDownload = {
-                vm.dismissUpdate()
-                val url = available.apkUrl ?: UpdateChecker.RELEASES_PAGE
-                if (!openUrlInBrowser(context, url)) {
-                    TingBiliMessageBus.show("无法打开浏览器")
-                }
-            },
         )
     }
 }

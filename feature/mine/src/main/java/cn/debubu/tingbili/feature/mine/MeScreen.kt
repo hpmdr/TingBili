@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -40,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -97,6 +94,7 @@ fun MeScreen(
     onOpenSettings: () -> Unit,
     onOpenStorage: () -> Unit,
     onOpenGeneral: () -> Unit,
+    onOpenAbout: () -> Unit,
     onOpenBiliFav: () -> Unit,
     onOpenBiliHistory: () -> Unit,
     onOpenBiliToview: () -> Unit,
@@ -117,7 +115,6 @@ fun MeScreen(
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     var showLogoutConfirm by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
 
     // cacheBytes 是 VM 构造时的快照：存储页清理后 VM 不重建，返回本页需重读。
     // LaunchedEffect 覆盖 NavHost 重组本页，ON_RESUME 覆盖 pager 常驻页不重建的场景。
@@ -206,8 +203,8 @@ fun MeScreen(
                     icon = Icons.Filled.Info,
                     accent = SettingAccent.CYAN,
                     title = "关于",
-                    subtitle = "版本信息 · 免责声明",
-                    onClick = { showAbout = true },
+                    subtitle = "版本信息 · 更新与声明",
+                    onClick = onOpenAbout,
                 )
             }
 
@@ -236,10 +233,6 @@ fun MeScreen(
             Spacer(Modifier.height(24.dp))
         }
         }
-    }
-
-    if (showAbout) {
-        AboutDialog(onDismiss = { showAbout = false })
     }
 
     if (showLogoutConfirm) {
@@ -535,35 +528,6 @@ private fun themeModeLabel(mode: cn.debubu.tingbili.core.data.model.ThemeMode): 
     cn.debubu.tingbili.core.data.model.ThemeMode.SYSTEM -> "跟随系统"
     cn.debubu.tingbili.core.data.model.ThemeMode.CUSTOM -> "自定义"
     else -> "默认粉"
-}
-
-// ── 关于对话框（原在其他设置内，现独立到「我的」页） ──
-
-@Composable
-private fun AboutDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val version = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (_: Exception) {
-            "1.0"
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("关于") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("听视频 v$version", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "本程序仅供学习测试使用，请在 24 小时内删除，禁止商用。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } },
-    )
 }
 
 // 纯格式化函数，不该标 @Composable（会触发 lint NonObservableLocale，也让 read 出现在组合期）

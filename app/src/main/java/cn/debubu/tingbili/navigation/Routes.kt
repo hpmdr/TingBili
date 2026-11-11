@@ -34,9 +34,13 @@ object SettingsRoute
 @Serializable
 object StorageRoute
 
-/** 二级页：其他设置（图片格式 / 首页推荐词 / 版本更新）。 */
+/** 二级页：其他设置（图片格式 / 首页推荐词）。 */
 @Serializable
 object GeneralRoute
+
+/** 二级页：关于（版本信息 / 更新检查 / 版权与免责声明 / 项目链接） */
+@Serializable
+object AboutRoute
 
 /** 二级页：默认音质（播放设置 → 默认音质进入，唯一入口） */
 @Serializable
