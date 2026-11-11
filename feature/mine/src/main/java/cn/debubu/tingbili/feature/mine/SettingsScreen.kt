@@ -1,5 +1,10 @@
 package cn.debubu.tingbili.feature.mine
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +21,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
@@ -34,9 +40,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingDivider
@@ -73,6 +84,17 @@ fun SettingsScreen(
     var showStepSheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showRandomModeSheet by remember { mutableStateOf(false) }
+
+    // 通知栏播放控制：媒体通知豁免 POST_NOTIFICATIONS，只有用户手动关闭系统通知才会失效。
+    val context = LocalContext.current
+    var notificationsEnabled by remember {
+        mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
+    }
+    var notificationExempt by remember { mutableStateOf(isMediaNotificationExempt(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        notificationExempt = isMediaNotificationExempt(context)
+    }
 
     TingBiliScaffold(
         topBar = {
@@ -135,6 +157,24 @@ fun SettingsScreen(
                         subtitle = "高档需登录/会员，拿不到自动回落",
                         value = AudioQuality.fromCode(audioQuality).shortDesc,
                         onClick = onOpenQuality,
+                    )
+                    SettingDivider()
+                    val notificationsUsable = notificationsEnabled || notificationExempt
+                    SettingRow(
+                        icon = Icons.Filled.Notifications,
+                        accent = SettingAccent.AMBER,
+                        title = "通知栏播放控制",
+                        subtitle = if (notificationsUsable) {
+                            "通知栏和锁屏可暂停、切歌，耳机线控可用"
+                        } else {
+                            "通知栏和锁屏不会显示播放控制，点击去系统设置"
+                        },
+                        value = if (notificationsUsable) "已开启" else "已关闭",
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            runCatching { context.startActivity(intent) }
+                        },
                     )
                 }
             }
@@ -313,3 +353,12 @@ private fun SubtitleScaleSheet(
         onDismiss = onDismiss,
     )
 }
+
+/**
+ * 13+ 未授予 POST_NOTIFICATIONS 时，媒体会话通知仍可显示（平台豁免）。
+ * 与「用户手动关闭系统通知」区分：只有后者才需要提示/引导。
+ */
+private fun isMediaNotificationExempt(context: android.content.Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED

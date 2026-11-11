@@ -9,7 +9,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -106,18 +105,13 @@ class MainActivity : ComponentActivity() {
     // Activity 作用域：setContent 里的 hiltViewModel() 拿到的是同一个实例
     private val mainViewModel: MainViewModel by viewModels()
 
-    // 通知权限被拒后必须给一次性提示（REVIEW_REPORT A-03）：
+    // 系统通知被手动关闭时必须给一次性提示（REVIEW_REPORT A-03）：
     // 否则媒体通知、锁屏卡片、耳机线控会静默消失，用户只会觉得「播放坏了」。
-    private var notificationDenied by mutableStateOf(false)
+    // 媒体会话通知豁免 POST_NOTIFICATIONS，因此不请求权限，只处理「系统通知总开关被关」。
+    private var notificationDisabled by mutableStateOf(false)
 
     /** 每进程只提示一次：播放开始时若通知被关，弹一次说明就够，反复弹会烦人 */
     private var notificationHintShown = false
-
-
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (!granted) notificationDenied = true
-        }
 
     /**
      * 锁屏/深度睡眠回来后唯一的可靠恢复点：先按播放器位置对表，再决定是否重建音频路径。
@@ -147,19 +141,9 @@ class MainActivity : ComponentActivity() {
         splashScreen.setKeepOnScreenCondition { mainViewModel.startTab.value == null }
         playbackConnection.connect()
         consumeOpenPlayerExtra(intent)
-        // 通知权限延到首 Tab 落定后再要：onCreate 直接弹框会盖住首帧，
-        // 且 MediaSession 通知在起播前用不上
-        lifecycleScope.launch {
-            mainViewModel.startTab.filterNotNull().first()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(
-                    this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-        // 用户可能没在申请时拒绝，而是事后去系统设置关掉通知；播放开始时补一次检查（A-03 最佳实践）。
+        // 用户手动关掉系统通知时播放控制也会消失；起播时补一次检查（A-03 最佳实践）。
+        // 媒体会话通知豁免 POST_NOTIFICATIONS：13+ 未授权但通知开关未被人为关闭时仍能显示，
+        // 这种情况不提示，避免把「从未授权」误判成「用户关了通知」。
         lifecycleScope.launch {
             repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 playerManager.state
@@ -170,9 +154,13 @@ class MainActivity : ComponentActivity() {
                         if (notificationHintShown) return@collect
                         val enabled = androidx.core.app.NotificationManagerCompat.from(this@MainActivity)
                             .areNotificationsEnabled()
-                        if (!enabled) {
+                        val mediaExempt = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(
+                                this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
+                            ) != PackageManager.PERMISSION_GRANTED
+                        if (!enabled && !mediaExempt) {
                             notificationHintShown = true
-                            notificationDenied = true
+                            notificationDisabled = true
                         }
                     }
             }
@@ -212,8 +200,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     AdaptiveMainScaffold(mainViewModel)
                 }
-                if (notificationDenied) {
-                    NotificationDeniedDialog(onDismiss = { notificationDenied = false })
+                if (notificationDisabled) {
+                    NotificationDisabledDialog(onDismiss = { notificationDisabled = false })
                 }
             }
         }
@@ -397,18 +385,18 @@ private fun OfflineBanner(modifier: Modifier = Modifier) {
 }
 
 /**
- * 通知权限被拒的说明与二次引导（REVIEW_REPORT A-03）：
- * 不弹「再问一次」系统框（用户已明确拒绝，系统也可能不再展示），只解释后果并给「去设置」。
+ * 系统通知被手动关闭的说明与二次引导（REVIEW_REPORT A-03）：
+ * 不弹「再开一次」系统框，只解释后果并给「去设置」。
  */
 @Composable
-private fun NotificationDeniedDialog(onDismiss: () -> Unit) {
+private fun NotificationDisabledDialog(onDismiss: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("通知权限已关闭") },
+        title = { Text("系统通知已关闭") },
         text = {
             Text(
-                "关闭后，播放控制面板不会出现在通知栏和锁屏上，耳机线控也可能无响应。" +
+                "通知栏和锁屏不会显示播放控制，耳机线控也可能无响应。" +
                     "播放本身不受影响，可在系统设置的「通知」里重新打开。",
             )
         },

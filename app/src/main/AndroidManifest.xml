@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!--
+        媒体会话（MediaSession）通知豁免此权限：播放控制通知无需申请即可显示。
+        代码不再于启动/首播请求它，避免新用户看到与播放器无关的「消息推送」文案。
+        未来若新增非媒体通知（更新提醒等），在对应功能处按需申请。
+    -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
