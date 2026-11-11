@@ -79,17 +79,27 @@ nice -n 19 ./gradlew assembleDebug --console=plain
 - 高频状态（播放进度/位置 tick）只在真正消费的叶子 Composable 里 `collectAsStateWithLifecycle()`；**禁止在页面或导航壳顶层订阅**——10-23 修过的隔离被后续提交抵消过一次（见 `docs/FIX_PLAN.md` F4a）。
 - Room：**单人测试期允许破坏性升级**（抬 DB 版本 + `fallbackToDestructiveMigration`，升级即清库；没有其他用户），对外发版前再补手写 `Migration`；新增/修改实体必须补索引。改动最小化，收尾前跑通构建和相关测试。
 - 需求不确定时多问用户：先给建议方案和利弊，等用户拍板再动手，不要自行定需求、定范围、定交互。
-- **真机操作优先用 1.1+ 的 `android` CLI，它比 adb 更贴合 UI 自动化**（都需显式 `--sdk=<路径>`）：
-  - `android layout --flat -p > layout.json` 拿控件树：JSON 直出，**自带 `center` 坐标**，
+- **真机操作默认用 1.1+ 的 `android` CLI，不要直接用 `adb`**（CLI 未覆盖的操作见下方例外）：
+  - **读状态/控件树**：`android layout --flat -p --device=<serial>` 拿 JSON，**自带 `center` 坐标**，
     不用 `pull` 再解析 XML。首次会装一次 instrumentation server（慢），之后秒回。
-  - `android input tap/text/scroll/swipe/key` 按**选择器**操作：`android input tap "text=我的"`
-    （歧义时加 `--match=first`，`--wait=<ms>` 等元素出现）。比 `adb shell input tap x y`
-    健壮——不依赖屏幕密度与坐标。
-  - `android run --apks=<apk>` 装包并启动：**delta install 实测只传约一半数据**（80MB→40MB），
-    比 `adb install` + `am start` 快。
+    禁止用 `adb shell uiautomator dump` 那套（要 pull 再解析）。
+  - **操作 UI**：`android input tap/text/scroll/swipe/key` 按**选择器**操作，例如
+    `android input tap "text=我的"`（歧义时加 `--match=first`，加 `--wait=<ms>` 等元素出现）。
+    禁止用 `adb shell input tap x y`——不依赖屏幕密度与坐标，更稳。
+  - **装包并启动**：`android run --apks=<apk> --device=<serial>`，**delta install 实测只传约一半数据**
+    （80MB→40MB），比 `adb install` + `am start` 快。
   - **`android build` 不要用**：实测它是 gradle 的套壳（自己下一套 gradle 再跑），没有额外好处。
+  - **例外（这些仍用 adb）**：无线调试配对/连接（`adb pair` / `adb connect`）、`adb forward/reverse`
+    端口转发、抓 logcat、`adb pull/push` 传文件、`adb -s <serial> shell getprop` 取系统属性。
+  - **SDK 路径**：CLI 不读 `local.properties`（那是 Gradle 专用），只认 `ANDROID_HOME` 环境变量。
+    **AI 的执行环境常拿不到 `ANDROID_HOME`**（`~/.bashrc` 对非交互式 shell 会直接 return），
+    此时按以下顺序解决，**不要在仓库里写死 SDK 绝对路径**（路径变更只改 `~/.bashrc` 一处）：
+    1. 显式传 `--sdk="$ANDROID_HOME"`（`ANDROID_HOME` 非空时）；
+    2. 或从 `local.properties` 读 `sdk.dir` 再传 `--sdk`；
+    3. 都不行就问用户，别猜。
+    注意 `source ~/.bashrc` **无效**（非交互式 shell 拿不到），别依赖它。
   仍要遵守的纪律：**了解屏幕内容（当前页面、加载/空态/转圈、文案）一律读控件树**，
-  `screencap` 截图又慢又没时效性，**仅在用户明确要看视觉效果时**提供，
+  `android screen capture` 截图又慢又没时效性，**仅在用户明确要看视觉效果时**提供，
   **禁止**用截图做常规状态验证、猜布局、猜坐标点击。（2026-10-14 教训：多次用截图验状态又慢又卡，已纠正）
 - 真机验「启动自动检查更新」**必须用 `perfDebug` 包**：`debug` 包 `FLAG_DEBUGGABLE` 会让
   `MainViewModel.autoCheckUpdate()` 直接 return，永远验不到。且 debug 包 versionName 是占位符
