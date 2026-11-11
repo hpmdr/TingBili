@@ -27,6 +27,7 @@ import cn.debubu.tingbili.feature.favorites.BvFavoriteScreen
 import cn.debubu.tingbili.feature.favorites.FavoriteFolderScreen
 import cn.debubu.tingbili.feature.mine.AboutScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
+import cn.debubu.tingbili.feature.mine.BackupScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
 import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
 import cn.debubu.tingbili.feature.favorites.BiliFavDetailScreen
@@ -101,10 +102,16 @@ fun AppRootNavHost(
             StorageSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable<GeneralRoute> {
-            GeneralSettingsScreen(onBack = { navController.popBackStack() })
+            GeneralSettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenBackup = { navController.navigate(BackupRoute) },
+            )
         }
         composable<AboutRoute> {
             AboutScreen(onBack = { navController.popBackStack() })
+        }
+        composable<BackupRoute> {
+            BackupScreen(onBack = { navController.popBackStack() })
         }
         composable<AudioDecodersRoute> {
             AudioDecodersScreen(onBack = { navController.popBackStack() })

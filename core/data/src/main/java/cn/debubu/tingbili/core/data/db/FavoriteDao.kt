@@ -136,4 +136,40 @@ interface FavoriteDao {
 
     @Query("SELECT (SELECT COUNT(*) FROM FavoriteTrackEntity) + (SELECT COUNT(*) FROM BvFavoriteEntity) > 0")
     suspend fun hasAnyFavorite(): Boolean
+
+    // ── 备份/恢复：全量读写与清空 ─────────────────────────
+
+    @Query("SELECT * FROM FavoriteFolderEntity")
+    suspend fun getAllFolders(): List<FavoriteFolderEntity>
+
+    @Query("SELECT * FROM FavoriteTrackEntity")
+    suspend fun getAllTracks(): List<FavoriteTrackEntity>
+
+    @Query("SELECT * FROM BvFavoriteEntity")
+    suspend fun getAllBvFavorites(): List<BvFavoriteEntity>
+
+    @Query("SELECT * FROM BvFavoritePageEntity")
+    suspend fun getAllBvPages(): List<BvFavoritePageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFolders(folders: List<FavoriteFolderEntity>)
+
+    /** 合并导入用：主键冲突的行跳过，返回每行 rowId（-1=已存在）。 */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTracksIgnore(tracks: List<FavoriteTrackEntity>): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBvFavorites(favorites: List<BvFavoriteEntity>)
+
+    @Query("DELETE FROM FavoriteTrackEntity")
+    suspend fun clearTracks()
+
+    @Query("DELETE FROM FavoriteFolderEntity")
+    suspend fun clearFolders()
+
+    @Query("DELETE FROM BvFavoritePageEntity")
+    suspend fun clearAllBvPages()
+
+    @Query("DELETE FROM BvFavoriteEntity")
+    suspend fun clearAllBvFavorites()
 }

@@ -46,6 +46,7 @@ class HistoryTrackerTest {
 
         private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
 
+        override suspend fun insertAll(rows: List<HistoryEntity>) {}
         override suspend fun save(e: HistoryEntity) {
             saved += e
             map[key(e)] = e

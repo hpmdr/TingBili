@@ -339,6 +339,21 @@ class NavigationTest {
     }
 
     @Test
+    fun `backupRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = GeneralRoute) {
+                composable<GeneralRoute> { Text("general") }
+                composable<BackupRoute> { Text("backup") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(BackupRoute) }
+        composeTestRule.onNodeWithText("backup").assertIsDisplayed()
+    }
+
+    @Test
     fun `upSpaceRoute resolves in nav graph`() {
         lateinit var navController: TestNavHostController
         composeTestRule.setContent {

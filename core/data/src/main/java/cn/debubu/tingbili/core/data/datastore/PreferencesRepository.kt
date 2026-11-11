@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import cn.debubu.tingbili.core.data.backup.SettingsBackup
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -373,6 +374,82 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setSkippedReleaseSec(v: Long) {
         ds.edit { it[SKIPPED_RELEASE_SEC] = v }
+    }
+
+    // ── 备份/恢复：设置白名单快照 ─────────────────────────
+
+    /** 导出设置快照：只取用户偏好，不含睡眠定时/更新检查/播放进度等瞬时状态。 */
+    suspend fun snapshotSettings(): SettingsBackup {
+        val p = ds.data.first()
+        return SettingsBackup(
+            stepSec = p[STEP_SEC],
+            repeatMode = p[REPEAT_MODE],
+            randomPlayMode = p[RANDOM_PLAY_MODE],
+            speed = p[SPEED],
+            subtitleScale = p[SUBTITLE_SCALE],
+            audioHwDecode = p[AUDIO_HW_DECODE],
+            audioOffload = p[AUDIO_OFFLOAD],
+            audioQuality = p[AUDIO_QUALITY],
+            sleepFinishChapter = p[SLEEP_FINISH_CHAPTER],
+            sleepLastMinutes = p[SLEEP_LAST_MINUTES],
+            themeMode = p[THEME_MODE],
+            customThemeColor = p[CUSTOM_THEME_COLOR],
+            darkMode = p[DARK_MODE],
+            darkThemeStyle = p[DARK_THEME_STYLE],
+            imageFormat = p[IMAGE_FORMAT],
+            homeKeywords = p[HOME_KEYWORDS]?.split(",")?.map(String::trim)?.filter(String::isNotBlank),
+            cacheMaxMb = p[CACHE_MAX_MB],
+            autoCheckUpdate = p[AUTO_CHECK_UPDATE],
+            searchHistory = p[SEARCH_HISTORY_JSON]?.let { decodeStringList(it) },
+        )
+    }
+
+    /** 恢复设置：只写非空字段，越界值按读侧规则钳制，避免备份文件把非法值带进来。 */
+    suspend fun restoreSettings(s: SettingsBackup) {
+        ds.edit { p ->
+            s.stepSec?.let { p[STEP_SEC] = it.coerceIn(MIN_STEP_SEC, MAX_STEP_SEC) }
+            s.repeatMode?.let { p[REPEAT_MODE] = it.coerceIn(0, 2) }
+            s.randomPlayMode?.let { p[RANDOM_PLAY_MODE] = it }
+            s.speed?.let { if (it.isFinite()) p[SPEED] = it.coerceIn(MIN_SPEED, MAX_SPEED) }
+            s.subtitleScale?.let { p[SUBTITLE_SCALE] = it.coerceIn(0.85f, 1.3f) }
+            s.audioHwDecode?.let { p[AUDIO_HW_DECODE] = it }
+            s.audioOffload?.let {
+                p[AUDIO_OFFLOAD] = it
+                audioOffloadMirror = it
+            }
+            s.audioQuality?.let {
+                p[AUDIO_QUALITY] =
+                    if (it in MIN_AUDIO_QUALITY_CODE..MAX_AUDIO_QUALITY_CODE) it else DEFAULT_AUDIO_QUALITY
+            }
+            s.sleepFinishChapter?.let { p[SLEEP_FINISH_CHAPTER] = it }
+            s.sleepLastMinutes?.let { p[SLEEP_LAST_MINUTES] = it.coerceIn(30, 600) }
+            s.themeMode?.let { p[THEME_MODE] = it }
+            s.customThemeColor?.let { p[CUSTOM_THEME_COLOR] = it }
+            s.darkMode?.let { p[DARK_MODE] = it }
+            s.darkThemeStyle?.let { p[DARK_THEME_STYLE] = it }
+            s.imageFormat?.let { p[IMAGE_FORMAT] = it }
+            s.homeKeywords?.let { keywords ->
+                val cleaned = keywords.map(String::trim).filter(String::isNotBlank).distinct()
+                if (cleaned.isEmpty()) p.remove(HOME_KEYWORDS) else p[HOME_KEYWORDS] = cleaned.joinToString(",")
+            }
+            s.cacheMaxMb?.let {
+                val clamped = it.coerceIn(MIN_CACHE_MAX_MB, MAX_CACHE_MAX_MB)
+                p[CACHE_MAX_MB] = clamped
+                cacheMaxMbMirror = clamped
+            }
+            s.autoCheckUpdate?.let { p[AUTO_CHECK_UPDATE] = it }
+            s.searchHistory?.let { history ->
+                val cleaned = history.map(String::trim).filter(String::isNotBlank).distinct().take(MAX_SEARCH_HISTORY)
+                if (cleaned.isEmpty()) p.remove(SEARCH_HISTORY_JSON)
+                else p[SEARCH_HISTORY_JSON] = Json.encodeToString(ListSerializer(String.serializer()), cleaned)
+            }
+        }
+    }
+
+    private fun decodeStringList(raw: String): List<String> = try {
+        Json.decodeFromString(ListSerializer(String.serializer()), raw)
+    } catch (_: Exception) {
+        emptyList()
     }
 
     companion object {

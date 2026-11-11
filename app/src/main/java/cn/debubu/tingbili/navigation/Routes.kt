@@ -42,6 +42,10 @@ object GeneralRoute
 @Serializable
 object AboutRoute
 
+/** 二级页：备份与恢复（导出/导入收藏、历史、设置与登录账号） */
+@Serializable
+object BackupRoute
+
 /** 二级页：默认音质（播放设置 → 默认音质进入，唯一入口） */
 @Serializable
 object QualityRoute

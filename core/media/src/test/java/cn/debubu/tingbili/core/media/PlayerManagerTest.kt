@@ -148,6 +148,7 @@ class PlayerManagerTest {
         val saved = mutableListOf<HistoryEntity>()
         private val map = mutableMapOf<String, HistoryEntity>()
         private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
+        override suspend fun insertAll(rows: List<HistoryEntity>) {}
         override suspend fun save(e: HistoryEntity) { saved.add(e); map[key(e)] = e }
         override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? =
             map["$sourceType:$sourceId"]

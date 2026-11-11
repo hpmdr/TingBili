@@ -158,6 +158,7 @@ class HomeViewModelTest {
     }
 
     class FakeHistoryDao : HistoryDao {
+        override suspend fun insertAll(rows: List<HistoryEntity>) {}
         override suspend fun save(e: HistoryEntity) {}
         override suspend fun getSource(sourceType: Int, sourceId: String): HistoryEntity? = null
         override suspend fun getLatestForTrack(bvid: String, cid: Long): HistoryEntity? = null

@@ -124,6 +124,7 @@ class HistoryViewModelTest {
         private val flow = MutableStateFlow<List<HistoryEntity>>(emptyList())
         private val map = mutableMapOf<String, HistoryEntity>()
         private fun key(e: HistoryEntity) = "${e.sourceType}:${e.sourceId}"
+        override suspend fun insertAll(rows: List<HistoryEntity>) {}
         override suspend fun save(e: HistoryEntity) {
             map[key(e)] = e
             flow.value = map.values.sortedByDescending { it.updatedAt }

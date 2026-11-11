@@ -47,6 +47,10 @@ data class HistoryEntity(
 interface HistoryDao {    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(e: HistoryEntity)
 
+    /** 备份恢复批量写入（按主键 REPLACE）。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<HistoryEntity>)
+
     /** 某个播单当前一行的快照（累计时长/最后位置） */
     @Query(
         "SELECT * FROM HistoryEntity WHERE sourceType=:sourceType AND sourceId=:sourceId LIMIT 1"

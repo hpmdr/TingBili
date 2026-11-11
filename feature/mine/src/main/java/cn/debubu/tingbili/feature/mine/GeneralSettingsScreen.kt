@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Tag
@@ -52,11 +53,12 @@ import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：其他设置（B 站图片格式 / 首页推荐词）。 */
+/** 二级页：其他设置（B 站图片格式 / 首页推荐词 / 版本更新）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(
     onBack: () -> Unit,
+    onOpenBackup: () -> Unit,
     vm: GeneralSettingsViewModel = hiltViewModel(),
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
@@ -113,6 +115,19 @@ fun GeneralSettingsScreen(
                         subtitle = "首页发现流按这些词轮换搜索",
                         value = "${homeKeywords.size}个",
                         onClick = { showKeywordsSheet = true },
+                    )
+                }
+            }
+
+            Column {
+                SettingSectionLabel("数据")
+                SettingsGroup {
+                    SettingRow(
+                        icon = Icons.Filled.Backup,
+                        accent = SettingAccent.AMBER,
+                        title = "备份与恢复",
+                        subtitle = "导出/导入收藏、历史与设置",
+                        onClick = onOpenBackup,
                     )
                 }
             }
