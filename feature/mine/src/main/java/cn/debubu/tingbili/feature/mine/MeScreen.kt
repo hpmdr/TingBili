@@ -144,7 +144,7 @@ fun MeScreen(
             onUserClick = { if (session == null) onOpenLogin() },
         )
 
-        // ── 2. 悬浮四宫格数据卡:B站收藏/历史/稍后再看 + 离线缓存 ──
+        // ── 2. 悬浮四宫格数据卡:B站收藏/历史/稍后再看 + 本地缓存 ──
         // 首页 Tab 的收藏/历史是本 app 本地数据,这里只进 B站账号体系。
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             DashboardGrid(
@@ -444,7 +444,8 @@ private fun DashboardGrid(
     onBiliToview: () -> Unit,
     onCache: () -> Unit
 ) {
-    val biliValue = if (isLogin) "去查看" else "未登录"
+    // 已登录的 B站 三项没有可展示的数值，留白即可（原来统一写「去查看」是纯噪声）
+    val biliValue = if (isLogin) null else "未登录"
     val darkTheme = LocalDarkTheme.current
     Card(
         modifier = Modifier
@@ -477,7 +478,7 @@ private fun DashboardGrid(
             GridItem(
                 icon = Icons.Filled.Download, tint = Color(0xFFF59E0B),
                 bg = if (darkTheme) Color(0xFF2E2306) else Color(0xFFFFF7E6),
-                title = "离线缓存", value = formatCacheGb(cacheBytes), onClick = onCache, weight = 1f
+                title = "本地缓存", value = formatCacheGb(cacheBytes), onClick = onCache, weight = 1f
             )
         }
     }
@@ -489,7 +490,7 @@ private fun androidx.compose.foundation.layout.RowScope.GridItem(
     tint: Color,
     bg: Color,
     title: String,
-    value: String,
+    value: String?,
     onClick: () -> Unit,
     weight: Float
 ) {
@@ -512,8 +513,10 @@ private fun androidx.compose.foundation.layout.RowScope.GridItem(
         }
         Spacer(Modifier.height(6.dp))
         Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(1.dp))
-        Text(value, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!value.isNullOrBlank()) {
+            Spacer(Modifier.height(1.dp))
+            Text(value, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
