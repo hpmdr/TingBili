@@ -30,15 +30,15 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +59,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliBottomSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceOption
 import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
+import cn.debubu.tingbili.core.ui.component.TingBiliStepSlider
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
@@ -285,52 +286,70 @@ fun SettingsScreen(
     }
 }
 
-/** 步长 BottomSheet：滑杆与快捷值只改本地草稿，应用后才落盘。 */
+/**
+ * 步长 BottomSheet：大号读数作锚点 + 细轨刻度滑轨，快捷档位兜底不滑动也能选。
+ * 只改本地草稿，应用后才落盘；滑动关闭视为取消。
+ */
 @Composable
 private fun StepSheet(
     step: Int,
     onApply: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var draft by remember(step) { mutableFloatStateOf(step.toFloat()) }
+    var draft by remember(step) { mutableIntStateOf(step.coerceIn(STEP_MIN, STEP_MAX)) }
     TingBiliBottomSheet(
         title = "前进 / 后退步长",
-        subtitle = "拖动滑杆或选择快捷值，点击应用后生效。",
+        subtitle = "播放页快进或快退一次跳过的秒数。",
         onDismissRequest = onDismiss,
         actions = {
             TextButton(onClick = onDismiss) { Text("取消") }
-            Button(onClick = { onApply(draft.toInt()) }) { Text("应用") }
+            Button(onClick = { onApply(draft) }) { Text("应用") }
         },
     ) {
-        Text(
-            "当前：${draft.toInt()} 秒",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-        )
-        Slider(
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text(
+                text = draft.toString(),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "秒",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
+            )
+        }
+        TingBiliStepSlider(
             value = draft,
             onValueChange = { draft = it },
-            valueRange = 5f..60f,
-            steps = 10,
-            modifier = Modifier.fillMaxWidth(),
+            valueRange = STEP_MIN..STEP_MAX,
+            step = STEP_INTERVAL,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(5, 15, 30, 60).forEach { value ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            STEP_PRESETS.forEach { value ->
                 FilterChip(
-                    selected = draft.toInt() == value,
-                    onClick = { draft = value.toFloat() },
+                    selected = draft == value,
+                    onClick = { draft = value },
                     label = { Text("${value}s") },
                 )
             }
         }
-        Text(
-            "播放页快进/快退一次跳过的秒数；滑动关闭视为取消。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
     }
 }
+
+private const val STEP_MIN = 5
+private const val STEP_MAX = 60
+private const val STEP_INTERVAL = 5
+private val STEP_PRESETS = listOf(5, 15, 30, 60)
 
 /** 字幕字号：选择类弹层，点选预览，应用后生效。 */
 @Composable
