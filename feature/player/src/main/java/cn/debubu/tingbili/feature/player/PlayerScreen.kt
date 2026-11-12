@@ -13,7 +13,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -97,13 +96,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.first
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.filterNotNull
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,6 +131,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
+import cn.debubu.tingbili.core.ui.component.TingBiliLyricList
+import cn.debubu.tingbili.core.ui.component.LyricTone
 import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.SettingRadioRow
@@ -1327,17 +1324,6 @@ private fun MiniLyricCard(
     onSwitchTrack: () -> Unit = {},
     fontScale: Float = 1f,
 ) {
-    // 窗口固定"上 2 下 7"：锚点取窗口首行（= currentIndex-2），共 10 行。
-    // 之前锚当前行本身，内容超出视口时会被滚动尾部钳制，字体放大后上方上下文只剩半行。
-    // 底部仍有约一行白，10 行刚好填满。
-    val windowStart = (currentIndex - 2).coerceAtLeast(0)
-    val window = remember(lyrics, windowStart) {
-        lyrics.subList(windowStart, minOf(lyrics.size, windowStart + 10))
-    }
-    val listState = rememberLazyListState()
-    LaunchedEffect(windowStart, lyrics) {
-        if (window.isNotEmpty()) listState.scrollToItem(0)
-    }
     val current = lyrics.getOrNull(currentIndex)?.text
     Surface(
         onClick = onCardClick,
@@ -1468,67 +1454,42 @@ private fun MiniLyricCard(
                         )
                     }
                 } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    itemsIndexed(window, key = { idx, line -> line.timeMs * 100 + idx }) { idx, line ->
+                    // 窗口固定"上 2 下 7"共 10 行：锚点取窗口首行，内容超出视口时不会被
+                    // 滚动尾部钳制，字体放大后上方上下文仍保留。底部约一行白，10 行刚好填满。
+                    TingBiliLyricList(
+                        items = lyrics,
+                        currentIndex = currentIndex,
+                        windowSize = 10,
+                        key = { idx, line -> line.timeMs * 100 + idx },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    ) { _, line, tone ->
                         if (line.text.isNotBlank()) {
-                            val globalIdx = windowStart + idx
-                            if (globalIdx < currentIndex) {
-                                Text(
-                                    text = line.text,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else if (globalIdx == currentIndex) {
-                                Text(
-                                    text = line.text,
-                                    style = MaterialTheme.typography.titleMedium.copy(
+                            val isCurrent = tone == LyricTone.Current
+                            Text(
+                                text = line.text,
+                                style = if (isCurrent) {
+                                    MaterialTheme.typography.titleMedium.copy(
                                         fontSize = MaterialTheme.typography.titleMedium.fontSize * fontScale,
-                                    ),
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else if (globalIdx <= currentIndex + 3) {
-                                Text(
-                                    text = line.text,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    )
+                                } else {
+                                    MaterialTheme.typography.bodyMedium.copy(
                                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else {
-                                Text(
-                                    text = line.text,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
+                                    )
+                                },
+                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                color = when (tone) {
+                                    LyricTone.Current -> MaterialTheme.colorScheme.primary
+                                    LyricTone.Near -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    LyricTone.Faded ->
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                },
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
-                }
                 }
             }
         }
@@ -1536,10 +1497,12 @@ private fun MiniLyricCard(
 }
 
 /**
- * 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行居中跟随，末尾带 AI 标注。
+ * 全屏字幕：当前行主题色大字 + 上下文小字灰，当前行锚在视口 1/3 高度跟随，末尾带 AI 标注。
  *
- * 交互：点文字 = 跳到该行；点行以外的空白（上下半屏留白、行间隙）= 收起全屏。
+ * 交互：点文字 = 跳到该行；点行以外的空白（上下留白、行间隙）= 收起全屏。
  * 点击区域只到文字边界，行两侧空白不再算“点中”，从根上减少误触跳转。
+ *
+ * 滚动、锚定、拖动接管逻辑与小卡共用 [TingBiliLyricList]，差异只在窗口与点击行为。
  */
 @Composable
 private fun FullscreenLyricsList(
@@ -1548,36 +1511,7 @@ private fun FullscreenLyricsList(
     onExit: () -> Unit,
     isLoading: Boolean,
 ) {
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    // 用户接管：手指拖动时暂停自动跟随，松手且静置几秒后才回到高亮行；
-    // 跟随是程序化滚动，不产生 DragInteraction，不会和这里互相误触。
-    var followSuspended by remember { mutableStateOf(false) }
-    LaunchedEffect(listState) {
-        var resumeJob: Job? = null
-        try {
-            listState.interactionSource.interactions.collect { interaction ->
-                when (interaction) {
-                    is DragInteraction.Start -> {
-                        resumeJob?.cancel()
-                        resumeJob = null
-                        followSuspended = true
-                    }
-                    is DragInteraction.Stop, is DragInteraction.Cancel -> {
-                        resumeJob?.cancel()
-                        resumeJob = launch {
-                            // 惯性滚动走完再开始计时，避免还在滑就被拽回高亮
-                            snapshotFlow { listState.isScrollInProgress }.first { !it }
-                            delay(FOLLOW_RESUME_DELAY_MS)
-                            followSuspended = false
-                        }
-                    }
-                }
-            }
-        } finally {
-            resumeJob?.cancel()
-        }
-    }
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             // 空白处单击收起全屏：用 clickable 而不是 detectTapGestures——
@@ -1588,98 +1522,60 @@ private fun FullscreenLyricsList(
                 onClickLabel = "收起全屏字幕",
             ) { onExit() },
     ) {
-        // 当前行锚在 1/3 高度（上方留 1/3、下方留 2/3 给下文）：首尾行也能顶到锚线
-        val topPadding = maxHeight * (1f / 3f)
-        val bottomPadding = maxHeight * (2f / 3f)
-        // 闭环锚定：先粗定位把目标行弄进布局，再按实测位置 scrollBy 精调到 1/3 线。
-        // 不依赖 scrollToItem 的 offset 语义（真机证明其负偏移在冷/热布局下都落不到中央，
-        // 只会把目标行晾在底边），scrollBy 是纯相对位移无歧义；到首尾时自然钳制。
-        // 尺寸变化也要重滚：进场转场时首帧约束可能是中间态只滚一次会定错位置
-        LaunchedEffect(state.currentLyricIndex, state.lyrics.size, topPadding, bottomPadding, followSuspended) {
-            // 用户正在看别处：别抢滚动；恢复时 key 变化会重跑，自然回到高亮行
-            if (followSuspended) return@LaunchedEffect
-            val idx = state.currentLyricIndex
-            if (idx < 0 || idx >= state.lyrics.size) return@LaunchedEffect
-            // 瞬时跟随不用动画：动画会被下一句打断，越跟越偏
-            try {
-                listState.scrollToItem(idx)
-                // 等目标行真实出现在布局里（冷进场时首滚只为把它组合出来）
-                snapshotFlow {
-                    listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
-                }.filterNotNull().first()
-                val info = listState.layoutInfo
-                val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
-                    ?: return@LaunchedEffect
-                val viewportHeight = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
-                val anchor = info.viewportStartOffset + viewportHeight / 3f
-                val delta = (item.offset + item.size / 2 - anchor).toFloat()
-                if (delta != 0f) listState.scroll { scrollBy(delta) }
-            } catch (_: Exception) {
-                // 切歌/切字幕轨时列表并发变化，忽略本次跟随
-            }
-        }
-        androidx.compose.foundation.lazy.LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            itemsIndexed(
-                items = state.lyrics,
-                // timeMs 会重（AI 字幕同秒多行），key 必须唯一否则复用错位连带滚错位置
-                key = { idx, line -> "$idx-${line.timeMs}" },
-            ) { idx, line ->
-                val isCurrent = idx == state.currentLyricIndex
-                // 与小卡 MiniLyricCard 同款三档灰：已播/远期 0.7，未来 3 行内全亮
-                val lyricColor = if (isCurrent) {
-                    MaterialTheme.colorScheme.primary
-                } else if (idx < state.currentLyricIndex || idx > state.currentLyricIndex + 3) {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+        TingBiliLyricList(
+            items = state.lyrics,
+            currentIndex = state.currentLyricIndex,
+            // timeMs 会重（AI 字幕同秒多行），key 必须唯一否则复用错位连带滚错位置
+            key = { idx, line -> "$idx-${line.timeMs}" },
+            anchorRatio = 1f / 3f,
+            footer = if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
+                {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = if (state.subtitleIsAi) {
+                                "字幕由 AI 生成，可能有误 · ${state.subtitleLabel}"
+                            } else {
+                                "字幕 · ${state.subtitleLabel}"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
-                Text(
-                    text = line.text,
-                    style = if (isCurrent) {
-                        MaterialTheme.typography.titleMedium.copy(
-                            fontSize = MaterialTheme.typography.titleMedium.fontSize * state.subtitleScale,
-                        )
-                    } else {
-                        MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * state.subtitleScale,
-                        )
-                    },
-                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                    color = lyricColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    // 不铺满整行：只有文字（含少量内边距）可点，行两侧空白留给“点空白退出”
-                    // （小卡是 fillMaxWidth 整行宽，这里为保退出手势不能照搬）
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = !isLoading) { onSeekLyric(line) }
-                        .padding(horizontal = 12.dp, vertical = if (isCurrent) 6.dp else 2.dp),
-                )
-        }
-        if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
-            item(key = "subtitle-label") {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = if (state.subtitleIsAi) {
-                            "字幕由 AI 生成，可能有误 · ${state.subtitleLabel}"
-                        } else {
-                            "字幕 · ${state.subtitleLabel}"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+            } else {
+                null
+            },
+        ) { _, line, tone ->
+            val isCurrent = tone == LyricTone.Current
+            Text(
+                text = line.text,
+                style = if (isCurrent) {
+                    MaterialTheme.typography.titleMedium.copy(
+                        fontSize = MaterialTheme.typography.titleMedium.fontSize * state.subtitleScale,
                     )
-                }
-            }
-        }
+                } else {
+                    MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * state.subtitleScale,
+                    )
+                },
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                color = when (tone) {
+                    LyricTone.Current -> MaterialTheme.colorScheme.primary
+                    LyricTone.Near -> MaterialTheme.colorScheme.onSurfaceVariant
+                    LyricTone.Faded -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                },
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                // 不铺满整行：只有文字（含少量内边距）可点，行两侧空白留给“点空白退出”
+                // （小卡是 fillMaxWidth 整行宽，这里为保退出手势不能照搬）
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = !isLoading) { onSeekLyric(line) }
+                    .padding(horizontal = 12.dp, vertical = if (isCurrent) 6.dp else 2.dp),
+            )
         }
         // 顶部药丸已去掉（会压住第一屏字幕）：退出靠点空白处，读屏走外层容器的“收起全屏字幕”操作
     }
@@ -1721,9 +1617,6 @@ private fun UndoJumpHint(
         }
     }
 }
-
-/** 全屏字幕：松手后静置这么久无操作，才自动回到高亮行 */
-private const val FOLLOW_RESUME_DELAY_MS = 4000L
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
