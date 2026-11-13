@@ -288,6 +288,11 @@ private fun CustomColorSheet(
     val scheme = remember(previewColor, darkTheme, darkAmoled) {
         brandedColorScheme(previewColor, darkTheme, darkAmoled)
     }
+    // 取色板叠加层与 hue 无关：remember 常驻，拖动时 Draw 期只读不分配
+    val svWhiteOverlay = remember { Brush.horizontalGradient(listOf(Color.White, Color.Transparent)) }
+    val svBlackOverlay = remember { Brush.verticalGradient(listOf(Color.Transparent, Color.Black)) }
+    val hueRainbow = remember { Brush.horizontalGradient((0..6).map { Color(hsvToArgb(it * 60f, 1f, 1f)) }) }
+    val svBaseColor = remember(hue) { Color(hsvToArgb(hue, 1f, 1f)) }
 
     TingBiliBottomSheet(
         title = "自定义主题色",
@@ -325,9 +330,9 @@ private fun CustomColorSheet(
             ) {
                 val w = size.width
                 val h = size.height
-                drawRect(Color(hsvToArgb(hue, 1f, 1f)))
-                drawRect(Brush.horizontalGradient(listOf(Color.White, Color.Transparent)))
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                drawRect(svBaseColor)
+                drawRect(svWhiteOverlay)
+                drawRect(svBlackOverlay)
                 val cx = saturation * w
                 val cy = (1f - (brightness - 0.15f) / 0.85f) * h
                 val center = Offset(cx, cy)
@@ -344,7 +349,7 @@ private fun CustomColorSheet(
                     .pickGesture(onPoint = onHuePoint, onRelease = onHueRelease)
                     .semantics { contentDescription = "色相取色条" },
             ) {
-                drawRect(Brush.horizontalGradient((0..6).map { Color(hsvToArgb(it * 60f, 1f, 1f)) }))
+                drawRect(hueRainbow)
                 val cx = hue / 360f * size.width
                 val center = Offset(cx, size.height / 2)
                 drawCircle(Color.White, radius = 13.dp.toPx(), center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))

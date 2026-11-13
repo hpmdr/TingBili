@@ -18,6 +18,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -38,6 +45,25 @@ private fun lyricToneOf(index: Int, currentIndex: Int): LyricTone = when {
 
 /** 用户手动接管后，静置这么久再回到高亮行 */
 private const val FOLLOW_RESUME_DELAY_MS = 4_000L
+
+/** 上下 edge fade：Offscreen 是 DstIn 生效的前提；fade 只盖首尾半行，不吃有效阅读区 */
+private fun fadeModifier(fadeFraction: Float): Modifier {
+    if (fadeFraction <= 0f) return Modifier
+    return Modifier
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                brush = Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    fadeFraction to Color.Black,
+                    1f - fadeFraction to Color.Black,
+                    1f to Color.Transparent,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+}
 
 /** 小卡窗口：当前行上方保留的行数 */
 private const val WINDOW_LEAD = 2
@@ -65,6 +91,10 @@ fun <T> TingBiliLyricList(
     windowSize: Int = 0,
     anchorRatio: Float = 1f / 3f,
     footer: (@Composable () -> Unit)? = null,
+    // 全屏排印：行距与 edge fade 由调用方定，小卡走默认值（2.dp / 无 fade）保持不动
+    lineSpacing: Dp = 2.dp,
+    // 上下 fade 各占视口比例，0 = 不加；DstIn 只做渐隐不改变色相，浅色主题不发灰
+    fadeFraction: Float = 0f,
     row: @Composable (index: Int, item: T, tone: LyricTone) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -145,9 +175,9 @@ fun <T> TingBiliLyricList(
         }
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(fadeModifier(fadeFraction)),
             contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(lineSpacing),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(items = items, key = { idx, item -> key(idx, item) }) { idx, item ->

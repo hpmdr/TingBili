@@ -1528,6 +1528,8 @@ private fun FullscreenLyricsList(
             // timeMs 会重（AI 字幕同秒多行），key 必须唯一否则复用错位连带滚错位置
             key = { idx, line -> "$idx-${line.timeMs}" },
             anchorRatio = 1f / 3f,
+            lineSpacing = FULLSCREEN_LINE_SPACING,
+            fadeFraction = FULLSCREEN_FADE_FRACTION,
             footer = if (state.lyrics.isNotEmpty() && state.subtitleLabel != null) {
                 {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1552,12 +1554,20 @@ private fun FullscreenLyricsList(
             Text(
                 text = line.text,
                 style = if (isCurrent) {
+                    // 高亮取 titleMedium(16sp)×1.25=20sp，行高同倍放大(24sp→30sp)保 1.5 倍行高
                     MaterialTheme.typography.titleMedium.copy(
-                        fontSize = MaterialTheme.typography.titleMedium.fontSize * state.subtitleScale,
+                        fontSize = MaterialTheme.typography.titleMedium.fontSize *
+                            FULLSCREEN_HIGHLIGHT_SCALE * state.subtitleScale,
+                        lineHeight = MaterialTheme.typography.titleMedium.lineHeight *
+                            FULLSCREEN_HIGHLIGHT_SCALE * state.subtitleScale,
                     )
                 } else {
+                    // 正文取 bodyMedium(14sp)×1.1≈15.4sp，行高同倍放大(20sp→22sp)保 1.43 倍行高
                     MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = MaterialTheme.typography.bodyMedium.fontSize * state.subtitleScale,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize *
+                            FULLSCREEN_BODY_SCALE * state.subtitleScale,
+                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight *
+                            FULLSCREEN_BODY_SCALE * state.subtitleScale,
                     )
                 },
                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
@@ -1571,10 +1581,11 @@ private fun FullscreenLyricsList(
                 overflow = TextOverflow.Ellipsis,
                 // 不铺满整行：只有文字（含少量内边距）可点，行两侧空白留给“点空白退出”
                 // （小卡是 fillMaxWidth 整行宽，这里为保退出手势不能照搬）
+                // 高亮与非高亮用同一内边距：顶边锚定的位移与行高无关，对称边距不会引入行间差
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(enabled = !isLoading) { onSeekLyric(line) }
-                    .padding(horizontal = 12.dp, vertical = if (isCurrent) 6.dp else 2.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
         // 顶部药丸已去掉（会压住第一屏字幕）：退出靠点空白处，读屏走外层容器的“收起全屏字幕”操作
@@ -1583,6 +1594,12 @@ private fun FullscreenLyricsList(
 
 /** 歌词行跳转的撤销快照：fromMs=跳转前位置，token 用于丢弃过期的自动消失 */
 private data class JumpUndo(val fromMs: Long, val toLabel: String, val token: Long)
+
+/** 全屏字幕排印（方案 A）：高亮 16sp×1.25，正文 14sp×1.1，行距 12dp，上下 fade 各占约 11% 视口 */
+private const val FULLSCREEN_HIGHLIGHT_SCALE = 1.25f
+private const val FULLSCREEN_BODY_SCALE = 1.1f
+private const val FULLSCREEN_FADE_FRACTION = 0.11f
+private val FULLSCREEN_LINE_SPACING = 12.dp
 
 /** 撤销提示停留时长：够用户反应过来点“撤销”，又不至于长期遮挡 */
 private const val UNDO_HINT_MS = 4_000L

@@ -201,7 +201,8 @@ fun SpaceScreen(
                 }
                 else -> items(
                     count = paging.itemCount,
-                    key = { index -> paging.peek(index)?.let { "${it.bvid}#$index" } ?: "ph-$index" }
+                    key = { index -> paging.peek(index)?.bvid ?: "ph-$index" },
+                    contentType = { "video" }
                 ) { index ->
                     val video = paging[index]
                     if (video != null) {

@@ -284,11 +284,9 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
             val layoutDirection = LocalLayoutDirection.current
             // mini 条在整屏坐标里定位：主页 Tab 时停在底栏上沿，二级页时贴屏幕底。
             // 位置变化走动画，避免进出详情页时上下硬跳（内容 padding 仍立即生效）。
-            val miniPlayerBottom by animateDpAsState(
-                targetValue = if (inMainTabs) innerPadding.calculateBottomPadding() else 0.dp,
-                animationSpec = tween(durationMillis = 220),
-                label = "miniPlayerBottom",
-            )
+            // 动画状态下沉到独立槽位：父级只算目标值，逐帧重组只发生在 overlay 内部，
+            // Box + NavHost 不再跟动画帧重组。
+            val targetMiniBottom = if (inMainTabs) innerPadding.calculateBottomPadding() else 0.dp
             Box(modifier = Modifier.fillMaxSize()) {
                 AppRootNavHost(
                     navController = navController,
@@ -305,13 +303,13 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
                 // 悬浮 mini：盖在列表上、不占位，列表从它后面滚过；
                 // 显隐只做位移+淡出，内边距全程不动，滑到底不弹
                 if (showMiniPlayer) {
-                    MiniPlayerOverlay(
+                    AnimatedMiniPlayerOverlay(
                         navController = navController,
                         visibility = miniPlayerVisibility,
+                        targetBottom = targetMiniBottom,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(bottom = miniPlayerBottom),
+                            .fillMaxWidth(),
                     )
                 }
             }
@@ -348,6 +346,28 @@ private fun AdaptiveMainScaffold(mainViewModel: MainViewModel) {
         // 订阅下沉到独立 composable（pendingUpdate 平时为 null，不重组整壳）。
         cn.debubu.tingbili.navigation.UpdatePromptSlot(mainViewModel)
     }
+}
+
+/**
+ * mini 悬浮条动画槽位：动画状态只在这里订阅，父级 Box + NavHost 不跟帧重组。
+ */
+@Composable
+private fun AnimatedMiniPlayerOverlay(
+    navController: androidx.navigation.NavHostController,
+    visibility: cn.debubu.tingbili.navigation.MiniPlayerVisibility,
+    targetBottom: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+) {
+    val animatedBottom by animateDpAsState(
+        targetValue = targetBottom,
+        animationSpec = tween(durationMillis = 220),
+        label = "miniPlayerBottom",
+    )
+    cn.debubu.tingbili.navigation.MiniPlayerOverlay(
+        navController = navController,
+        visibility = visibility,
+        modifier = modifier.padding(bottom = animatedBottom),
+    )
 }
 
 /**

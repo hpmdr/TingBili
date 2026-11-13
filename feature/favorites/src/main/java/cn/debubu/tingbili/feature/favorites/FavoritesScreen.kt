@@ -148,7 +148,7 @@ fun FavoritesScreen(
                     EmptyHint("还没有收藏夹或 BV 收藏，点右上角新建收藏夹")
                 }
             } else {
-                items(unified, key = { it.key }) { item ->
+                items(unified, key = { it.key }, contentType = { if (it.folder != null) "folder" else "bv" }) { item ->
                     val folder = item.folder
                     val bv = item.bv
                     when {

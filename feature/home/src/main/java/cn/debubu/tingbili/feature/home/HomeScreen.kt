@@ -324,8 +324,10 @@ private fun SnapshotGrid(
     ) {
         itemsIndexed(
             items = tracks,
-            // 同一 BV 可能重复出现，缀上 index 兜底防 key 撞车
-            key = { index, track -> "${track.bvid}:${track.cid}#$index" }
+            // B 站搜索常返回重复 BV，但 SearchPagingSource 已按 bvid 跨页去重，
+            // 同一 Pager 内 bvid 唯一，故 key 用 bvid:cid 即可稳定复用，不再缀 index。
+            key = { _, track -> "${track.bvid}:${track.cid}" },
+            contentType = { _, _ -> "track" }
         ) { _, track ->
             TrackGridCard(
                 track = track,
@@ -558,11 +560,12 @@ private fun TrackPagingGrid(
     ) {
         items(
             count = paging.itemCount,
-            // key 必须全局唯一：B 站搜索常返回重复 BV（cid=0 的未解析项），
-            // 同一 BV 在一页出现两次时 "bvid:cid" 会撞车闪退，故缀上 index 兜底。
+            // key 必须全局唯一且稳定：SearchPagingSource 已按 bvid 去重，
+            // 同一 Pager 内 bvid 唯一，复用 bvid:cid 即可，缀 index 会导致插入即全 key 变。
             key = { index ->
-                paging.peek(index)?.let { "${it.bvid}:${it.cid}#$index" } ?: "placeholder-$index"
-            }
+                paging.peek(index)?.let { "${it.bvid}:${it.cid}" } ?: "placeholder-$index"
+            },
+            contentType = { "track" }
         ) { index ->
             val track = paging[index]
             if (track != null) {

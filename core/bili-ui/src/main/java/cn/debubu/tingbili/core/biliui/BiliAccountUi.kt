@@ -153,7 +153,7 @@ fun BiliVideoList(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(list, key = { (it.bvid.ifBlank { it.title }) + it.cover }) { item ->
+        items(list, key = { it.bvid.ifBlank { "title:${it.title.hashCode()}" } }, contentType = { "video" }) { item ->
             BiliVideoRow(item = item, onClick = { if (item.playable) onItemClick(item) })
         }
         if (hasMore) {
