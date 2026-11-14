@@ -121,7 +121,8 @@ class FavoriteFolderViewModel @Inject constructor(
                     return@launch
                 }
                 val safe = startIndex.coerceIn(0, entities.lastIndex)
-                player.play(
+                // 同集去重：正在播则只跳转，暂停则原进度续播，不重建队列
+                player.playOrResume(
                     entities.map { it.toTrack() },
                     safe,
                     folder.value?.name ?: "收藏夹",

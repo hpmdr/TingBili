@@ -1018,6 +1018,37 @@ class PlayerManager @Inject constructor(
     }
 
     /**
+     * 同集去重入口：点到的就是正在播的同一集时不重建队列。
+     * - 正在播（含加载中）：直接返回 true，调用方只做页面跳转；
+     * - 同一集但已暂停：resume() 原进度继续播，返回 true；
+     * - 不同集：走 [play] 从头播，返回 false。
+     * 同集判断只看 bvid:cid（cid==0 的未解析 track 走 play 正常流程）。
+     * 同集时忽略 [startPositionMs]（历史续播落点不回拨，保持现进度）。
+     * @return true=同集已处理（无需再 play）；false=已转调 play 起播新集。
+     */
+    suspend fun playOrResume(
+        tracks: List<Track>,
+        index: Int,
+        sourceTitle: String? = null,
+        startPositionMs: Long? = null,
+        sourceFolderId: Long? = null,
+    ): Boolean {
+        if (tracks.isEmpty()) return true
+        val safeIndex = index.coerceIn(0, tracks.lastIndex)
+        val target = tracks.getOrNull(safeIndex) ?: return true
+        if (target.cid != 0L) {
+            val cur = _state.value.currentTrack
+            if (cur != null && cur.bvid == target.bvid && cur.cid == target.cid) {
+                val s = _state.value
+                if (!s.isPlaying && !s.isLoading) resume()
+                return true
+            }
+        }
+        play(tracks, index, sourceTitle, startPositionMs, sourceFolderId)
+        return false
+    }
+
+    /**
      * 起播时的续播位置：
      * 1. 优先当前来源（收藏夹/BV）且就是这一集的记录；
      * 2. 否则取该分 P 跨来源最近一条（同一集从别处听过也能续上）。

@@ -154,7 +154,8 @@ class BvFavoriteViewModel @Inject constructor(
                 }
                 val tracks = pageList.map { it.toTrack(fav) }
                 val safe = startIndex.coerceIn(0, tracks.lastIndex)
-                player.play(tracks, safe, fav.title)
+                // 同集去重：正在播则只跳转，暂停则原进度续播，不重建队列
+                player.playOrResume(tracks, safe, fav.title)
             } finally {
                 _startingPlay.value = false
                 _pendingIndex.value = null

@@ -66,6 +66,7 @@ import coil3.compose.AsyncImage
 @Composable
 fun FavoriteFolderScreen(
     onBack: () -> Unit,
+    onPlayNavigate: () -> Unit = {},
     vm: FavoriteFolderViewModel = hiltViewModel(),
 ) {
     val folder by vm.folder.collectAsStateWithLifecycle()
@@ -157,7 +158,7 @@ fun FavoriteFolderScreen(
             }
             item(key = "play") {
                 Button(
-                    onClick = { vm.playAll(focus?.index ?: 0) },
+                    onClick = { vm.playAll(focus?.index ?: 0); onPlayNavigate() },
                     enabled = tracks.isNotEmpty() && !startingPlay,
                     shape = RoundedCornerShape(20.dp),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
@@ -218,7 +219,7 @@ fun FavoriteFolderScreen(
                         isPending = startingPlay && pendingIndex == index,
                         focused = focus?.index == index,
                         playing = playingTrack?.takeIf { it.key == "${entity.bvid}:${entity.cid}" },
-                        onClick = { vm.playAt(index) },
+                        onClick = { vm.playAt(index); onPlayNavigate() },
                         onDelete = { removeTarget = entity },
                     )
                 }

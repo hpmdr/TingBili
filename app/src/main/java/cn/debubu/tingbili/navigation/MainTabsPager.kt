@@ -50,7 +50,10 @@ fun MainTabsPager(
             }
 
             2 -> ImageFormatScope(mainViewModel) {
-                HistoryScreen(onFolderClick = { id -> navController.navigate(FavoriteFolderRoute(id)) })
+                HistoryScreen(
+                    onFolderClick = { id -> navController.navigate(FavoriteFolderRoute(id)) },
+                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                )
             }
 
             else -> ImageFormatScope(mainViewModel) {

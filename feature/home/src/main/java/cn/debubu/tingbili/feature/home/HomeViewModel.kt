@@ -221,7 +221,7 @@ class HomeViewModel @Inject constructor(
             // For discovery, many BV may be multi-P but unknown until view() — offer sheet anyway
             // If caller doesn't specify, we treat single play as direct; bottomSheet still available via long-press
             // Here we play directly per brief's else branch
-            viewModelScope.launch { player.play(listOf(track), 0) }
+            viewModelScope.launch { player.playOrResume(listOf(track), 0) }
         }
     }
 
@@ -257,7 +257,7 @@ class HomeViewModel @Inject constructor(
 
     fun playTracks(tracks: List<Track>, index: Int = 0) {
         if (tracks.isEmpty()) return
-        viewModelScope.launch { player.play(tracks, index) }
+        viewModelScope.launch { player.playOrResume(tracks, index) }
     }
 
     fun playSingle(track: Track) = playTracks(listOf(track), 0)

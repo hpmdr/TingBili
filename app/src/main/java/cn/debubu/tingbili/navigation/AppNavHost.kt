@@ -176,7 +176,10 @@ fun AppRootNavHost(
         }
         composable<FavoriteFolderRoute> {
             ImageFormatScope(mainViewModel) {
-                FavoriteFolderScreen(onBack = { navController.popBackStack() })
+                FavoriteFolderScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
+                )
             }
         }
         composable<BvFavoriteRoute> { entry ->
@@ -185,6 +188,7 @@ fun AppRootNavHost(
                 BvFavoriteScreen(
                     bvid = args.bvid,
                     onBack = { navController.popBackStack() },
+                    onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
                 )
             }
         }

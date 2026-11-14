@@ -1376,4 +1376,58 @@ class PlayerManagerTest {
         assertEquals(null, playerManager.state.value.errorMessage)
         playerManager.release()
     }
+
+    @Test
+    fun `playOrResume same track while playing does not rebuild`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 100_000, null),
+            Track("BV1", 2, "t2", "a", "", 100_000, null),
+        )
+        playerManager.play(tracks, 0)
+        val itemsAfterPlay = fakePlayer.mediaItems.size
+        assertTrue(playerManager.state.value.isPlaying)
+        // 同集正在播：只返回 true，不重建、不归零
+        val same = playerManager.playOrResume(tracks, 0)
+        assertTrue(same)
+        assertEquals(itemsAfterPlay, fakePlayer.mediaItems.size)
+        assertTrue(playerManager.state.value.isPlaying)
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        playerManager.release()
+    }
+
+    @Test
+    fun `playOrResume same track while paused resumes`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t1", "a", "", 100_000, null))
+        playerManager.play(tracks, 0)
+        playerManager.pause()
+        assertFalse(playerManager.state.value.isPlaying)
+        val playCallsBefore = fakePlayer.playCalls
+        val same = playerManager.playOrResume(tracks, 0)
+        assertTrue(same)
+        assertTrue(playerManager.state.value.isPlaying)
+        assertTrue(fakePlayer.playCalls > playCallsBefore)
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        playerManager.release()
+    }
+
+    @Test
+    fun `playOrResume different track plays new`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "t1", "a", "", 100_000, null),
+            Track("BV1", 2, "t2", "a", "", 100_000, null),
+        )
+        playerManager.play(tracks, 0)
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        val same = playerManager.playOrResume(tracks, 1)
+        assertFalse(same)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
 }

@@ -132,7 +132,8 @@ class HistoryViewModel @Inject constructor(
             _message.value = "该集已移出收藏夹，已按 BV 续播"
             return false
         }
-        player.play(
+        // 同集去重：playOrResume 内同集忽略 startPositionMs，保持现进度续播/只跳转
+        player.playOrResume(
             tracks,
             idx,
             folder.name,
@@ -159,7 +160,8 @@ class HistoryViewModel @Inject constructor(
             _message.value = "该分 P 已失效"
             return
         }
-        player.play(
+        // 同集去重：同集忽略历史落点，保持现进度续播/只跳转
+        player.playOrResume(
             tracks,
             idx,
             "播放历史",

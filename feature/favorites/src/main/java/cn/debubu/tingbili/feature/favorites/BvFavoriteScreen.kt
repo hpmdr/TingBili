@@ -74,6 +74,7 @@ import java.time.format.DateTimeFormatter
 fun BvFavoriteScreen(
     bvid: String,
     onBack: () -> Unit,
+    onPlayNavigate: () -> Unit = {},
     vm: BvFavoriteViewModel = hiltViewModel(),
 ) {
     val favorite by vm.favorite.collectAsStateWithLifecycle()
@@ -212,7 +213,7 @@ fun BvFavoriteScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Button(
-                        onClick = { vm.playAll(focus?.index ?: 0) },
+                        onClick = { vm.playAll(focus?.index ?: 0); onPlayNavigate() },
                         enabled = pages.isNotEmpty() && !startingPlay,
                         shape = RoundedCornerShape(20.dp),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
@@ -281,7 +282,7 @@ fun BvFavoriteScreen(
                         isPending = startingPlay && pendingIndex == index,
                         focused = focus?.index == index,
                         playing = playingTrack?.takeIf { it.key == "${page.bvid}:${page.cid}" },
-                        onClick = { vm.playAt(index) },
+                        onClick = { vm.playAt(index); onPlayNavigate() },
                         showVideoTitle = false,
                     )
                 }

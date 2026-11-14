@@ -180,7 +180,8 @@ class DetailViewModel @Inject constructor(
             _pendingIndex.value = index
             _startingPlay.value = true
             try {
-                player.play(tracks, index)
+                // 同集去重：正在播则只跳转（调用方负责 onPlayNavigate），暂停则原进度续播，不重建队列
+                player.playOrResume(tracks, index)
             } finally {
                 _startingPlay.value = false
                 _pendingIndex.value = null

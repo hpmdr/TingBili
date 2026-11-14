@@ -57,6 +57,7 @@ import coil3.compose.AsyncImage
 @Composable
 fun HistoryScreen(
     onFolderClick: (Long) -> Unit = {},
+    onPlayNavigate: () -> Unit = {},
     vm: HistoryViewModel = hiltViewModel(),
 ) {
     val list by vm.history.collectAsStateWithLifecycle()
@@ -115,7 +116,7 @@ fun HistoryScreen(
                         folderExists = folderExists,
                         isPending = startingResume &&
                             pendingKey == "${item.sourceType}:${item.sourceId}",
-                        onResume = { vm.resume(item) },
+                        onResume = { vm.resume(item); onPlayNavigate() },
                         onFolderClick = { folderId?.let(onFolderClick) },
                         onDelete = { vm.delete(item) }
                     )
