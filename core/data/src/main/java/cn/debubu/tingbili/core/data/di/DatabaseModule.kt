@@ -100,6 +100,15 @@ object DatabaseModule {
         }
     }
 
+    /** v19：队列快照补 shuffleOrderJson（洗牌顺序 App 自持，恢复后续播同一套顺序）。 */
+    private val MIGRATION_18_19 = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `PlayQueueSnapshotEntity` ADD COLUMN `shuffleOrderJson` TEXT NOT NULL DEFAULT '[]'"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): TingBiliDatabase =
@@ -110,6 +119,7 @@ object DatabaseModule {
                 MIGRATION_14_15,
                 MIGRATION_16_17,
                 MIGRATION_17_18,
+                MIGRATION_18_19,
             )
             // 注意：不要再接 fallbackToDestructiveMigrationOnDowngrade(true)，
             // 它会把 requireMigration 重新设为 true，导致升级 fallback 失效。

@@ -10,8 +10,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -63,6 +66,14 @@ open class AuthRepository @Inject constructor(
 
     private val _sessionFlow = MutableStateFlow<BiliSession?>(null)
     val sessionFlow: StateFlow<BiliSession?> = _sessionFlow.asStateFlow()
+
+    /**
+     * 登录态失效事件（只发一次/次）：任一需要登录的接口明确返回
+     * [SESSION_EXPIRED_CODES]，或保活验出 nav 未登录，作废本地会话后发射。
+     * UI 层订阅后提示用户重登（不自动跳页，避免打断播放）。
+     */
+    private val _sessionExpiredEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sessionExpiredEvents: SharedFlow<Unit> = _sessionExpiredEvents.asSharedFlow()
 
     // F7：构造期不再同步读加密存储。首次建 MasterKey 实测 ≈786ms 主线程磁盘读（见 FIX_PLAN §7.1），
     // 改为后台加载：UI 收集 sessionFlow 自动刷新；网络拦截器用 awaitSession() 有界等待，避免首批请求丢 Cookie。
@@ -227,15 +238,56 @@ open class AuthRepository @Inject constructor(
      * 换新 Cookie → confirm 退役旧 token → nav 验证 → 落盘。
      * 无会话 / 无 refresh_token（老会话）/ 网络失败一律返回 false，调用方忽略即可。
      * 进程启动时调一次（MainViewModel），每天自然触发，不额外建定时任务。
+     *
+     * 续期只懂「要不要换」，不懂「死没死」：这里先拿 nav 验活，
+     * 明确未登录就直接作废本地会话（否则「我的」页永远显示缓存头像，
+     * 稍后再看之类的登录接口却一路 -101）。
      */
     suspend fun maintainSession(): Boolean {
         val current = _sessionFlow.value ?: return false
         if (current.refreshToken.isBlank()) return false
+        if (isSessionDead(current)) {
+            invalidateSession()
+            return false
+        }
         return try {
             refreshSession(current)?.let { save(it); true } ?: false
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * 拿 nav 验会话死活：明确 `isLogin == false` 才算死。
+     * 网络失败/解析失败一律按「不知道」处理，绝不能因此登出。
+     */
+    private suspend fun isSessionDead(current: BiliSession): Boolean =
+        runCatching {
+            fetchNav(current.toCookieHeader()).getOrNull()?.isLogin == false
+        }.getOrDefault(false)
+
+    /**
+     * 任一接口返回登录态失效码时调这里：作废本地保存的会话。
+     *
+     * 幂等：本来就没会话（游客态）直接返回 false，不发事件——
+     * 游客调需登录接口吃 -101 是预期行为，不能误伤。
+     * 有会话才清并返回 true，调用方继续按原错误展示即可。
+     */
+    fun invalidateIfSessionExpired(code: Int): Boolean {
+        if (code !in SESSION_EXPIRED_CODES) return false
+        return invalidateSession()
+    }
+
+    /**
+     * 作废本地会话（内存 + 加密存储），有会话才发失效事件。
+     * CookieHeaderProvider 按会话实例缓存，清掉后后续请求自动降为游客，
+     * 不会再拿死 Cookie 去撞服务端。
+     */
+    fun invalidateSession(): Boolean {
+        if (_sessionFlow.value == null) return false
+        save(null)
+        _sessionExpiredEvents.tryEmit(Unit)
+        return true
     }
 
     private suspend fun refreshSession(current: BiliSession): BiliSession? = withContext(io) {
@@ -551,6 +603,12 @@ open class AuthRepository @Inject constructor(
     )
 
     companion object {
+        /**
+         * B 站「登录态失效」码：-101 账号未登录，-111 csrf 校验失败。
+         * 注意 412/-412 是风控（请求太频繁），-352/-351 是业务风控，
+         * 都不是过期——误清会导致用户被登出还一脸懵，绝不能混进来。
+         */
+        val SESSION_EXPIRED_CODES = setOf(-101, -111)
         val REFRESH_CSRF_RE = Regex(""""refresh_token"\s*:\s*"([^"]+)"""")
         const val MAX_REDIRECT_HOPS = 5
         const val BROWSER_UA =

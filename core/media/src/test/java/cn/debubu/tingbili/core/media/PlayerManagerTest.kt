@@ -334,7 +334,31 @@ class PlayerManagerTest {
         assertEquals(Player.REPEAT_MODE_OFF, fakePlayer.repeatMode)
 
         playerManager.setShuffleEnabled(true)
-        assertEquals(true, fakePlayer.shuffleModeEnabled)
+        // 顺序 App 自持并落盘，transport 恒为逻辑顺序：Exo 洗牌不再打开
+        assertEquals(false, fakePlayer.shuffleModeEnabled)
+        playerManager.release()
+    }
+
+    @Test
+    fun `enabling shuffle builds current first order`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 3, "p3", "a", "", 10_000, null),
+        )
+        playerManager.play(tracks, 1)
+        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
+        playerManager.setShuffleEnabled(true)
+        runCurrent()
+
+        // 当前项恒为第一位，剩下两位是 0/2 的排列；快照里同一套
+        val order = fakePlayQueue.snapshot!!.shuffleOrderJson.let {
+            cn.debubu.tingbili.core.data.db.PlayQueueJson.decodeOrder(it)
+        }
+        assertEquals(1, order.first())
+        assertEquals(setOf(0, 1, 2), order.toSet())
         playerManager.release()
     }
 
@@ -358,7 +382,7 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `shuffle next at end of order reshuffles and starts new round`() = runTest {
+    fun `shuffle next follows held order then starts new round`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
@@ -368,13 +392,77 @@ class PlayerManagerTest {
         playerManager.play(tracks, 0)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
         playerManager.setShuffleEnabled(true)
-        fakePlayer.moveTo(1) // 洗牌序走到末尾（repeat off）
-
+        // 2 首时牌序恒为 [0,1]：先沿本轮走到 p2（直接 seek，不重建 transport）
         playerManager.next()
         runCurrent()
 
-        // 重洗一轮（重建 transport 生成新洗牌序）并从另一首接着播，不再停在末尾
-        assertEquals(1, fakePlayer.startIndex)
+        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(2L, playerManager.state.value.currentTrack?.cid)
+        assertEquals(0, fakePlayer.startIndex)
+        assertTrue(playerManager.state.value.isPlaying)
+
+        // 轮末再下一首：开新一轮（2 首必回到另一首），重建 transport
+        playerManager.next()
+        runCurrent()
+
+        assertEquals(0, fakePlayer.startIndex)
+        assertEquals(0, playerManager.state.value.currentIndex)
+        assertEquals(1L, playerManager.state.value.currentTrack?.cid)
+        assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `shuffle round natural end starts new round and keeps playing`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+        )
+        playerManager.play(tracks, 0)
+        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
+        playerManager.setShuffleEnabled(true)
+        playerManager.next()
+        runCurrent()
+        assertEquals(1, playerManager.state.value.currentIndex)
+
+        fakePlayer.storedListener?.onPlaybackStateChanged(Player.STATE_ENDED)
+        runCurrent()
+
+        // 整轮自然播完：重洗一轮接着播，不进「播完即停」
+        assertEquals(0, fakePlayer.startIndex)
+        assertEquals(0, playerManager.state.value.currentIndex)
+        assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `shuffle natural end mid round continues round`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 3, "p3", "a", "", 10_000, null),
+        )
+        // 牌序写死 [0,2,1]：当前停在逻辑末位 p3，本轮还没走完
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
+            tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
+            currentIndex = 2,
+            shuffleEnabled = true,
+            shuffleOrderJson = "[0,2,1]",
+        )
+        playerManager.restoreLastPlayback()
+        runCurrent()
+        playerManager.resume()
+        runCurrent()
+        assertEquals(2, playerManager.state.value.currentIndex)
+
+        // 逻辑队尾播完 ≠ 整轮播完：沿本轮走到 order[2]=1，不开新轮
+        fakePlayer.storedListener?.onPlaybackStateChanged(Player.STATE_ENDED)
+        runCurrent()
+
         assertEquals(1, playerManager.state.value.currentIndex)
         assertEquals(2L, playerManager.state.value.currentTrack?.cid)
         assertTrue(playerManager.state.value.isPlaying)
@@ -382,25 +470,64 @@ class PlayerManagerTest {
     }
 
     @Test
-    fun `shuffle round natural end reshuffles and keeps playing`() = runTest {
+    fun `shuffle auto advance redirects to held order`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
             Track("BV1", 1, "p1", "a", "", 10_000, null),
             Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 3, "p3", "a", "", 10_000, null),
         )
-        playerManager.play(tracks, 0)
-        prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
-        playerManager.setShuffleEnabled(true)
-        fakePlayer.moveTo(1)
+        // 牌序写死 [0,2,1]：Exo 自动连到逻辑下一首 p2 时，本轮下一位是 p3，改跳过去
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
+            tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
+            currentIndex = 0,
+            shuffleEnabled = true,
+            shuffleOrderJson = "[0,2,1]",
+        )
+        playerManager.restoreLastPlayback()
+        runCurrent()
+        playerManager.resume()
+        runCurrent()
+        assertEquals(0, playerManager.state.value.currentIndex)
 
-        fakePlayer.storedListener?.onPlaybackStateChanged(Player.STATE_ENDED)
+        fakePlayer.moveTo(1)
+        fakePlayer.storedListener?.onMediaItemTransition(
+            fakePlayer.mediaItems[1], Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
+        )
         runCurrent()
 
-        // 整轮自然播完：重洗一轮接着播，不进「播完即停」
-        assertEquals(1, fakePlayer.startIndex)
-        assertEquals(1, playerManager.state.value.currentIndex)
+        assertEquals(2, playerManager.state.value.currentIndex)
+        assertEquals(3L, playerManager.state.value.currentTrack?.cid)
         assertTrue(playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
+    fun `restore resumes held shuffle order mid round`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(
+            Track("BV1", 1, "p1", "a", "", 10_000, null),
+            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 3, "p3", "a", "", 10_000, null),
+        )
+        fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
+            tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
+            currentIndex = 0,
+            shuffleEnabled = true,
+            shuffleOrderJson = "[0,2,1]",
+        )
+        playerManager.restoreLastPlayback()
+        runCurrent()
+        assertEquals(true, playerManager.state.value.shuffleEnabled)
+
+        // 杀进程恢复后沿同一套顺序走：下一首是 order[1]=p3，不是逻辑 p2
+        playerManager.next()
+        runCurrent()
+
+        assertEquals(2, playerManager.state.value.currentIndex)
+        assertEquals(3L, playerManager.state.value.currentTrack?.cid)
         playerManager.release()
     }
 
@@ -421,11 +548,17 @@ class PlayerManagerTest {
         playerManager.playAt(1)
         runCurrent()
 
-        // 点另一集：重建 transport（新牌序 = 重洗），落到所点曲目
+        // 点另一集：以所点为新起点重洗并重建 transport，落到所点曲目
         assertEquals(1, fakePlayer.startIndex)
         assertEquals(1, playerManager.state.value.currentIndex)
         assertEquals(2L, playerManager.state.value.currentTrack?.cid)
         assertTrue(playerManager.state.value.isPlaying)
+        assertEquals(
+            listOf(1, 0),
+            cn.debubu.tingbili.core.data.db.PlayQueueJson.decodeOrder(
+                fakePlayQueue.snapshot!!.shuffleOrderJson
+            )
+        )
         playerManager.release()
     }
 
@@ -442,12 +575,18 @@ class PlayerManagerTest {
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
         playerManager.setShuffleEnabled(true)
 
-        // 重播当前集（重播按钮）：走 seekTo，不重建
+        // 重播当前集（重播按钮）：走 seekTo，不重建，牌序不变
         playerManager.playAt(0)
         runCurrent()
 
         assertEquals(0, fakePlayer.startIndex)
         assertEquals(0, playerManager.state.value.currentIndex)
+        assertEquals(
+            listOf(0, 1),
+            cn.debubu.tingbili.core.data.db.PlayQueueJson.decodeOrder(
+                fakePlayQueue.snapshot!!.shuffleOrderJson
+            )
+        )
         playerManager.release()
     }
 

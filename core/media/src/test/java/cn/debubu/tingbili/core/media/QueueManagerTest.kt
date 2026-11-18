@@ -133,6 +133,7 @@ class QueueManagerTest {
         manager.setActiveQueue(tracks, 1, "夹", sourceFolderId = 7L)
         manager.setPlayOrder(PlayOrder.REVERSE)
         manager.setShuffleEnabled(true)
+        manager.setShuffleOrder(listOf(1, 0, 2))
         runCurrent()
 
         // 队列反转，当前项按 key 重新定位
@@ -142,11 +143,51 @@ class QueueManagerTest {
         assertEquals(true, manager.shuffleEnabled)
         assertEquals(1, dao.snapshot!!.playOrder)
         assertEquals(true, dao.snapshot!!.shuffleEnabled)
+        assertEquals(listOf(1, 0, 2), manager.shuffleOrder)
 
         val restored = QueueManager(dao, prefs).also { it.attach(this, listener) }.restore()
         runCurrent()
         assertEquals(PlayOrder.REVERSE, restored?.playOrder)
         assertEquals(true, restored?.shuffleEnabled)
+        // 同一套牌序恢复回来，杀进程后接着走
+        assertEquals(listOf(1, 0, 2), restored?.shuffleOrder)
+    }
+
+    @Test
+    fun `shuffle order survives reverse mapping`() = runTest {
+        manager.attach(this, listener)
+        val tracks = listOf(track("BV1", 1), track("BV1", 2), track("BV1", 3))
+        manager.setActiveQueue(tracks, 0, "夹")
+        manager.setShuffleEnabled(true)
+        manager.setShuffleOrder(listOf(0, 2, 1))
+        manager.setPlayOrder(PlayOrder.REVERSE)
+        runCurrent()
+        // 反转只是下标变换：牌序映射过去，本轮不断
+        assertEquals(listOf(2, 0, 1), manager.shuffleOrder)
+        assertEquals(2, manager.currentIndex)
+    }
+
+    @Test
+    fun `corrupt shuffle order self heals to empty`() = runTest {
+        manager.attach(this, listener)
+        val tracks = listOf(track("BV1", 1), track("BV1", 2))
+        manager.setActiveQueue(tracks, 0, "夹")
+        manager.setShuffleEnabled(true)
+        // 长度/内容对不上的一律忽略，不污染快照
+        manager.setShuffleOrder(listOf(0, 0))
+        manager.setShuffleOrder(listOf(0, 1, 2))
+        assertTrue(manager.shuffleOrder.isEmpty())
+
+        // 损坏快照恢复出来也是空，调用方开新一轮
+        dao.snapshot = PlayQueueSnapshotEntity(
+            tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
+            currentIndex = 0,
+            shuffleEnabled = true,
+            shuffleOrderJson = "[0,0]",
+        )
+        val restored = QueueManager(dao, prefs).also { it.attach(this, listener) }.restore()
+        runCurrent()
+        assertTrue(restored?.shuffleOrder.orEmpty().isEmpty())
     }
 
     @Test

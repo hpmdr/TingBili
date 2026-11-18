@@ -737,14 +737,42 @@ class PlayerManager @Inject constructor(
     suspend fun setShuffleEnabled(enabled: Boolean) = playMutex.withLock {
         randomMode = prefs.randomPlayMode.first()
         queueManager.setShuffleEnabled(enabled)
+        if (enabled && randomMode == RandomPlayMode.SHUFFLE) {
+            // 洗牌顺序 App 自持并落盘：当前项恒为第一位，恢复后沿同一套顺序接着播
+            queueManager.setShuffleOrder(buildShuffleOrder(queue.size, currentIndex))
+        }
         applyShuffleToTransport()
         _state.update { it.copy(shuffleEnabled = enabled) }
     }
 
     /**
+     * 本轮有效的洗牌顺序（queue 下标排列）；空/损坏 = 需要开新一轮。
+     * 刷新/反转/换队列后 QueueManager 会清空或重映射，这里只做最后一道校验。
+     */
+    private fun validShuffleOrder(): List<Int> {
+        val q = queue
+        val o = queueManager.shuffleOrder
+        if (o.size != q.size || o.toSet() != q.indices.toSet()) return emptyList()
+        return o
+    }
+
+    /**
+     * Fisher-Yates 洗牌：startIdx 恒为第一位（当前播的不跳走）；
+     * randomStart 则起点也随机且不等于 startIdx（换轮用，保证真的“换一批”）。
+     */
+    private fun buildShuffleOrder(size: Int, startIdx: Int, randomStart: Boolean = false): List<Int> {
+        if (size <= 0) return emptyList()
+        val safeStart = startIdx.coerceIn(0, size - 1)
+        val rest = (0 until size).filter { it != safeStart }.shuffled()
+        if (!randomStart || rest.isEmpty()) return listOf(safeStart) + rest
+        val start = rest.random()
+        return listOf(start) + (listOf(safeStart) + rest.filter { it != start }).shuffled()
+    }
+
+    /**
      * 章节列表点某一集：在当前 transport 上跳，不重建队列、不改顺序。
-     * 例外：洗牌模式下手动点选**另一集**时重建 transport（setMediaItems 生成新牌序 = 重洗，
-     * 用户预期「点一首新歌、剩余顺序换一批」）；重播当前集不重洗。
+     * 例外：洗牌模式下手动点选**另一集**时，以该集为起点重洗剩余顺序并重建 transport，
+     * 用户预期「点一首新歌、从它开始换一批顺序」；重播当前集不重洗。
      */
     fun playAt(index: Int, manual: Boolean = true) {
         if (index !in queue.indices) return
@@ -762,19 +790,29 @@ class PlayerManager @Inject constructor(
             return
         }
         effectiveScope().launch {
-            playMutex.withLock { rebuildTransport(index, 0L, startPlaying = true) }
+            playMutex.withLock {
+                if (reshuffleOnPick) {
+                    // 所点为新起点，剩余重洗并落盘（恢复后沿这套顺序走）
+                    queueManager.setShuffleOrder(buildShuffleOrder(queue.size, index))
+                }
+                rebuildTransport(index, 0L, startPlaying = true)
+            }
         }
     }
 
-    /** 根据当前队列/顺序/随机开关，把 transport 的 shuffle/repeat 状态对齐。 */
+    /**
+     * 根据当前队列/顺序/随机开关，把 transport 的 shuffle/repeat 状态对齐。
+     *
+     * shuffle 恒关：顺序由 App 自持（QueueManager.shuffleOrder + 落盘），transport
+     * 永远按逻辑顺序放。之前曾打开 Exo 洗牌，但 MediaController 拿不到 Exo 内部牌序，
+     * 杀进程恢复只能重洗，“每轮每集一次”保证不了。
+     */
     private suspend fun applyShuffleToTransport() {
-        val enabled = queueManager.shuffleEnabled
-        val mode = randomMode
-        transport.shuffleModeEnabled = enabled && mode == RandomPlayMode.SHUFFLE
+        transport.shuffleModeEnabled = false
         val prefRepeat = prefs.repeatMode.first()
         transport.repeatMode = when {
             // 纯随机需要「永远有下一首」：交给 repeat all，再由 auto 回调改跳随机项
-            enabled && mode == RandomPlayMode.PURE_RANDOM -> Player.REPEAT_MODE_ALL
+            queueManager.shuffleEnabled && randomMode == RandomPlayMode.PURE_RANDOM -> Player.REPEAT_MODE_ALL
             prefRepeat == PlaybackState.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ONE
             prefRepeat == PlaybackState.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
@@ -848,16 +886,21 @@ class PlayerManager @Inject constructor(
     }
 
     /**
-     * 洗牌整轮播完：重洗一轮，从随机一首接着播（单集队列则重播当前）。
-     * 走 rebuildTransport（setMediaItems 会生成新洗牌序）；只在整轮结束时发生，频率低。
+     * 洗牌开新一轮：整套顺序重洗（起点随机且不等于当前），落盘后从新起点接着播。
+     * 只在整轮播完/顺序损坏时发生，频率低；单集队列则回到当前。
      */
     private fun startNewShuffleRound() {
         val q = queue
         if (q.isEmpty()) return
-        val candidates = q.indices.filter { it != currentIndex }
-        val target = if (candidates.isEmpty()) currentIndex else candidates.random()
         effectiveScope().launch {
-            playMutex.withLock { rebuildTransport(target, 0L, startPlaying = true) }
+            playMutex.withLock {
+                if (queue.isEmpty()) return@withLock
+                queueManager.setShuffleOrder(
+                    buildShuffleOrder(queue.size, currentIndex, randomStart = true)
+                )
+                val target = queueManager.shuffleOrder.firstOrNull() ?: currentIndex
+                rebuildTransport(target, 0L, startPlaying = true)
+            }
         }
     }
 
@@ -1230,6 +1273,12 @@ class PlayerManager @Inject constructor(
             jumpToRandom(excludeCurrent = true)
             return
         }
+        // 洗牌：沿本轮顺序走；走完开新一轮（transport 常年是逻辑顺序，不靠 Exo 洗）
+        if (queueManager.shuffleEnabled && randomMode == RandomPlayMode.SHUFFLE) {
+            nextShuffled()
+            return
+        }
+        // 顺序模式走到逻辑队尾：回卷到头（repeat off 到队尾才 ended，由回调接管）
         if (transport.mediaItemCount != queue.size) {
             val nextIdx = (currentIndex + 1) % queue.size
             effectiveScope().launch {
@@ -1237,16 +1286,31 @@ class PlayerManager @Inject constructor(
             }
             return
         }
-        // 洗牌走到牌序末尾（repeat off）：重洗一轮接着播，别让「下一曲」死在末尾
-        if (queueManager.shuffleEnabled &&
-            randomMode == RandomPlayMode.SHUFFLE &&
-            !transport.hasNextMediaItem
-        ) {
+        transport.seekToNextMediaItem()
+        transport.play()
+    }
+
+    /** 洗牌模式下一首：沿本轮顺序走；走完/顺序损坏开新一轮，不死在队尾。 */
+    private fun nextShuffled() {
+        val order = validShuffleOrder()
+        if (order.isEmpty()) {
             startNewShuffleRound()
             return
         }
-        transport.seekToNextMediaItem()
-        transport.play()
+        val pos = order.indexOf(currentIndex)
+        if (pos in 0 until order.lastIndex) {
+            val target = order[pos + 1]
+            if (transport.mediaItemCount == queue.size) {
+                transport.seekTo(target, 0L)
+                transport.play()
+            } else {
+                effectiveScope().launch {
+                    playMutex.withLock { rebuildTransport(target, 0L, startPlaying = true) }
+                }
+            }
+            return
+        }
+        startNewShuffleRound()
     }
 
     fun previous() {
@@ -1256,6 +1320,15 @@ class PlayerManager @Inject constructor(
             effectiveScope().launch {
                 playMutex.withLock { rebuildTransport(prevIdx, 0L, startPlaying = true) }
             }
+            return
+        }
+        // 洗牌：沿本轮顺序回退；已在轮首则从头播当前（transport 是逻辑顺序，不靠 Exo 洗）
+        if (queueManager.shuffleEnabled && randomMode == RandomPlayMode.SHUFFLE) {
+            val order = validShuffleOrder()
+            val pos = order.indexOf(currentIndex)
+            val target = if (pos > 0) order[pos - 1] else currentIndex.coerceIn(queue.indices)
+            transport.seekTo(target, 0L)
+            transport.play()
             return
         }
         transport.seekToPreviousMediaItem()
@@ -1297,6 +1370,34 @@ class PlayerManager @Inject constructor(
                 }
             }
             randomRedirectTarget = -1
+            // 洗牌：transport 永远是逻辑顺序，自动连播会先落到逻辑下一首；
+            // 不是本轮顺序的下一位就改跳过去，保证“每轮每集一次”。手动点播（SEEK）不干预。
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
+                queueManager.shuffleEnabled &&
+                randomMode == RandomPlayMode.SHUFFLE &&
+                queue.size > 1 &&
+                !_state.value.sleepEndOfChapter
+            ) {
+                val order = validShuffleOrder()
+                if (order.isNotEmpty()) {
+                    val oldPos = order.indexOf(_state.value.currentIndex)
+                    val expected = if (oldPos in 0 until order.lastIndex) order[oldPos + 1] else -1
+                    if (expected != -1 && expected != index) {
+                        // 先把上一集在章尾的进度落到历史，再改跳
+                        effectiveScope().launch { runCatching { historyTracker.flush() } }
+                        transport.pause()
+                        transport.seekTo(expected, 0L)
+                        transport.play()
+                        return
+                    }
+                    if (expected == -1 && index != _state.value.currentIndex) {
+                        // 本轮刚好走完但逻辑上还有下一首：直接开新一轮
+                        effectiveScope().launch { runCatching { historyTracker.flush() } }
+                        startNewShuffleRound()
+                        return
+                    }
+                }
+            }
             queueManager.moveCurrentTo(index)
             _state.update {
                 it.copy(
@@ -1339,11 +1440,20 @@ class PlayerManager @Inject constructor(
             if (!buffering) syncPositionFromPlayer()
         }
         override fun onPlaybackEnded() {
-            // 洗牌整轮自然播完（repeat off 到队尾才 ended）：重洗一轮接着播
-            // 睡眠定时「到章停」到此为止，不续轮；repeat all 由 ExoPlayer 自己回卷，不会 ended
+            // 洗牌：逻辑队尾自然播完（repeat off 到队尾才 ended）。
+            // 本轮还有剩就沿本轮接着走，刚好走完才开新一轮。
+            // 睡眠定时「到章停」到此为止，不续轮；repeat all 由 ExoPlayer 自己回卷，不会 ended。
             if (!queueManager.shuffleEnabled || randomMode != RandomPlayMode.SHUFFLE) return
             if (_state.value.sleepEndOfChapter) return
-            startNewShuffleRound()
+            val order = validShuffleOrder()
+            val pos = order.indexOf(_state.value.currentIndex)
+            if (pos in 0 until order.lastIndex) {
+                val target = order[pos + 1]
+                transport.seekTo(target, 0L)
+                transport.play()
+            } else {
+                startNewShuffleRound()
+            }
         }
         override fun onPositionDiscontinuity() {
             // 播放器权威事件（seek/切章/自动跳变）到达：解除抑制并按它对齐

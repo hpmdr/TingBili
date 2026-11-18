@@ -36,6 +36,8 @@ class QueueManager(
         val sourceFolderId: Long?,
         val playOrder: PlayOrder,
         val shuffleEnabled: Boolean,
+        /** 洗牌顺序（queue 下标排列，当前项第一位）；空 = 未洗牌/纯随机 */
+        val shuffleOrder: List<Int>,
     )
 
     internal companion object {
@@ -60,6 +62,14 @@ class QueueManager(
 
     /** 当前播放列表的随机开关；随机方式在播放设置里选。 */
     var shuffleEnabled: Boolean = false
+        private set
+
+    /**
+     * 当前轮洗牌顺序（queue 下标排列，当前项恒为第一位）。
+     * SHUFFLE 模式由 PlayerManager 维护并随快照落盘；纯随机不需要顺序，恒空。
+     * 内容变化（刷新/反转/换队列）后重算或映射，损坏/对不上时自愈为空（调用方开新一轮）。
+     */
+    var shuffleOrder: List<Int> = emptyList()
         private set
 
     private var scope: CoroutineScope? = null
@@ -98,6 +108,8 @@ class QueueManager(
         this.sourceFolderId = sourceFolderId
         this.playOrder = playOrder
         this.shuffleEnabled = shuffleEnabled
+        // 新队列的顺序由调用方（开随机时）随后确立，这里先清空避免旧顺序串台
+        this.shuffleOrder = emptyList()
         notifyChanged()
         persistSnapshot()
     }
@@ -108,6 +120,7 @@ class QueueManager(
         currentIndex = -1
         this.sourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
         this.sourceFolderId = sourceFolderId
+        shuffleOrder = emptyList()
         notifyChanged()
     }
 
@@ -122,6 +135,8 @@ class QueueManager(
         currentIndex = playingFinalIdx
         this.sourceTitle = sourceTitle?.takeIf { it.isNotBlank() }
         this.sourceFolderId = sourceFolderId
+        // 内容变了旧牌序作废：调用方（下一首/自动连播）看到空顺序会开新一轮，不卡死
+        shuffleOrder = emptyList()
         notifyChanged()
         persistSnapshot()
     }
@@ -136,7 +151,7 @@ class QueueManager(
 
     /**
      * 切换当前播放列表的正/倒序：原地反转队列，当前在播项按 key 重新定位。
-     * 只改这条队列，不碰收藏夹/BV。
+     * 只改这条队列，不碰收藏夹/BV。洗牌顺序按下标映射过去，本轮不断。
      */
     fun setPlayOrder(order: PlayOrder) {
         if (order == playOrder) return
@@ -145,6 +160,8 @@ class QueueManager(
         currentIndex = if (currentKey == null) -1
         else queue.indexOfFirst { it.bvid == currentKey.first && it.cid == currentKey.second }
         playOrder = order
+        // 反转只是下标变换：牌序按新下标映射；对不上（队列同时被换了）则清空自愈
+        shuffleOrder = sanitizeOrder(shuffleOrder.map { queue.size - 1 - it }, queue.size)
         notifyChanged()
         persistSnapshot()
     }
@@ -153,8 +170,28 @@ class QueueManager(
     fun setShuffleEnabled(enabled: Boolean) {
         if (enabled == shuffleEnabled) return
         shuffleEnabled = enabled
+        if (!enabled) shuffleOrder = emptyList()
         notifyChanged()
         persistSnapshot()
+    }
+
+    /**
+     * 确立本轮洗牌顺序：必须是当前队列下标的排列，否则忽略（损坏快照/串台时自愈为空）。
+     * 纯随机不需要顺序，传空列表即清空。
+     */
+    fun setShuffleOrder(order: List<Int>) {
+        val sanitized = sanitizeOrder(order, queue.size)
+        if (sanitized == shuffleOrder) return
+        shuffleOrder = sanitized
+        notifyChanged()
+        persistSnapshot()
+    }
+
+    /** 排列校验：长度对齐且恰为 0 until size 的排列，否则视为损坏返回空。 */
+    private fun sanitizeOrder(order: List<Int>, size: Int): List<Int> {
+        if (order.isEmpty() || order.size != size) return emptyList()
+        if (order.toSet() != (0 until size).toSet()) return emptyList()
+        return order
     }
 
     /**
@@ -168,6 +205,7 @@ class QueueManager(
         sourceFolderId = null
         playOrder = PlayOrder.FORWARD
         shuffleEnabled = false
+        shuffleOrder = emptyList()
         notifyChanged()
         scope?.launch {
             try {
@@ -184,8 +222,9 @@ class QueueManager(
         val folderId = sourceFolderId
         val order = playOrder
         val shuffle = shuffleEnabled
+        val shuffleOrder = sanitizeOrder(shuffleOrder, q.size)
         if (q.isEmpty() || idx !in q.indices) return
-        scope?.launch { saveSnapshot(q, idx, title, folderId, order, shuffle) }
+        scope?.launch { saveSnapshot(q, idx, title, folderId, order, shuffle, shuffleOrder) }
     }
 
     private suspend fun saveSnapshot(
@@ -195,6 +234,7 @@ class QueueManager(
         sourceFolderId: Long?,
         playOrder: PlayOrder,
         shuffleEnabled: Boolean,
+        shuffleOrder: List<Int>,
     ) {
         if (tracks.isEmpty() || index !in tracks.indices) return
         val capped = if (tracks.size > MAX_QUEUE_SNAPSHOT) tracks.take(MAX_QUEUE_SNAPSHOT) else tracks
@@ -205,6 +245,10 @@ class QueueManager(
             sourceFolderId = sourceFolderId,
             playOrder = playOrder.code,
             shuffleEnabled = shuffleEnabled,
+            // 超长截断后下标会整体错位：截断时直接丢掉本轮顺序（调用方开新一轮）
+            shuffleOrderJson = PlayQueueJson.encodeOrder(
+                if (tracks.size <= MAX_QUEUE_SNAPSHOT) shuffleOrder else emptyList()
+            ),
             updatedAt = System.currentTimeMillis(),
         )
         // 单行 Upsert 原子落盘：队列/下标/合集名要么一起新，要么一起旧
@@ -257,6 +301,11 @@ class QueueManager(
             sourceFolderId = snapshot?.sourceFolderId
             playOrder = PlayOrder.fromCode(snapshot?.playOrder ?: PlayOrder.FORWARD.code)
             shuffleEnabled = snapshot?.shuffleEnabled ?: false
+            // 恢复同一套牌序：损坏/对不上（夹内容变了）则清空，调用方开新一轮
+            shuffleOrder = sanitizeOrder(
+                snapshot?.shuffleOrderJson?.let { PlayQueueJson.decodeOrder(it) }.orEmpty(),
+                savedQueue.size,
+            )
             val speed = try {
                 prefs.speed.first()
             } catch (_: Exception) {
@@ -278,6 +327,7 @@ class QueueManager(
                 sourceFolderId = sourceFolderId,
                 playOrder = playOrder,
                 shuffleEnabled = shuffleEnabled,
+                shuffleOrder = shuffleOrder,
             )
         } catch (_: Exception) {
             // 损坏数据忽略，保持空状态

@@ -16,6 +16,7 @@ import cn.debubu.tingbili.core.data.update.UpdateChecker
 import cn.debubu.tingbili.core.data.update.UpdateDataSource
 import cn.debubu.tingbili.core.media.PlayerManager
 import cn.debubu.tingbili.core.ui.HomeScrollTopBus
+import cn.debubu.tingbili.core.ui.component.TingBiliMessageBus
 import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -166,8 +167,16 @@ class MainViewModel @Inject constructor(
     }
 
     init {
-        // 登录态保活：进程启动时检查一次，需要续期则静默续期；失败忽略，下次启动再试
+        // 登录态保活：进程启动时检查一次，需要续期则静默续期；
+        // 明确死亡（nav 未登录）直接作废本地会话。失败忽略，下次启动再试
         viewModelScope.launch { auth.maintainSession() }
+        // 登录失效只提示不跳页：用户可能正在听歌，保活/任一接口作废会话后
+        // 各页按 isLoggedIn 自动降级（字幕栏变「去登录」等），提示一次即可
+        viewModelScope.launch {
+            auth.sessionExpiredEvents.collect {
+                TingBiliMessageBus.show("登录已过期，请重新登录")
+            }
+        }
         viewModelScope.launch {
             _startTab.value = try {
                 resolveStartTab()

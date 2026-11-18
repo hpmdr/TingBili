@@ -15,6 +15,8 @@ data class ViewDto(
 @Serializable
 data class ViewData(
     val bvid: String = "",
+    /** 数字稿件号：评论接口的 oid 要它（bvid 不行） */
+    val aid: Long = 0,
     val title: String = "",
     val pic: String = "",
     val desc: String = "",

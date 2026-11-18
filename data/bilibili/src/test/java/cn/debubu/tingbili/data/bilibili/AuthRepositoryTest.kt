@@ -4,6 +4,8 @@ import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
 import cn.debubu.tingbili.data.bilibili.auth.AuthStore
 import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import cn.debubu.tingbili.data.bilibili.auth.QrStatus
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.mockwebserver.MockResponse
@@ -196,11 +198,15 @@ class AuthRepositoryTest {
     @Test
     fun `maintainSession skips when refresh not needed`() = runTest {
         repo.save(BiliSession("S", "J", 9L, refreshToken = "RT0"))
+        // 先 nav 验活（会话没死），再问 cookie/info 要不要续期
+        server.enqueue(MockResponse().setBody(
+            """{"code":0,"data":{"isLogin":true,"mid":9,"uname":"u","face":""}}"""
+        ))
         server.enqueue(MockResponse().setBody(
             """{"code":0,"data":{"refresh":false,"timestamp":123}}"""
         ))
         assertTrue(repo.maintainSession())
-        assertEquals(1, server.requestCount)
+        assertEquals(2, server.requestCount)
         // 会话原样保留
         assertEquals("RT0", repo.sessionFlow.value?.refreshToken)
     }
@@ -239,8 +245,8 @@ class AuthRepositoryTest {
         assertEquals("NEW_J", s?.biliJct)
         assertEquals("RT1", s?.refreshToken)
         assertEquals("新名字", s?.userName)
-        // info + correspond + refresh + confirm + nav = 5 次请求
-        assertEquals(5, server.requestCount)
+        // 验活 nav + info + correspond + refresh + confirm + 验新 nav = 6 次请求
+        assertEquals(6, server.requestCount)
     }
 
     @Test
@@ -313,5 +319,85 @@ class AuthRepositoryTest {
         dec.init(javax.crypto.Cipher.DECRYPT_MODE, pair.private)
         val plain = String(dec.doFinal(java.util.Base64.getDecoder().decode(cipher)), Charsets.UTF_8)
         assertEquals("HASH123secret", plain)
+    }
+
+    // ── 登录失效作废 ──
+
+    @Test
+    fun `invalidateIfSessionExpired clears session on -101 and emits once`() = runTest {
+        repo.save(BiliSession("SESS", "JCT", 42L, refreshToken = "RT"))
+        val events = mutableListOf<Unit>()
+        val job = backgroundScope.launch { repo.sessionExpiredEvents.collect { events += it } }
+        runCurrent()
+
+        assertTrue(repo.invalidateIfSessionExpired(-101))
+        runCurrent()
+
+        assertNull(repo.sessionNow())
+        assertNull(saved.last())
+        assertEquals(1, events.size)
+        job.cancel()
+    }
+
+    @Test
+    fun `invalidateIfSessionExpired clears session on -111`() = runTest {
+        repo.save(BiliSession("SESS", "JCT", 42L, refreshToken = "RT"))
+        assertTrue(repo.invalidateIfSessionExpired(-111))
+        assertNull(repo.sessionNow())
+    }
+
+    @Test
+    fun `non-expiry codes keep session`() = runTest {
+        repo.save(BiliSession("SESS", "JCT", 42L, refreshToken = "RT"))
+        val events = mutableListOf<Unit>()
+        val job = backgroundScope.launch { repo.sessionExpiredEvents.collect { events += it } }
+        runCurrent()
+
+        // 0 成功，-412/-400/-352 都是风控或业务错误，不是过期，绝不能清登录态
+        listOf(0, -412, 412, -400, -352, -404).forEach {
+            assertEquals(false, repo.invalidateIfSessionExpired(it))
+        }
+        runCurrent()
+
+        assertEquals(42L, repo.sessionNow()?.uid)
+        assertTrue(events.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `guest -101 is no-op without event`() = runTest {
+        repo.save(null)
+        val events = mutableListOf<Unit>()
+        val job = backgroundScope.launch { repo.sessionExpiredEvents.collect { events += it } }
+        runCurrent()
+
+        // 游客调需登录接口吃 -101 是预期行为，不能误伤（也没东西可清）
+        assertEquals(false, repo.invalidateIfSessionExpired(-101))
+        runCurrent()
+
+        assertTrue(events.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `maintainSession drops dead session reported by nav`() = runTest {
+        repo.save(BiliSession("DEAD", "JCT", 42L, refreshToken = "RT"))
+        server.enqueue(MockResponse().setBody("""{"code":-101,"message":"账号未登录"}"""))
+
+        assertEquals(false, repo.maintainSession())
+        assertNull(repo.sessionNow())
+        assertNull(saved.last())
+    }
+
+    @Test
+    fun `maintainSession keeps session when nav check fails on network`() = runTest {
+        repo.save(BiliSession("SESS", "JCT", 42L, refreshToken = "RT"))
+        // nav 500（验活失败）+ cookie/info 说不用续期：会话保留
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setBody("""{"code":0,"data":{"refresh":false}}"""))
+
+        // 网络失败 = 不知道死活，绝不能登出
+        assertEquals(true, repo.maintainSession())
+        assertEquals(42L, repo.sessionNow()?.uid)
     }
 }

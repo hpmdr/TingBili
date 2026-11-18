@@ -1431,6 +1431,9 @@ private fun MiniLyricCard(
                     }
                 }
                 SubtitleLoadState.Empty -> {
+                    // 真没字幕才到这里：登录有效 + 接口回空轨/空正文。
+                    // 只有 AI 字幕的视频在登录掉线后不会走这里（走 NoAuth），
+                    // 所以看到暂无字幕先看登录态，不要直接判视频问题。
                     Box(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentAlignment = Alignment.Center,
@@ -1595,11 +1598,16 @@ private fun FullscreenLyricsList(
 /** 歌词行跳转的撤销快照：fromMs=跳转前位置，token 用于丢弃过期的自动消失 */
 private data class JumpUndo(val fromMs: Long, val toLabel: String, val token: Long)
 
-/** 全屏字幕排印（方案 A）：高亮 16sp×1.25，正文 14sp×1.1，行距 12dp，上下 fade 各占约 11% 视口 */
+/**
+ * 全屏字幕排印（方案 A）：高亮 16sp×1.25，正文 14sp×1.1，上下 fade 各占约 11% 视口。
+ *
+ * 行距只给 4dp：每行自带 6dp 上下内边距（点击热区），两者叠加才是行间空白（4+6+6=16dp）。
+ * 原先 12dp 叠加后达 24dp，比迷你卡（2dp）松 4 倍，已按视觉稿收紧。
+ */
 private const val FULLSCREEN_HIGHLIGHT_SCALE = 1.25f
 private const val FULLSCREEN_BODY_SCALE = 1.1f
 private const val FULLSCREEN_FADE_FRACTION = 0.11f
-private val FULLSCREEN_LINE_SPACING = 12.dp
+private val FULLSCREEN_LINE_SPACING = 4.dp
 
 /** 撤销提示停留时长：够用户反应过来点“撤销”，又不至于长期遮挡 */
 private const val UNDO_HINT_MS = 4_000L

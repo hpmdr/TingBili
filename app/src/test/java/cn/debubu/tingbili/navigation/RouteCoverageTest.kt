@@ -45,6 +45,8 @@ class RouteCoverageTest {
                 composable<VideoDetailRoute> { Text("detail") }
                 composable<FavoriteFolderRoute> { Text("folder") }
                 composable<BvFavoriteRoute> { Text("bv fav") }
+                composable<VideoCommentsRoute> { Text("comments") }
+                composable<VideoCommentRepliesRoute> { Text("replies") }
             }
         }
         composeTestRule.onNodeWithText("home").assertIsDisplayed()
@@ -69,6 +71,12 @@ class RouteCoverageTest {
 
         composeTestRule.runOnIdle { navController.navigate(BvFavoriteRoute("BV1xx")) }
         composeTestRule.onNodeWithText("bv fav").assertIsDisplayed()
+
+        composeTestRule.runOnIdle { navController.navigate(VideoCommentsRoute("BV1xx", 2L)) }
+        composeTestRule.onNodeWithText("comments").assertIsDisplayed()
+
+        composeTestRule.runOnIdle { navController.navigate(VideoCommentRepliesRoute(2L, 3L)) }
+        composeTestRule.onNodeWithText("replies").assertIsDisplayed()
     }
 
     @Test

@@ -85,6 +85,31 @@ data class UpSpaceRoute(val mid: Long)
 @Serializable
 data class VideoDetailRoute(val bvid: String)
 
+/**
+ * BV 评论页路由（详情页右上角菜单进入）。
+ * [aid] 是评论接口要的 oid；[title]/[upMid] 只用于评论页副标题与 UP 标。
+ */
+@Serializable
+data class VideoCommentsRoute(
+    val bvid: String,
+    val aid: Long = 0L,
+    val title: String = "",
+    val upMid: Long = 0L,
+)
+
+/**
+ * 楼中楼详情页路由（评论页预览盒/回复数进入，对 PiliPlus replyReply bottomSheet）。
+ * [aid] 是评论接口要的 oid；[root] 是楼主 rpid；
+ * [title]/[upMid] 只用于副标题与 UP 标。
+ */
+@Serializable
+data class VideoCommentRepliesRoute(
+    val aid: Long,
+    val root: Long,
+    val title: String = "",
+    val upMid: Long = 0L,
+)
+
 /** 收藏夹详情页路由，携带收藏夹 id */
 @Serializable
 data class FavoriteFolderRoute(val folderId: Long)

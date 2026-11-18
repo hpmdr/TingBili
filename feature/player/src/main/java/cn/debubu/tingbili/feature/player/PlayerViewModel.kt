@@ -198,6 +198,10 @@ class PlayerViewModel @Inject constructor(
                 if (track == null) {
                     flowOf(SubState(status = SubtitleLoadState.Empty))
                 } else if (!loggedIn) {
+                    // 未登录直接 NoAuth（UI 显示「登录可享」），连接口都不打：
+                    // B 站 AI 字幕必须登录才下发，UP 主手动字幕游客可读。
+                    // 死 Cookie 时 AI 轨不下发——只有 AI 字幕的视频会落到暂无字幕，
+                    // 看起来像没字幕实际是登录掉了，不要当成视频问题查。
                     flowOf(SubState(status = SubtitleLoadState.NoAuth))
                 } else {
                     flow {

@@ -17,6 +17,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.toRoute
+import cn.debubu.tingbili.feature.detail.CommentRepliesScreen
+import cn.debubu.tingbili.feature.detail.CommentScreen
 import cn.debubu.tingbili.feature.detail.DetailScreen
 import cn.debubu.tingbili.feature.mine.LoginScreen
 import cn.debubu.tingbili.feature.history.HistoryScreen
@@ -162,8 +164,42 @@ fun AppRootNavHost(
                     onBack = { navController.popBackStack() },
                     onPlayNavigate = { navController.navigate(PlayerRoute) { launchSingleTop = true } },
                     onVideoClick = { bvid -> navController.navigate(VideoDetailRoute(bvid)) },
-                    onUpClick = { mid -> navController.navigate(UpSpaceRoute(mid)) }
+                    onUpClick = { mid -> navController.navigate(UpSpaceRoute(mid)) },
+                    onCommentsClick = { target ->
+                        navController.navigate(
+                            VideoCommentsRoute(
+                                bvid = target.bvid,
+                                aid = target.aid,
+                                title = target.title,
+                                upMid = target.upMid,
+                            )
+                        )
+                    },
                 )
+            }
+        }
+        composable<VideoCommentsRoute> {
+            ImageFormatScope(mainViewModel) {
+                CommentScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenReplies = { aid, title, upMid, root ->
+                        if (aid > 0L && root.rpid > 0L) {
+                            navController.navigate(
+                                VideoCommentRepliesRoute(
+                                    aid = aid,
+                                    root = root.rpid,
+                                    title = title,
+                                    upMid = upMid,
+                                )
+                            )
+                        }
+                    },
+                )
+            }
+        }
+        composable<VideoCommentRepliesRoute> {
+            ImageFormatScope(mainViewModel) {
+                CommentRepliesScreen(onBack = { navController.popBackStack() })
             }
         }
         composable<UpSpaceRoute> {

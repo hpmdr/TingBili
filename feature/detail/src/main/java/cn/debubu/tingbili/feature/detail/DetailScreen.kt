@@ -30,10 +30,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -92,6 +95,7 @@ fun DetailScreen(
     onPlayNavigate: () -> Unit = {},
     onVideoClick: (String) -> Unit = {},
     onUpClick: (Long) -> Unit = {},
+    onCommentsClick: (CommentTarget) -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -106,11 +110,14 @@ fun DetailScreen(
     val folders by viewModel.folders.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showFolderPicker by remember { mutableStateOf(false) }
+    var showCommentsMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // 打开页面不自动定位续播项；点了"继续播放"再滚过去（收藏详情同理）
     val scope = rememberCoroutineScope()
     val trackCount = (state as? DetailUiState.Success)?.tracks?.size ?: 0
+    // 评论区入口要 aid/标题/UP：详情没加载完就先禁用菜单，不让用户点进一个空页面
+    val loadedVideo = (state as? DetailUiState.Success)?.video
     fun scrollFocusIntoView() {
         val target = focus?.index ?: return
         if (trackCount <= 1) return
@@ -133,6 +140,37 @@ fun DetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    // 暂时只有一项：查看 BV 评论。后续要加"复制链接/分享"等直接往这里塞
+                    Box {
+                        IconButton(
+                            onClick = { showCommentsMenu = true },
+                            enabled = loadedVideo != null,
+                        ) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(
+                            expanded = showCommentsMenu,
+                            onDismissRequest = { showCommentsMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("查看 BV 评论") },
+                                onClick = {
+                                    showCommentsMenu = false
+                                    val video = loadedVideo ?: return@DropdownMenuItem
+                                    onCommentsClick(
+                                        CommentTarget(
+                                            bvid = video.bvid,
+                                            aid = video.aid,
+                                            title = video.title,
+                                            upMid = video.owner?.mid ?: 0L,
+                                        )
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             )

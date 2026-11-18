@@ -1,6 +1,9 @@
 package cn.debubu.tingbili.data.bilibili
 
 import cn.debubu.tingbili.core.data.Result
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
+import cn.debubu.tingbili.data.bilibili.auth.AuthStore
+import cn.debubu.tingbili.data.bilibili.auth.BiliSession
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -21,6 +24,8 @@ class BiliRepositoryTest {
 
     private lateinit var server: MockWebServer
     private lateinit var repo: BiliRepository
+    private lateinit var api: BiliApi
+    private lateinit var trustCerts: OkHttpClient
 
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; isLenient = true }
 
@@ -44,6 +49,7 @@ class BiliRepositoryTest {
             .sslSocketFactory(clientCerts.sslSocketFactory(), clientCerts.trustManager)
             .hostnameVerifier { _, _ -> true }
             .build()
+        this.trustCerts = trustCerts
 
         val retrofit = Retrofit.Builder()
             .baseUrl(server.url("/"))
@@ -51,6 +57,7 @@ class BiliRepositoryTest {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
         val api = retrofit.create(BiliApi::class.java)
+        this.api = api
         repo = BiliRepository(api, trustCerts, json)
     }
 
@@ -488,6 +495,54 @@ class BiliRepositoryTest {
                 .setResponseCode(200).addHeader("Content-Type", "application/json")
         )
         val r = repo.getBiliHistory(max = 0L, viewAt = 0L)
+        assertTrue(r is Result.Error)
+        assertEquals("账号未登录", (r as Result.Error).msg)
+    }
+
+    // ── 登录失效作废 ──
+
+    private fun authedRepo(): AuthRepository {
+        val auth = AuthRepository(
+            json,
+            object : AuthStore {
+                override fun load(): BiliSession? = null
+                override fun save(session: BiliSession?) { /* 落盘动作由 AuthRepositoryTest 覆盖，这里只验内存 */ }
+            },
+        )
+        auth.save(BiliSession("DEAD", "JCT", 42L))
+        return auth
+    }
+
+    @Test
+    fun `subtitle -101 clears saved login session`() = runTest {
+        val auth = authedRepo()
+        val authed = BiliRepository(api, trustCerts, json, auth = auth)
+        server.enqueue(jsonResponse("""{"code":-101,"message":"账号未登录"}"""))
+
+        val r = authed.listSubtitleTracks("BV1xx", 1L)
+        assertTrue(r is Result.Error)
+        assertEquals("账号未登录", (r as Result.Error).msg)
+        // 登录态已作废：后续请求自动降为游客，不再拿死 Cookie 去撞服务端
+        assertTrue(auth.sessionNow() == null)
+    }
+
+    @Test
+    fun `subtitle 412 keeps saved login session`() = runTest {
+        val auth = authedRepo()
+        val authed = BiliRepository(api, trustCerts, json, auth = auth)
+        server.enqueue(jsonResponse("""{"code":-412,"message":"请求过于频繁，请稍后再试"}"""))
+
+        val r = authed.listSubtitleTracks("BV1xx", 1L)
+        assertTrue(r is Result.Error)
+        // 412 是风控不是过期，绝不能清登录态
+        assertEquals(42L, auth.sessionNow()?.uid)
+    }
+
+    @Test
+    fun `guest -101 does not emit or crash without auth`() = runTest {
+        // repo 是无 auth 的手工构造（默认 null）：游客吃 -101 直接按原错误返回
+        server.enqueue(jsonResponse("""{"code":-101,"message":"账号未登录"}"""))
+        val r = repo.listSubtitleTracks("BV1xx", 1L)
         assertTrue(r is Result.Error)
         assertEquals("账号未登录", (r as Result.Error).msg)
     }

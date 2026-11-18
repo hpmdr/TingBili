@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import cn.debubu.tingbili.core.data.model.Track
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /**
@@ -16,6 +17,8 @@ import kotlinx.serialization.json.Json
  * 进程在中间被杀即出现“队列新、下标旧”的错位）。进度（positionMs 高频 10s 写）
  * 仍放 DataStore，见 PreferencesRepository.lastPositionMs。
  * tracksJson 复用 core:data.model.Track 的 kotlinx 序列化。
+ * 洗牌顺序（SHUFFLE 模式）由 App 自己持有记在这里，Exo 只按顺序放：
+ * MediaController 拿不到也塞不回 Exo 内部牌序，恢复必须靠这套顺序接着走。
  */
 @Entity
 data class PlayQueueSnapshotEntity(
@@ -32,6 +35,8 @@ data class PlayQueueSnapshotEntity(
     val playOrder: Int = 0,
     /** 当前播放列表的随机开关（只管开关，随机方式在播放设置里） */
     val shuffleEnabled: Boolean = false,
+    /** 洗牌顺序：queue 下标排列，当前项为第一位；空 = 未洗牌/纯随机 */
+    val shuffleOrderJson: String = "[]",
     val updatedAt: Long = 0L,
 )
 
@@ -56,6 +61,16 @@ object PlayQueueJson {
 
     fun decode(raw: String): List<Track> = try {
         Json.decodeFromString(ListSerializer(Track.serializer()), raw)
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    /** 洗牌顺序编解码：queue 下标排列；损坏返回空列表（调用方视为未洗牌自愈）。 */
+    fun encodeOrder(order: List<Int>): String =
+        Json.encodeToString(ListSerializer(Int.serializer()), order)
+
+    fun decodeOrder(raw: String): List<Int> = try {
+        Json.decodeFromString(ListSerializer(Int.serializer()), raw)
     } catch (_: Exception) {
         emptyList()
     }

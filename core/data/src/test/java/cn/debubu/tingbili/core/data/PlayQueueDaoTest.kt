@@ -61,4 +61,21 @@ class PlayQueueDaoTest {
     fun `decode corrupt json yields empty`() {
         assertTrue(PlayQueueJson.decode("not-json{{{").isEmpty())
     }
+
+    @Test
+    fun `shuffle order round trips with snapshot`() = runTest {
+        val dao = db().playQueueDao()
+        dao.save(
+            PlayQueueSnapshotEntity(
+                tracksJson = PlayQueueJson.encode(listOf(track("BV1", 1), track("BV1", 2))),
+                currentIndex = 0,
+                shuffleEnabled = true,
+                shuffleOrderJson = PlayQueueJson.encodeOrder(listOf(0, 1)),
+            )
+        )
+        val got = dao.get()!!
+        assertEquals(listOf(0, 1), PlayQueueJson.decodeOrder(got.shuffleOrderJson))
+        // 损坏的顺序串也如实存取，语义校验在 QueueManager 层
+        assertTrue(PlayQueueJson.decodeOrder("not-json{{{").isEmpty())
+    }
 }

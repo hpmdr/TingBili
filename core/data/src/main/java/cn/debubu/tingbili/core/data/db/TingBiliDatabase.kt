@@ -19,7 +19,8 @@ import androidx.room.RoomDatabase
     // v17：PlayUrlCacheEntity 补 bandwidthBps 列（Hi-Res FLAC 容器无码率，播放信息页兜底用）。
     // v18：PlayUrlCacheEntity 补 audioCode 列（底部音质标签显示实际生效档）。
     //      简单加列，写手写迁移避免破坏性升级清掉收藏/历史。
-    version = 18,
+    // v19：PlayQueueSnapshotEntity 补 shuffleOrderJson 列（洗牌顺序 App 自持，杀进程恢复接着走）。
+    version = 19,
     exportSchema = false,
 )
 abstract class TingBiliDatabase : RoomDatabase() {

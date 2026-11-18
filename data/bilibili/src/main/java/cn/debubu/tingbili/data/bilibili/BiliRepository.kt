@@ -18,6 +18,14 @@ import cn.debubu.tingbili.data.bilibili.dto.toAudioOptions
 import cn.debubu.tingbili.data.bilibili.dto.toAudioUrl
 import cn.debubu.tingbili.data.bilibili.dto.toLyricLines
 import cn.debubu.tingbili.data.bilibili.dto.toTracks
+import cn.debubu.tingbili.data.bilibili.auth.AuthRepository
+import cn.debubu.tingbili.data.bilibili.dto.ReplyDetailDto
+import cn.debubu.tingbili.data.bilibili.dto.ReplyMainDto
+import cn.debubu.tingbili.data.bilibili.dto.toCommentDetailPage
+import cn.debubu.tingbili.data.bilibili.dto.toCommentPage
+import cn.debubu.tingbili.data.bilibili.model.CommentDetailPage
+import cn.debubu.tingbili.data.bilibili.model.CommentPage
+import cn.debubu.tingbili.data.bilibili.model.CommentSort
 import cn.debubu.tingbili.data.bilibili.model.LyricLine
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +34,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
@@ -40,7 +49,22 @@ class BiliRepository @Inject constructor(
     private val json: Json = Json { ignoreUnknownKeys = true },
     // 单测注入 StandardTestDispatcher；生产走 Dispatchers.IO（REVIEW_REPORT D-07）
     @Named(cn.debubu.tingbili.core.data.di.DISPATCHER_IO) private val io: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * 登录失效作废器：生产由 Hilt 注入单例 AuthRepository。
+     * 默认 null 是为了不改动十几处测试里的手工构造；手工构造时跳过作废，
+     * 保持原有行为。生产链路恒有值。
+     */
+    private val auth: AuthRepository? = null,
 ) {
+    /**
+     * 每个看到业务 code 的分支都调这里：命中 -101/-111 且本地有会话时，
+     * 作废本地登录态（内存 + 加密存储），后续请求自动降为游客。
+     * 调用方继续按原错误展示即可（稍后再看照旧显示「账号未登录」）。
+     */
+    private fun noteAuth(code: Int) {
+        auth?.invalidateIfSessionExpired(code)
+    }
+
     private val searchMutex = Mutex()
     private var lastSearchAtMs = 0L
 
@@ -63,6 +87,7 @@ class BiliRepository @Inject constructor(
      * 由 PagingSource 退避后提示用户（PiliPlus 同款判定）。
      */
     private fun checkSearchCode(dtoCode: Int, dtoMessage: String, vVoucher: String? = null): String? {
+        noteAuth(dtoCode)
         if (dtoCode == 412 || dtoCode == -412) {
             val detail = dtoMessage.ifBlank { "请求被拦截" }
             throw BiliRateLimitedException("请求太频繁（412），稍后再试：$detail")
@@ -117,6 +142,15 @@ class BiliRepository @Inject constructor(
         const val SEARCH_MIN_INTERVAL_MS = 800L
         /** view / viewDetail 内存 memo TTL：回退/重进详情、历史 N 路回访直接命中，只缓存成功态 */
         const val VIEW_MEMO_TTL_MS = 300_000L
+
+        /** 评论主列表（游标 + mode 排序，匿名可读） */
+        private const val COMMENT_MAIN_URL = "https://api.bilibili.com/x/v2/reply/main"
+        /**
+         * 楼中楼全量（pn 翻页，匿名可读）。
+         * 参数抄 PiliPlus ReplyHttp.replyReplyList：oid + root + pn + type + sort，
+         * 游客态不带 csrf 也能读。
+         */
+        private const val COMMENT_REPLY_URL = "https://api.bilibili.com/x/v2/reply/reply"
     }
 
     private data class ViewEntry(val tracks: List<Track>, val fetchedAtMs: Long)
@@ -135,6 +169,7 @@ class BiliRepository @Inject constructor(
         return try {
             val dto = api.view(bvid)
             if (dto.code != 0) {
+                noteAuth(dto.code)
                 Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
             } else {
                 val tracks = dto.toTracks()
@@ -162,6 +197,7 @@ class BiliRepository @Inject constructor(
         return try {
             val dto = api.view(bvid)
             if (dto.code != 0 || dto.data == null) {
+                noteAuth(dto.code)
                 Result.Error(dto.message.ifBlank { "view failed: code ${dto.code}" })
             } else {
                 val data = dto.data
@@ -200,6 +236,95 @@ class BiliRepository @Inject constructor(
     }
 
     /**
+     * BV 评论（游标分页）。[offset] 首屏传空串，之后传上一页的 [CommentPage.nextOffset]。
+     *
+     * 走 [httpClient] 而不是 Retrofit：`pagination_str` 是一整段 JSON（`{"offset":"..."}`），
+     * 塞进 `@Query` 需要额外包一层编码；这里直接用 HttpUrl 组query，既避免手工拼串，
+     * 也复用拦截器里的 Cookie/UA/Referer（游客态可读，登录态配额更宽松）。
+     *
+     * 注意 oid 是 **aid**（数字），不是 bvid —— 详情页的 view 接口会带回 aid。
+     */
+    suspend fun getComments(
+        aid: Long,
+        sort: CommentSort = CommentSort.HOT,
+        offset: String = "",
+    ): Result<CommentPage> = withContext(io) {
+        if (aid <= 0L) return@withContext Result.Error("BV 号无效，暂时读不到评论")
+        try {
+            val url = COMMENT_MAIN_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("oid", aid.toString())
+                .addQueryParameter("type", "1")
+                .addQueryParameter("mode", sort.mode.toString())
+                .addQueryParameter("pagination_str", paginationJson(offset))
+                .build()
+            httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@use Result.Error("评论加载失败：HTTP ${response.code}")
+                }
+                val text = response.body?.string().orEmpty()
+                if (text.isBlank()) return@use Result.Error("评论加载失败：空响应")
+                val dto = json.decodeFromString<ReplyMainDto>(text)
+                if (dto.code != 0) {
+                    noteAuth(dto.code)
+                    Result.Error(dto.message.ifBlank { "评论加载失败：code ${dto.code}" })
+                } else {
+                    Result.Success(dto.toCommentPage())
+                }
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "评论加载失败", e)
+        }
+    }
+
+    /** 组装 `pagination_str`：offset 是 base64 风格游标，转义引号/反斜杠后塞进 JSON 字符串 */
+    private fun paginationJson(offset: String): String {
+        val escaped = offset.replace("\\", "\\\\").replace("\"", "\\\"")
+        return """{"offset":"$escaped"}"""
+    }
+
+    /**
+     * 楼中楼全量（抄 PiliPlus replyReplyList 的 REST 分支）。
+     * [root] 是楼主 rpid；[pn] 从 1 开始，首屏跟详情接口一次把 root + 第一页一起带回。
+     * root 被删时接口 data.root 为空，转成「评论可能已被删除」错误
+     * （对 PiliPlus jumpToDialogue 失败的 toast）。
+     */
+    suspend fun getCommentReplies(
+        aid: Long,
+        root: Long,
+        pn: Int = 1,
+        ps: Int = 20,
+    ): Result<CommentDetailPage> = withContext(io) {
+        if (aid <= 0L || root <= 0L) return@withContext Result.Error("评论不存在或已被删除")
+        try {
+            val url = COMMENT_REPLY_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("oid", aid.toString())
+                .addQueryParameter("type", "1")
+                .addQueryParameter("root", root.toString())
+                .addQueryParameter("pn", pn.coerceAtLeast(1).toString())
+                .addQueryParameter("ps", ps.coerceIn(1, 20).toString())
+                .addQueryParameter("sort", "1")
+                .build()
+            httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@use Result.Error("评论加载失败：HTTP ${response.code}")
+                }
+                val text = response.body?.string().orEmpty()
+                if (text.isBlank()) return@use Result.Error("评论加载失败：空响应")
+                val dto = json.decodeFromString<ReplyDetailDto>(text)
+                if (dto.code != 0) {
+                    noteAuth(dto.code)
+                    Result.Error(dto.message.ifBlank { "评论加载失败：code ${dto.code}" })
+                } else {
+                    dto.toCommentDetailPage()?.let { Result.Success(it) }
+                        ?: Result.Error("评论可能已被删除")
+                }
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "评论加载失败", e)
+        }
+    }
+
+    /**
      * 取音频直链（主链）：qn 下发偏好档位做服务端鉴权，返回后再按偏好 rank 二次精选（见 selectAudio）。
      * 默认偏好 132K（免登录可得最佳档）；服务端只给低档时诚实回落，不断播。
      * 备链语义见 [getPlayUrls]；这里只给主链，保持老调用方行为不变。
@@ -231,6 +356,7 @@ class BiliRepository @Inject constructor(
     ): Result<PlayCandidates> = try {
         val dto = api.playUrl(bvid, cid, qn = preferQuality, guest = guest)
         if (dto.code != 0) {
+            noteAuth(dto.code)
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
             val selected = dto.selectAudio(preferQuality)
@@ -269,6 +395,7 @@ class BiliRepository @Inject constructor(
     ): Result<List<DashAudio>> = try {
         val dto = api.playUrl(bvid, cid, qn = preferQuality)
         if (dto.code != 0) {
+            noteAuth(dto.code)
             Result.Error(dto.message.ifBlank { "playurl failed: code ${dto.code}" })
         } else {
             Result.Success(dto.toAudioOptions())
@@ -306,6 +433,7 @@ class BiliRepository @Inject constructor(
     suspend fun listSubtitleTracks(bvid: String, cid: Long): Result<List<SubtitleTrack>> = try {
         val dto = api.subtitle(bvid, cid)
         if (dto.code != 0) {
+            noteAuth(dto.code)
             Result.Error(dto.message.ifBlank { "subtitle failed: code ${dto.code}" })
         } else {
             Result.Success(dto.toTracks())
@@ -318,24 +446,30 @@ class BiliRepository @Inject constructor(
 
     suspend fun getAllFavFolders(upMid: Long): Result<List<BiliFavFolder>> = try {
         val dto = api.favFoldersAll(upMid)
-        if (dto.code != 0) Result.Error(dto.message.ifBlank { "fav folders failed: code ${dto.code}" })
-        else Result.Success(dto.toAllFolders())
+        if (dto.code != 0) {
+            noteAuth(dto.code)
+            Result.Error(dto.message.ifBlank { "fav folders failed: code ${dto.code}" })
+        } else Result.Success(dto.toAllFolders())
     } catch (e: Exception) {
         Result.Error(e.message ?: "fav folders failed", e)
     }
 
     suspend fun getFavMedias(mediaId: Long, pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliSpaceVideo>, Boolean>> = try {
         val dto = api.favMedias(mediaId, pn, ps)
-        if (dto.code != 0) Result.Error(dto.message.ifBlank { "fav medias failed: code ${dto.code}" })
-        else Result.Success(dto.toSpaceVideos())
+        if (dto.code != 0) {
+            noteAuth(dto.code)
+            Result.Error(dto.message.ifBlank { "fav medias failed: code ${dto.code}" })
+        } else Result.Success(dto.toSpaceVideos())
     } catch (e: Exception) {
         Result.Error(e.message ?: "fav medias failed", e)
     }
 
     suspend fun getToview(pn: Int = 1, ps: Int = 20): Result<Pair<List<BiliSpaceVideo>, Int>> = try {
         val dto = api.toview(pn, ps)
-        if (dto.code != 0) Result.Error(dto.message.ifBlank { "toview failed: code ${dto.code}" })
-        else Result.Success(dto.toSpaceVideos() to (dto.data?.count ?: 0))
+        if (dto.code != 0) {
+            noteAuth(dto.code)
+            Result.Error(dto.message.ifBlank { "toview failed: code ${dto.code}" })
+        } else Result.Success(dto.toSpaceVideos() to (dto.data?.count ?: 0))
     } catch (e: Exception) {
         Result.Error(e.message ?: "toview failed", e)
     }
@@ -350,8 +484,10 @@ class BiliRepository @Inject constructor(
         ps: Int = 20,
     ): Result<cn.debubu.tingbili.data.bilibili.dto.BiliHistoryDto> = try {
         val dto = api.historyCursor(ps = ps, max = max, viewAt = viewAt)
-        if (dto.code != 0) Result.Error(dto.message.ifBlank { "history failed: code ${dto.code}" })
-        else Result.Success(dto)
+        if (dto.code != 0) {
+            noteAuth(dto.code)
+            Result.Error(dto.message.ifBlank { "history failed: code ${dto.code}" })
+        } else Result.Success(dto)
     } catch (e: Exception) {
         Result.Error(e.message ?: "history failed", e)
     }
