@@ -5,7 +5,11 @@ plugins {
 
 android {
     namespace = "cn.debubu.tingbili.core.biliui"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         minSdk = 31
