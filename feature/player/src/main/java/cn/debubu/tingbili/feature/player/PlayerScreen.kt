@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.feature.player
 
+import android.content.ClipData
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -42,7 +43,7 @@ import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -55,7 +56,8 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -114,6 +116,8 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -126,7 +130,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalTime
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
@@ -153,6 +157,7 @@ fun PlayerScreen(
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
+    val clipboard = LocalClipboard.current
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     // 注意：进度流（1Hz）不在这里订阅——它只被「进度条 / 辅助栏 / 定时弹层」用，
     // 顶层订阅会让整个播放页 body 每秒重跑一次（REVIEW_REPORT B-03）。
@@ -193,6 +198,15 @@ fun PlayerScreen(
     val undoScope = rememberCoroutineScope()
     LaunchedEffect(lyricFullscreen) {
         if (!lyricFullscreen) undoJump = null
+    }
+
+    val onCopyBv: () -> Unit = {
+        trackUi.track?.bvid?.takeIf { it.isNotBlank() }?.let { bv ->
+            undoScope.launch {
+                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("BV号", bv)))
+                TingBiliMessageBus.show("已复制 BV：$bv")
+            }
+        }
     }
 
     val coverModel = trackUi.track?.cover
@@ -510,6 +524,7 @@ fun PlayerScreen(
     }
     if (showMoreSheet) {
         PlayerMoreSheet(
+            bv = trackUi.track?.bvid?.takeIf { it.isNotBlank() },
             refreshing = isRefreshing,
             onRefresh = { vm.refreshBv() },
             onInfo = {
@@ -519,6 +534,10 @@ fun PlayerScreen(
             },
             onDetail = {
                 trackUi.track?.bvid?.takeIf { it.isNotBlank() }?.let(onDetailClick)
+                showMoreSheet = false
+            },
+            onCopyBv = {
+                onCopyBv()
                 showMoreSheet = false
             },
             onSettings = {
@@ -560,14 +579,16 @@ fun PlayerScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerMoreSheet(
+    bv: String?,
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onInfo: () -> Unit,
     onDetail: () -> Unit,
+    onCopyBv: () -> Unit,
     onSettings: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -597,6 +618,13 @@ private fun PlayerMoreSheet(
                 title = "查看 BV 详情",
                 subtitle = "跳转视频详情页",
                 onClick = onDetail,
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+            MoreBareRow(
+                title = "复制 BV",
+                subtitle = bv ?: "当前没有 BV",
+                onClick = onCopyBv,
+                enabled = bv != null,
             )
             MoreGroupTitle("播放")
             MoreBareRow(
@@ -645,7 +673,8 @@ private fun MoreBareRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(2.dp))
             Text(
@@ -679,7 +708,7 @@ private fun PlaybackInfoSheet(
     onBack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -1259,7 +1288,7 @@ private fun PlayerAuxBar(
                 onClick = onTimerClick,
             )
             AuxItem(
-                icon = Icons.Filled.List,
+                icon = Icons.AutoMirrored.Filled.List,
                 label = "章节",
                 tint = idleColor,
                 contentDescription = "章节目录",
@@ -1671,7 +1700,7 @@ private fun SleepTimerSheet(
     val customError = sleepCustomError(customText)
     val validMin = customText.toIntOrNull()?.takeIf { customError == null }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -1884,7 +1913,7 @@ private fun ChapterSheet(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     val listState = rememberLazyListState()
     // 打开时、切顺序、随机跳到新集都定位到当前项（上方留两条上下文）
     LaunchedEffect(currentIndex, playOrder) {

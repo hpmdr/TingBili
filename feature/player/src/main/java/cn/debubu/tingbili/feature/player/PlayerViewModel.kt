@@ -24,6 +24,7 @@ import javax.inject.Named
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -233,7 +234,7 @@ class PlayerViewModel @Inject constructor(
                                     val chosen = tracks.getOrNull(safeIdx)
                                     val lr = chosen?.let { subtitles.linesResult(it.url) }
                                     if (lr is Result.Success && lr.data.isNotEmpty()) {
-                                        subtitles.store(track.bvid, track.cid, tracks, safeIdx, lr.data, chosen!!.displayLabel, chosen.isAi)
+                                        subtitles.store(track.bvid, track.cid, tracks, safeIdx, lr.data, chosen.displayLabel, chosen.isAi)
                                         subtitleFailed = false
                                         emit(SubState(tracks, safeIdx, lr.data, chosen.displayLabel, chosen.isAi, SubtitleLoadState.Ready))
                                     } else if (lr is Result.Error) {
@@ -395,6 +396,7 @@ class PlayerViewModel @Inject constructor(
         val sleepEndOfChapter: Boolean = false,
     )
 
+    @OptIn(FlowPreview::class)
     val progressUi: StateFlow<ProgressUiState> = player.state
         .map { p ->
             ProgressUiState(
