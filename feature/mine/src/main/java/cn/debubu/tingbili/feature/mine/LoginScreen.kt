@@ -30,6 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -61,6 +66,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,6 +76,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,12 +100,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
@@ -797,6 +803,18 @@ private fun PasswordContent(vm: LoginViewModel) {
     var visible by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val working = passwordUi is LoginViewModel.PasswordUi.Working
+    // 密码框迁移到新 TextFieldState：本地缓冲 + 与外部 saveable 状态双向同步，保留转屏恢复
+    val passwordState = rememberTextFieldState(password)
+    LaunchedEffect(password) {
+        if (passwordState.text.toString() != password) {
+            passwordState.setTextAndPlaceCursorAtEnd(password)
+        }
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { passwordState.text.toString() }
+            .distinctUntilChanged()
+            .collect { password = it }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -815,23 +833,23 @@ private fun PasswordContent(vm: LoginViewModel) {
                 imeAction = ImeAction.Next,
             ),
         )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it.filter { c -> !c.isWhitespace() } },
+        OutlinedSecureTextField(
+            state = passwordState,
+            inputTransformation = InputTransformation {
+                val current = toString()
+                val filtered = current.filter { c -> !c.isWhitespace() }
+                if (current != filtered) replace(0, length, filtered)
+            },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("密码") },
-            singleLine = true,
             shape = RoundedCornerShape(14.dp),
             colors = loginFieldColors(),
-            visualTransformation = if (visible) VisualTransformation.None
-            else PasswordVisualTransformation(),
+            textObfuscationMode = if (visible) TextObfuscationMode.Visible else TextObfuscationMode.Hidden,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    focusManager.clearFocus()
-                    vm.submitPassword(username, password)
-                },
-            ),
+            onKeyboardAction = KeyboardActionHandler {
+                focusManager.clearFocus()
+                vm.submitPassword(username, password)
+            },
             trailingIcon = {
                 IconButton(onClick = { visible = !visible }) {
                     Icon(

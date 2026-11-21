@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
@@ -66,6 +69,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,7 +80,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -351,6 +356,18 @@ private fun HomeSearchEntry(
     modifier: Modifier = Modifier,
     onTitleDoubleClick: () -> Unit = {}
 ) {
+    // 新 TextFieldState API：本地持有输入缓冲，与外部提升的 input 双向同步。
+    val textFieldState = rememberTextFieldState(input)
+    LaunchedEffect(input) {
+        if (textFieldState.text.toString() != input) {
+            textFieldState.setTextAndPlaceCursorAtEnd(input)
+        }
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { textFieldState.text.toString() }
+            .distinctUntilChanged()
+            .collect { onInputChange(it) }
+    }
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -368,20 +385,19 @@ private fun HomeSearchEntry(
         // 用 BasicTextField 自绘外壳：M3 TextField 自带 56dp 最小高度 + 大内边距，
         // 在首页顶栏显得过胖；这里高度完全由内容决定（约 34~36dp），贴合文字行高
         BasicTextField(
-            value = input,
-            onValueChange = onInputChange,
+            state = textFieldState,
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
                 .onFocusChanged { onFocusChange(it.isFocused) },
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             textStyle = MaterialTheme.typography.bodyMedium.copy(
                 color = MaterialTheme.colorScheme.onSurface
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
-            decorationBox = { innerTextField ->
+            onKeyboardAction = KeyboardActionHandler { onSubmit() },
+            decorator = { innerTextField ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -399,7 +415,7 @@ private fun HomeSearchEntry(
                     )
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.weight(1f)) {
-                        if (input.isEmpty()) {
+                        if (textFieldState.text.isEmpty()) {
                             Text(
                                 text = placeholder,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -410,7 +426,7 @@ private fun HomeSearchEntry(
                         }
                         innerTextField()
                     }
-                    if (input.isNotEmpty()) {
+                    if (textFieldState.text.isNotEmpty()) {
                         Spacer(Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Default.Clear,

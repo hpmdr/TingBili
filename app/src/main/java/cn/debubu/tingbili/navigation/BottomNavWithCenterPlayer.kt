@@ -3,11 +3,11 @@ package cn.debubu.tingbili.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
+import androidx.compose.material.icons.automirrored.outlined.ManageSearch
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -20,7 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import cn.debubu.tingbili.core.media.PlayerManager
@@ -51,7 +51,7 @@ fun MainBottomNav(
             onClick = homeTabClick,
             icon = {
                 Icon(
-                    imageVector = if (isHomeSelected) Icons.Filled.ManageSearch else Icons.Outlined.ManageSearch,
+                    imageVector = if (isHomeSelected) Icons.AutoMirrored.Filled.ManageSearch else Icons.AutoMirrored.Outlined.ManageSearch,
                     contentDescription = null
                 )
             },

@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
@@ -16,11 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
+import androidx.compose.material.icons.automirrored.outlined.ManageSearch
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -53,7 +53,7 @@ fun MainTabsScaffold(
     pagerState: PagerState,
     viewModel: MainViewModel = hiltViewModel(),
 ) {
-    val adaptiveInfo = currentWindowAdaptiveInfo()
+    val adaptiveInfo = currentWindowAdaptiveInfoV2()
     // 宽 >= 600dp 一律 Rail：实测本机横屏（约 904dp）官方默认映射仍返回
     // NavigationBar，且 Expanded 会走向抽屉——手机横屏要的是左侧 Rail。
     val layoutType = if (!adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(600)) {
@@ -113,7 +113,7 @@ fun MainTabsScaffold(
                     onClick = homeTabClick,
                     icon = {
                         Icon(
-                            imageVector = if (isHomeSelected) Icons.Filled.ManageSearch else Icons.Outlined.ManageSearch,
+                            imageVector = if (isHomeSelected) Icons.AutoMirrored.Filled.ManageSearch else Icons.AutoMirrored.Outlined.ManageSearch,
                             contentDescription = null
                         )
                     },

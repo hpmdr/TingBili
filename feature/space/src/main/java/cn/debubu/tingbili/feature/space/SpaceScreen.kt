@@ -25,8 +25,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -52,6 +55,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,7 +71,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -485,6 +490,17 @@ private fun SortSection(
 @Composable
 private fun SpaceSearchField(onSearch: (String) -> Unit, onClose: () -> Unit) {
     var input by rememberSaveable { mutableStateOf("") }
+    val textFieldState = rememberTextFieldState(input)
+    LaunchedEffect(input) {
+        if (textFieldState.text.toString() != input) {
+            textFieldState.setTextAndPlaceCursorAtEnd(input)
+        }
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { textFieldState.text.toString() }
+            .distinctUntilChanged()
+            .collect { input = it }
+    }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Row(
@@ -505,9 +521,8 @@ private fun SpaceSearchField(onSearch: (String) -> Unit, onClose: () -> Unit) {
         )
         Spacer(Modifier.width(6.dp))
         BasicTextField(
-            value = input,
-            onValueChange = { input = it },
-            singleLine = true,
+            state = textFieldState,
+            lineLimits = TextFieldLineLimits.SingleLine,
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester),
@@ -516,10 +531,10 @@ private fun SpaceSearchField(onSearch: (String) -> Unit, onClose: () -> Unit) {
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch(input) }),
-            decorationBox = { innerTextField ->
+            onKeyboardAction = KeyboardActionHandler { onSearch(textFieldState.text.toString()) },
+            decorator = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (input.isEmpty()) {
+                    if (textFieldState.text.isEmpty()) {
                         Text(
                             text = "搜索该UP主的音频视频…",
                             style = MaterialTheme.typography.bodySmall,
@@ -535,6 +550,7 @@ private fun SpaceSearchField(onSearch: (String) -> Unit, onClose: () -> Unit) {
         IconButton(
             onClick = {
                 input = ""
+                textFieldState.setTextAndPlaceCursorAtEnd("")
                 onClose()
             },
             modifier = Modifier.size(28.dp)
