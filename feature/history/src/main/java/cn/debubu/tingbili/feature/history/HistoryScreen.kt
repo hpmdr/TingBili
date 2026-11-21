@@ -40,7 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.db.HistoryEntity
 import cn.debubu.tingbili.core.data.model.Track
@@ -160,7 +160,7 @@ private fun HistoryRow(
         // 单 P 不显示 P1，与播放页/迷你/通知栏统一
         val page = track?.let { episodePageLabel(it.title, it.videoTitle, it.pageIndex) }
         "上次听到 " + playedProgressLabel(
-            pageIndex = if (page != null) track?.pageIndex else null,
+            pageIndex = if (page != null) track.pageIndex else null,
             positionMs = entity.positionMs,
             durationMs = track?.durationMs,
         )

@@ -149,7 +149,7 @@ class DetailViewModel @Inject constructor(
                     val video = result.data
                     _state.value = DetailUiState.Success(video, video.toTracks())
                 }
-                is Result.Error -> _state.value = DetailUiState.Error(result.msg ?: "加载失败")
+                is Result.Error -> _state.value = DetailUiState.Error(result.msg)
             }
         }
     }
@@ -167,7 +167,7 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repo.getRelated(bvid)) {
                 is Result.Success -> _related.value = RelatedUiState.Success(result.data)
-                is Result.Error -> _related.value = RelatedUiState.Error(result.msg ?: "加载失败")
+                is Result.Error -> _related.value = RelatedUiState.Error(result.msg)
             }
         }
     }

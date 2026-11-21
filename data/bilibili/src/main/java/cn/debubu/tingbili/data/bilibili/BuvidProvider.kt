@@ -59,10 +59,10 @@ open class BuvidProvider(
     private fun loadPersisted(): String? {
         val b3 = prefs?.getString(KEY_BUVID3, null) ?: return null
         if (b3.isBlank()) return null
-        val b4 = prefs?.getString(KEY_BUVID4, null).orEmpty()
+        val b4 = prefs.getString(KEY_BUVID4, null).orEmpty()
         // b_nut 是 buvid 的签发时刻，必须稳定；老版本没存过就只好以当前时间为准并补写
-        val nut = prefs?.getLong(KEY_BNUT, 0L)?.takeIf { it > 0L } ?: nowSec().also {
-            prefs?.edit()?.putLong(KEY_BNUT, it)?.apply()
+        val nut = prefs.getLong(KEY_BNUT, 0L).takeIf { it > 0L } ?: nowSec().also {
+            prefs.edit().putLong(KEY_BNUT, it).apply()
         }
         return buildCookie(b3, b4, nut)
     }
@@ -99,7 +99,7 @@ open class BuvidProvider(
             .build()
         client.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val root = json.parseToJsonElement(resp.body?.string() ?: return null).jsonObject
+            val root = json.parseToJsonElement(resp.body.string()).jsonObject
             val data = root["data"]?.jsonObject ?: return null
             val b3 = data["b_3"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() } ?: return null
             val b4 = data["b_4"]?.jsonPrimitive?.content ?: ""

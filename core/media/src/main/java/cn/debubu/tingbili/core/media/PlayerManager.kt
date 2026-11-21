@@ -723,13 +723,13 @@ class PlayerManager @Inject constructor(
      * 收藏夹/BV 的来源顺序不受影响。
      */
     suspend fun setPlayOrder(order: PlayOrder) = playMutex.withLock {
-        if (order == queueManager.playOrder) return
+        if (order == queueManager.playOrder) return@withLock
         // 切顺序前先对表，避免用 500ms 前的缓存位置重建
         syncPositionFromPlayer(force = true)
         val pos = _state.value.positionMs
         val playing = _state.value.isPlaying
         queueManager.setPlayOrder(order)
-        if (queue.isEmpty()) return
+        if (queue.isEmpty()) return@withLock
         rebuildTransport(queueManager.currentIndex, pos, playing)
     }
 

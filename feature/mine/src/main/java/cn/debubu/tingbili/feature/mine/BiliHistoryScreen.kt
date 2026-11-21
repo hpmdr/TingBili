@@ -9,7 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -57,7 +57,7 @@ class BiliHistoryViewModel @Inject constructor(
         _error.value = null
         viewModelScope.launch {
             when (val r = repo.getBiliHistory(ps = 20, max = 0L, viewAt = 0L)) {
-                is cn.debubu.tingbili.core.data.Result.Error -> _error.value = r.msg ?: "加载失败"
+                is cn.debubu.tingbili.core.data.Result.Error -> _error.value = r.msg
                 is cn.debubu.tingbili.core.data.Result.Success -> {
                     val dto = r.data
                     val items = dto.data?.list.orEmpty()

@@ -74,7 +74,7 @@ class WbiSigner(
             .build()
         navClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val root = json.parseToJsonElement(resp.body?.string() ?: return null).jsonObject
+            val root = json.parseToJsonElement(resp.body.string()).jsonObject
             // 匿名时 code=-101，但 data.wbi_img 仍然返回
             val wbi = root["data"]?.jsonObject?.get("wbi_img")?.jsonObject ?: return null
             val imgKey = wbi["img_url"]?.jsonPrimitive?.content

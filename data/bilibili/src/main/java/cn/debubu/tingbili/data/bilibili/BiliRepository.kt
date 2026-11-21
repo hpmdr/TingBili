@@ -261,7 +261,7 @@ class BiliRepository @Inject constructor(
                 if (!response.isSuccessful) {
                     return@use Result.Error("评论加载失败：HTTP ${response.code}")
                 }
-                val text = response.body?.string().orEmpty()
+                val text = response.body.string()
                 if (text.isBlank()) return@use Result.Error("评论加载失败：空响应")
                 val dto = json.decodeFromString<ReplyMainDto>(text)
                 if (dto.code != 0) {
@@ -308,7 +308,7 @@ class BiliRepository @Inject constructor(
                 if (!response.isSuccessful) {
                     return@use Result.Error("评论加载失败：HTTP ${response.code}")
                 }
-                val text = response.body?.string().orEmpty()
+                val text = response.body.string()
                 if (text.isBlank()) return@use Result.Error("评论加载失败：空响应")
                 val dto = json.decodeFromString<ReplyDetailDto>(text)
                 if (dto.code != 0) {
@@ -507,7 +507,7 @@ class BiliRepository @Inject constructor(
         try {
             httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
                 if (!response.isSuccessful) return@use Result.Error("字幕下载失败：${response.code}")
-                val text = response.body?.string().orEmpty()
+                val text = response.body.string()
                 if (text.isBlank()) return@use Result.Success(emptyList())
                 try {
                     Result.Success(json.decodeFromString<SubtitleFile>(text).toLyricLines())
