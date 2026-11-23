@@ -588,7 +588,12 @@ private fun PlayerMoreSheet(
     onSettings: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    // 只开放 Hidden/Expanded：等价于旧 API 的 skipPartiallyExpanded=true。
+    // 若保留 PartiallyExpanded 锚点，show() 会停在半屏，且返回键先收半屏再关闭（要点两次）。
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -708,7 +713,12 @@ private fun PlaybackInfoSheet(
     onBack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    // 只开放 Hidden/Expanded：等价于旧 API 的 skipPartiallyExpanded=true。
+    // 若保留 PartiallyExpanded 锚点，show() 会停在半屏，且返回键先收半屏再关闭（要点两次）。
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -1700,7 +1710,12 @@ private fun SleepTimerSheet(
     val customError = sleepCustomError(customText)
     val validMin = customText.toIntOrNull()?.takeIf { customError == null }
     // 内容高于半屏（运行中多一行状态），直接全展开，免得确定按钮被半屏卡掉
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    // 只开放 Hidden/Expanded：等价于旧 API 的 skipPartiallyExpanded=true。
+    // 若保留 PartiallyExpanded 锚点，show() 会停在半屏，且返回键先收半屏再关闭（要点两次）。
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -1913,7 +1928,12 @@ private fun ChapterSheet(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    // 只开放 Hidden/Expanded：等价于旧 API 的 skipPartiallyExpanded=true。
+    // 若保留 PartiallyExpanded 锚点，show() 会停在半屏，且返回键先收半屏再关闭（要点两次）。
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     val listState = rememberLazyListState()
     // 打开时、切顺序、随机跳到新集都定位到当前项（上方留两条上下文）
     LaunchedEffect(currentIndex, playOrder) {

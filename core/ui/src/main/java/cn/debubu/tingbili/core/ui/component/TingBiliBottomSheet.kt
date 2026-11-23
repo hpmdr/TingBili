@@ -39,7 +39,12 @@ fun TingBiliBottomSheet(
     actions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    // 只开放 Hidden/Expanded：等价于旧 API 的 skipPartiallyExpanded=true。
+    // 若保留 PartiallyExpanded 锚点，show() 会停在半屏，且返回键先收半屏再关闭（要点两次）。
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
