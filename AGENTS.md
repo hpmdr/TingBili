@@ -6,12 +6,17 @@ B 站专用音频播放器（非官方，仅供学习交流，禁止商用）。
 ## 命令
 
 ```bash
-# 日常迭代（本机调试）：保留 Gradle daemon，只出 debug 包
-./gradlew :app:installDebug
+# 日常迭代（本机调试）：只出 debug 包
+./gradlew :app:installDebug --no-daemon
 # 提交前门禁 / CI：无 daemon + 全量
 ./gradlew assembleDebug --no-daemon --stacktrace
 ./gradlew :core:data:testDebugUnitTest :core:media:testDebugUnitTest --no-daemon --stacktrace
 ```
+
+**所有构建一律加 `--no-daemon`**（2026-11-23 决定）：本机内存紧张（29Gi，常驻程序已占 ~10Gi），
+保留 daemon 会常驻 2.5GB+，叠加 Kotlin daemon / R8 的全量构建峰值曾把系统压到 swap 打满、
+MiMo Desktop 被 OOM 杀死。无 daemon 每次构建后 JVM 立即退出、内存归还，代价是冷启动多约 10s，
+换来内存安全，值得。
 
 全量 `./gradlew testDebugUnitTest` 很重，留给 CI 跑。CI 流程看 `.github/workflows/ci.yml`。
 **依赖版本**统一在 `gradle/libs.versions.toml` 维护；**应用版本号**（versionName/Code）
@@ -42,10 +47,8 @@ nice -n 19 ./gradlew assembleDebug --console=plain
 真要硬性封顶只能用 OS 层 cgroup（`systemd-run --scope -p AllowedCPUs=0-7 ./gradlew ...`），
 或改 `kotlin.compiler.execution.strategy=in-process` 把编译拉回 daemon 内（会加大 daemon 内存压力）。
 
-- **`nice` 对已存在的 daemon 无效**：nice 值属于进程，daemon 若此前以 nice 0 启动，
-  后续 `nice` 只影响它 fork 出的子进程。实测影响不大（daemon 多数时间在等 worker，
-  且 Kotlin daemon 会继承父进程 nice），不必为限流去 `--stop` 重启。
-- 日常用 **daemon**（保留 JVM），不要为了「干净」反复 `--no-daemon`：每次 fork 一个 JVM 的 CPU 抖动比增量构建更大。
+- **构建一律 `--no-daemon`**（见「命令」节原因）；每次 fork JVM 的 CPU 抖动远小于 daemon 常驻
+  2.5GB 挤爆内存导致 OOM 的代价。
 - 攒着改一起验证，**不要一步一构建**；纯文档/单模块改动只跑目标任务，别动全量。
 - 跑之前说一句「要构建，约 N 秒」，跑完再说结果——用户在游戏时尤其如此。
 
@@ -58,8 +61,13 @@ nice -n 19 ./gradlew assembleDebug --console=plain
 
 ## 环境（先探测，不假设）
 
-- 先跑 `java -version` 确认；字节码目标是 17，构建一律用 `./gradlew`。日常调试可保留 daemon（`./gradlew :app:installDebug`）；提交前门禁/CI 用 `--no-daemon`。如报工具链错误，以报错信息和 `gradle/wrapper/gradle-wrapper.properties` 为准对齐 JDK，不要跟本文件较劲。
-- SDK 通过 `ANDROID_HOME` / `local.properties` 解析（`local.properties` 各机器不同，不入库）。缺组件看 `README.md` 快速开始。
+- **用户刚克隆仓库、或环境可能变化时，先逐项核对本地开发环境与 README「开发环境要求」节是否相符**
+  （JDK 25 / android-37.2 / build-tools 36.0.0 / platform-tools / android CLI 1.1+ / Gradle wrapper 版本 / 内存）。
+  若发现任何不符（版本偏旧或缺失），**不要自行降级项目配置、不要改代码将就、也不要擅自下载安装或改系统配置**——
+  先用一句话列出「哪项不符 / 本机实际版本 / 推荐版本」，询问用户怎么办，等用户拍板再动手。
+  用户明确同意后才安装/升级环境，或调整项目配置。
+- 构建 JDK 25 + 字节码目标 Java 25（toolchain 自动探测；本机探测路径在 `~/.gradle/gradle.properties` 的 `org.gradle.java.installations.paths`，不入库）。构建一律 `./gradlew ... --no-daemon`（内存原因见「命令」节），如报工具链错误，以报错信息和 `gradle/wrapper/gradle-wrapper.properties` 为准对齐 Gradle 版本，不要跟本文件较劲。
+- SDK 通过 `ANDROID_HOME` / `local.properties` 解析（`local.properties` 各机器不同，不入库）。缺组件看 `README.md`「开发环境要求」与 `docs/DEVELOPMENT.md`。
 - **SDK 组件管理一律用新版 `android` CLI**（1.1+，含 `sdk install` / `update` / `remove` / `list`）。
   旧 `sdkmanager` 已废弃（会打印弃用警告且首次执行易卡死），**禁止再用**。网络操作加 `timeout`。
 - **`android` CLI 与 Gradle 的 SDK 定位方式不同**：CLI 不读 `local.properties`（那是 Gradle 专用），
@@ -71,6 +79,7 @@ nice -n 19 ./gradlew assembleDebug --console=plain
 
 ## 规则
 
+- **技术栈一律追最新**：最新的技术、最新的库、最新的 SDK（用户明确要求）。依赖/插件版本以 `gradle/libs.versions.toml` 为唯一事实源；JDK 25 + toolchain 25 + `jvmTarget JVM_25`；compileSdk/targetSdk 跟进最新稳定版。遇到"最新特性是否有坑"时优先实测验证可行性，而不是保守降级。
 - 只用相对路径。禁止把本机绝对路径、个人工具链、密钥写进仓库。
 - `build/ .gradle/ .idea/ local.properties *.apk *.log .superpowers/ .codebuddy/` 不提交（见 `.gitignore`）。
 - 单人开发：直接提交 `master`，不走分支、不开 PR，一次改动一个提交。提交信息 `feat/fix/docs/test/refactor/chore(范围): 简述`。提交前门禁绿 + 相关单测绿 + `git status` 干净（`gradlew` 可执行位 100755 别提交成 100644，否则 Linux CI 跑不了）。

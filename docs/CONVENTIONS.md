@@ -6,8 +6,8 @@
 ## 1. 工具链
 
 - 版本以 `gradle/libs.versions.toml` 为唯一事实源（本文件不再抄版本号，避免两处跑偏）。升版本只改 toml。
-- `gradle.properties`：`Xmx2g`、`parallel=true`、`caching=true`、`daemon.idletimeout=3h`、`configureondemand=false`（为将来开配置缓存留路）。Agent 单次构建加 `--no-daemon`。
-- `compileSdk 37 / minSdk 31 / targetSdk 37`，`jvmTarget 17`（构建用 JDK 25）。改这些是正式 PR，不是修构建的手段。
+- `gradle.properties`：`Xmx2g`、`parallel=true`、`caching=true`、`configureondemand=false`（为将来开配置缓存留路）。**所有构建一律 `--no-daemon`**（本机内存紧张，daemon 常驻 2.5GB+ 曾挤爆内存导致 OOM）。
+- `compileSdk 37.2 / minSdk 31 / targetSdk 37`，`jvmTarget 25` + Gradle toolchain 25（构建 JDK 25）。改这些是正式 PR，不是修构建的手段。
 
 ## 2. 模块
 

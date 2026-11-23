@@ -2,7 +2,7 @@
 
 > 普通用户请看 [README](../README.md)，这里只写开发相关的东西。
 
-- 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 37 / compileSdk 37 / Java 17`
+- 包名 `cn.debubu.tingbili` · `minSdk 31 (Android 12) / targetSdk 37 / compileSdk 37.2 / Java 25`
 - 技术栈：Kotlin + Compose (Material3, dynamicColor) + Navigation + Hilt + Room + DataStore + Media3 + Retrofit/OkHttp + Coil + Paging3
   （依赖与插件版本统一在 `gradle/libs.versions.toml` 维护，文档里不再重复，免得两处跑偏）
 - 架构：`app` 壳 + `core:ui/media/data/bili-ui` + `feature:home/favorites/history/player/mine/detail/space` + `data:bilibili`（特性模块化 Clean Architecture）
@@ -10,10 +10,10 @@
 ## 构建与测试
 
 ```bash
-# 需 JDK 25（构建；字节码目标保持 Java 17）+ Android SDK cmdline-tools
+# 需 JDK 25（toolchain + 字节码目标均 Java 25）+ Android SDK cmdline-tools
 # 推荐使用新 CLI（sdkmanager 已废弃）： $ANDROID_HOME/cmdline-tools/latest/bin/android
-# 组件与 CI 保持一致：compileSdk 37 解析到 platforms;android-37.0，AGP 9.4 默认 build-tools 36.0.0
-android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+# 组件与 CI 保持一致：compileSdk 37.2 解析到 platforms;android-37.2，AGP 9.4 默认 build-tools 36.0.0
+android sdk install "platform-tools" "platforms;android-37.2" "build-tools;36.0.0"
 ./gradlew assembleDebug --no-daemon   # 轻量门禁，全部命中缓存时约 30s
 ./gradlew :feature:history:assembleDebug :feature:player:assembleDebug --no-daemon
 # 全量测试较重，建议 CI 跑： ./gradlew testDebugUnitTest --no-daemon
@@ -21,10 +21,10 @@ android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.
 
 ## 多电脑开发
 
-- 另一台电脑：装 JDK 25 + SDK（`platforms;android-37.0`、`build-tools;36.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.8.0 由 wrapper 自动下载）。
+- 另一台电脑：装 JDK 25 + SDK（`platforms;android-37.2`、`build-tools;36.0.0`、`platform-tools`），配好 `ANDROID_HOME`，各自写 `local.properties`（不入库），`git clone` 后直接 `./gradlew assembleDebug --no-daemon`（Gradle 9.9.2 由 wrapper 自动下载）。
 - debug 签名已统一为仓库内 `app/debug.keystore`，多台电脑编出的测试包签名一致，同一部测试机换电脑装包无需卸载重装。release 签名严禁入库。
 
-国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`）；`gradle.properties` 限 `Xmx2g`、开 `parallel` 与构建缓存，daemon 保留 3 小时（CI 用 `--no-daemon`）。
+国内构建已配置 `aliyun` 镜像优先（`settings.gradle.kts`）；`gradle.properties` 限 `Xmx2g`、开 `parallel` 与构建缓存。**所有构建一律 `--no-daemon`**（本机内存紧张，保留 daemon 常驻 2.5GB+ 叠加全量构建峰值曾挤爆内存，详见 AGENTS.md）；JDK 25 由 Gradle toolchain 自动探测，本机路径配置在 `~/.gradle/gradle.properties` 的 `org.gradle.java.installations.paths`（不入库）。
 
 ## 模块
 

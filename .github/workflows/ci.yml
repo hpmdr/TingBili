@@ -47,11 +47,11 @@ jobs:
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
       # 新版 android CLI（sdkmanager 已废弃）会自行接受许可，不再需要 `sdkmanager --licenses`。
-      # 装的组件与本地实测一致：compileSdk 37 会解析到 platforms;android-37.0，AGP 9.4 默认 build-tools 36.0.0。
+      # 装的组件与本地实测一致：compileSdk 37.2 解析到 platforms;android-37.2，AGP 9.5 默认 build-tools 36.0.0。
       - name: Install SDK components
         run: |
           set -euo pipefail
-          android sdk install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+          android sdk install "platform-tools" "platforms;android-37.2" "build-tools;36.0.0"
       - name: Assemble Debug (lightweight gate)
         run: ./gradlew assembleDebug --no-daemon --stacktrace
       # 只编译全部模块的测试源码、不执行：拦住「测试没跟上主源码」的腐化。
