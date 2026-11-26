@@ -9,6 +9,8 @@ data class Track(
     val title: String,
     val author: String,
     val cover: String,
+    /** 当前分 P 的首帧预览图；播放封面可与 BV 封面分开选择。 */
+    val firstFrame: String? = null,
     val durationMs: Long,
     val subtitleUrl: String?,
     /** 分 P 数量，多 P 视频大于 1（搜索/详情接口返回） */

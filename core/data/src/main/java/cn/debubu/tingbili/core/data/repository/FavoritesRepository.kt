@@ -252,6 +252,8 @@ private fun Track.toEntity(folderId: Long, order: Int): FavoriteTrackEntity =
         durationMs = durationMs,
         videoTitle = videoTitle,
         pageIndex = pageIndex,
+        pageCount = pageCount,
+        firstFrame = firstFrame,
         order = order,
     )
 
@@ -276,6 +278,7 @@ private fun BvFavoriteSnapshot.toPageEntities(): List<BvFavoritePageEntity> =
             pageIndex = page.pageIndex,
             title = page.title,
             durationMs = page.durationMs,
+            firstFrame = page.firstFrame,
             order = index,
         )
     }

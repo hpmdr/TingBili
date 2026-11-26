@@ -43,6 +43,8 @@ data class FavoriteTrackEntity(
     val durationMs: Long = 0,
     val videoTitle: String? = null,
     val pageIndex: Int? = null,
+    @ColumnInfo(defaultValue = "1") val pageCount: Int = 1,
+    val firstFrame: String? = null,
     val order: Int = 0,
 )
 
@@ -78,6 +80,7 @@ data class BvFavoritePageEntity(
     val pageIndex: Int,
     val title: String,
     val durationMs: Long = 0,
+    val firstFrame: String? = null,
     val order: Int = 0,
 )
 

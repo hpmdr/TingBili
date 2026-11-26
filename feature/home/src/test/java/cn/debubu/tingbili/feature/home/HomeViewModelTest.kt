@@ -227,7 +227,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
     @Test
     fun `snapshot with matching keyword is used as first screen`() = runTest(dispatcher) {
         prefs.clearSearchHistory()
-        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", durationMs = 60000, subtitleUrl = null))
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
         snapshotDao.entity = HomeSnapshotEntity(
             keywordsJson = json.encodeToString(listOf("有声小说")),
@@ -349,7 +349,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
         val source = SearchPagingSource(repo, "有声小说")
         val state = PagingState<Int, Track>(
             pages = listOf(
-                PagingSource.LoadResult.Page(data = listOf(Track("BV1", 1, "t", "a", "", 0, null)), prevKey = null, nextKey = 2)
+                PagingSource.LoadResult.Page(data = listOf(Track("BV1", 1, "t", "a", "", durationMs = 0, subtitleUrl = null)), prevKey = null, nextKey = 2)
             ),
             anchorPosition = 0,
             config = androidx.paging.PagingConfig(20),
@@ -361,7 +361,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
 
     @Test
     fun `snapshot loads at startup when cached`() = runTest(dispatcher) {
-        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))
+        val tracks = listOf(Track("BV1xx", 1001, "T1", "a", "", durationMs = 60000, subtitleUrl = null))
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
         snapshotDao.entity = HomeSnapshotEntity(
             keywordsJson = json.encodeToString(listOf("有声小说")),
@@ -406,7 +406,7 @@ class FakeHomeSnapshotDao : HomeSnapshotDao, cn.debubu.tingbili.core.data.reposi
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; coerceInputValues = true }
         snapshotDao.entity = HomeSnapshotEntity(
             keywordsJson = json.encodeToString(listOf("别的词")),
-            tracksJson = json.encodeToString(listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null))),
+            tracksJson = json.encodeToString(listOf(Track("BV1xx", 1001, "T1", "a", "", durationMs = 60000, subtitleUrl = null))),
             updatedAt = System.currentTimeMillis()
         )
         val vm = HomeViewModel(repo, prefs, player, snapshotDao, cn.debubu.tingbili.core.ui.HomeScrollTopBus())

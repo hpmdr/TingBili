@@ -2,6 +2,7 @@ package cn.debubu.tingbili.core.media
 
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import java.io.IOException
@@ -47,7 +48,11 @@ class PlayUrlPipelineTest {
             return nextUrl?.let { ResolvedAudio(it) }
         }
         override suspend fun tracksOf(bvid: String): List<Track> = catalog
-        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
+        val artworkInputs = mutableListOf<String>()
+        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? {
+            artworkInputs += cover
+            return null
+        }
     }
 
     private lateinit var cache: FakeCache
@@ -63,7 +68,8 @@ class PlayUrlPipelineTest {
         audioUrls = AudioUrlResolver(resolvers, cache)
     }
 
-    private fun track(cid: Long = 1L) = Track("BV1", cid, "t", "a", "", 1000, null)
+    private fun track(cid: Long = 1L) =
+        Track("BV1", cid, "t", "a", "", durationMs = 1000, subtitleUrl = null)
 
     @Test
     fun `buildItem metadata title uses queue number when provided`() {
@@ -109,6 +115,34 @@ class PlayUrlPipelineTest {
     }
 
     @Test
+    fun `notification artwork follows cover mode and single part exception`() {
+        val multi = track(1).copy(cover = "bv", firstFrame = "first", pageCount = 2)
+        pipeline.buildItem(
+            multi,
+            ImageFormat.WEBP,
+            30232,
+            coverDisplayMode = CoverDisplayMode.FIRST_FRAME,
+            singlePartUsesBvCover = true,
+        )
+        pipeline.buildItem(
+            multi.copy(pageCount = 1),
+            ImageFormat.WEBP,
+            30232,
+            coverDisplayMode = CoverDisplayMode.FIRST_FRAME,
+            singlePartUsesBvCover = true,
+        )
+        pipeline.buildItem(
+            multi,
+            ImageFormat.WEBP,
+            30232,
+            coverDisplayMode = CoverDisplayMode.BV_COVER,
+            singlePartUsesBvCover = false,
+        )
+
+        assertEquals(listOf("first", "bv", "bv"), resolvers.artworkInputs)
+    }
+
+    @Test
     fun `fresh cache skips network`() {
         cache.map["BV1:1"] =
             PlayUrlCacheEntity("BV1:1", "http://cached/x.mp3", System.currentTimeMillis(), 96_000)
@@ -146,7 +180,7 @@ class PlayUrlPipelineTest {
     @Test
     fun `resolveCid fills from catalog`() = runTest {
         resolvers.catalog = listOf(track(7).copy(durationMs = 5000))
-        val r = pipeline.resolveCid(Track("BV1", 0, "t", "a", "", 0, null))
+        val r = pipeline.resolveCid(Track("BV1", 0, "t", "a", "", durationMs = 0, subtitleUrl = null))
         assertEquals(7L, r.cid)
         assertEquals(5000L, r.durationMs)
     }

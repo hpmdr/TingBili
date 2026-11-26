@@ -25,6 +25,7 @@ data class BvFavoritePageSnapshot(
     val pageIndex: Int,
     val title: String,
     val durationMs: Long,
+    val firstFrame: String? = null,
 )
 
 data class AddTracksResult(
@@ -38,10 +39,12 @@ fun FavoriteTrackEntity.toTrack(): Track = Track(
     title = title,
     author = author,
     cover = cover,
+    firstFrame = firstFrame,
     durationMs = durationMs,
     subtitleUrl = null,
     videoTitle = videoTitle,
     pageIndex = pageIndex,
+    pageCount = pageCount,
 )
 
 fun BvFavoritePageEntity.toTrack(parent: BvFavoriteEntity): Track = Track(
@@ -50,6 +53,7 @@ fun BvFavoritePageEntity.toTrack(parent: BvFavoriteEntity): Track = Track(
     title = title,
     author = parent.author,
     cover = parent.cover,
+    firstFrame = firstFrame,
     durationMs = durationMs,
     subtitleUrl = null,
     pageCount = parent.pageCount,

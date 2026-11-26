@@ -233,7 +233,7 @@ class StorageSettingsViewModelTest {
     @Test fun `clear audio excludes playing key`() = runTest(dispatcher) {
         val vm = StorageSettingsViewModel(prefs, fakeManager, player)
         try {
-            player.play(listOf(Track("BV1xx", 1001, "T1", "a", "", 60000, null)), 0)
+            player.play(listOf(Track("BV1xx", 1001, "T1", "a", "", durationMs = 60000, subtitleUrl = null)), 0)
             runCurrent()
             vm.clearAudioCache()
             runCurrent()

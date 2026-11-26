@@ -19,7 +19,7 @@ class FavoriteSnapshotTest {
             owner = Owner(name = "up", mid = 42),
             pages = listOf(
                 ViewPage(cid = 1, page = 1, part = "P1", duration = 60),
-                ViewPage(cid = 2, page = 2, part = "P2", duration = 60),
+                ViewPage(cid = 2, page = 2, part = "P2", duration = 60, firstFrame = "//i1.hdslb.com/p2.jpg"),
             ),
         )
 
@@ -36,5 +36,6 @@ class FavoriteSnapshotTest {
         assertEquals("P1", snapshot.pages[0].title)
         assertEquals(2, snapshot.pages[1].pageIndex)
         assertEquals(60_000L, snapshot.pages[1].durationMs)
+        assertEquals("https://i1.hdslb.com/p2.jpg", snapshot.pages[1].firstFrame)
     }
 }

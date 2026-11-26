@@ -26,13 +26,16 @@ class PlayQueueDaoTest {
     }
 
     private fun track(bvid: String, cid: Long) =
-        Track(bvid, cid, "P", "up", "", 1000L, null)
+        Track(bvid, cid, "P", "up", "", durationMs = 1000L, subtitleUrl = null)
 
     @Test
     fun `save and get round trip`() = runTest {
         val dao = db().playQueueDao()
         assertNull(dao.get())
-        val tracks = listOf(track("BV1", 1), track("BV1", 2))
+        val tracks = listOf(
+            track("BV1", 1),
+            track("BV1", 2).copy(firstFrame = "https://first", pageCount = 2),
+        )
         dao.save(
             PlayQueueSnapshotEntity(
                 tracksJson = PlayQueueJson.encode(tracks),
@@ -47,6 +50,8 @@ class PlayQueueDaoTest {
         assertEquals(2, decoded.size)
         assertEquals("BV1", decoded.first().bvid)
         assertEquals(2L, decoded[1].cid)
+        assertEquals("https://first", decoded[1].firstFrame)
+        assertEquals(2, decoded[1].pageCount)
     }
 
     @Test

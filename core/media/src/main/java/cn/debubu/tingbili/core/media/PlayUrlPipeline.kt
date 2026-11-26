@@ -4,8 +4,10 @@ import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.data.network.isConnectivityError
 import cn.debubu.tingbili.core.data.model.episodeLabel
 import cn.debubu.tingbili.core.data.model.queueLabel
@@ -27,6 +29,8 @@ class PlayUrlPipeline(
             track.copy(
                 cid = first.cid,
                 durationMs = first.durationMs.takeIf { it > 0L } ?: track.durationMs,
+                pageCount = first.pageCount,
+                firstFrame = first.firstFrame ?: track.firstFrame,
             )
         } ?: track
 
@@ -44,6 +48,8 @@ class PlayUrlPipeline(
         imageFormat: ImageFormat,
         audioQuality: Int,
         queueIndex: Int? = null,
+        coverDisplayMode: CoverDisplayMode = CoverDisplayMode.BV_COVER,
+        singlePartUsesBvCover: Boolean = true,
     ): MediaItem =
         MediaItem.Builder()
             .setUri(AudioUrlResolver.lazyUri(track.bvid, track.cid))
@@ -56,7 +62,9 @@ class PlayUrlPipeline(
                         else track.episodeLabel()
                     )
                     .setArtist(track.author)
-                    .setArtworkUri(artwork.artwork(track.cover, imageFormat))
+                    .setArtworkUri(
+                        artwork.artwork(track.playbackCover(coverDisplayMode, singlePartUsesBvCover), imageFormat)
+                    )
                     .build()
             )
             .build()

@@ -237,10 +237,16 @@ class QueueManager(
         shuffleOrder: List<Int>,
     ) {
         if (tracks.isEmpty() || index !in tracks.indices) return
-        val capped = if (tracks.size > MAX_QUEUE_SNAPSHOT) tracks.take(MAX_QUEUE_SNAPSHOT) else tracks
+        val truncated = tracks.size > MAX_QUEUE_SNAPSHOT
+        val start = if (truncated) {
+            (index - MAX_QUEUE_SNAPSHOT / 2).coerceIn(0, tracks.size - MAX_QUEUE_SNAPSHOT)
+        } else {
+            0
+        }
+        val capped = if (truncated) tracks.subList(start, start + MAX_QUEUE_SNAPSHOT) else tracks
         val snapshot = PlayQueueSnapshotEntity(
             tracksJson = PlayQueueJson.encode(capped),
-            currentIndex = index.coerceIn(0, capped.lastIndex),
+            currentIndex = if (truncated) index - start else index,
             sourceTitle = sourceTitle?.takeIf { it.isNotBlank() },
             sourceFolderId = sourceFolderId,
             playOrder = playOrder.code,

@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.ui.component.SettingAccent
 import cn.debubu.tingbili.core.ui.component.SettingRow
@@ -53,7 +54,7 @@ import cn.debubu.tingbili.core.ui.component.TingBiliChoiceSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 
-/** 二级页：其他设置（B 站图片格式 / 首页推荐词 / 版本更新）。 */
+/** 二级页：其他设置（播放封面 / B 站图片格式 / 首页推荐词 / 备份恢复）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(
@@ -62,8 +63,11 @@ fun GeneralSettingsScreen(
     vm: GeneralSettingsViewModel = hiltViewModel(),
 ) {
     val imageFormat by vm.imageFormat.collectAsStateWithLifecycle()
+    val coverDisplayMode by vm.coverDisplayMode.collectAsStateWithLifecycle()
+    val singlePartUsesBvCover by vm.singlePartUsesBvCover.collectAsStateWithLifecycle()
     val homeKeywords by vm.homeKeywords.collectAsStateWithLifecycle()
     var showImageSheet by remember { mutableStateOf(false) }
+    var showCoverModeSheet by remember { mutableStateOf(false) }
     var showKeywordsSheet by remember { mutableStateOf(false) }
 
     TingBiliScaffold(
@@ -101,6 +105,22 @@ fun GeneralSettingsScreen(
                         subtitle = "遇到图片无法显示时可切换",
                         value = imageFormatLabel(imageFormat),
                         onClick = { showImageSheet = true },
+                    )
+                    SettingSwitchRow(
+                        icon = Icons.Filled.Image,
+                        accent = SettingAccent.CYAN,
+                        title = "单集使用 BV 封面",
+                        subtitle = "首帧模式下，单 P 视频仍使用稿件封面",
+                        checked = singlePartUsesBvCover,
+                        onCheckedChange = vm::setSinglePartUsesBvCover,
+                    )
+                    SettingRow(
+                        icon = Icons.Filled.Image,
+                        accent = SettingAccent.PURPLE,
+                        title = "播放封面",
+                        subtitle = "播放页、迷你播放器与系统媒体封面",
+                        value = coverDisplayModeLabel(coverDisplayMode),
+                        onClick = { showCoverModeSheet = true },
                     )
                 }
             }
@@ -146,6 +166,16 @@ fun GeneralSettingsScreen(
             onDismiss = { showImageSheet = false },
         )
     }
+    if (showCoverModeSheet) {
+        CoverDisplayModeSheet(
+            current = coverDisplayMode,
+            onApply = {
+                vm.setCoverDisplayMode(it)
+                showCoverModeSheet = false
+            },
+            onDismiss = { showCoverModeSheet = false },
+        )
+    }
     if (showKeywordsSheet) {
         KeywordsSheet(
             keywords = homeKeywords,
@@ -172,6 +202,25 @@ private fun ImageFormatSheet(
             TingBiliChoiceOption(ImageFormat.AVIF, "AVIF", "省流量，默认"),
             TingBiliChoiceOption(ImageFormat.WEBP, "WebP", "均衡"),
             TingBiliChoiceOption(ImageFormat.JPEG, "JPEG", "兜底，遇到白图时切换"),
+        ),
+        selected = current,
+        onApply = onApply,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+private fun CoverDisplayModeSheet(
+    current: CoverDisplayMode,
+    onApply: (CoverDisplayMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    TingBiliChoiceSheet(
+        title = "播放封面",
+        subtitle = "首帧使用 B 站返回的分 P 预览图；缺失时自动回退 BV 封面。",
+        options = listOf(
+            TingBiliChoiceOption(CoverDisplayMode.BV_COVER, "BV 封面", "所有分 P 使用稿件封面"),
+            TingBiliChoiceOption(CoverDisplayMode.FIRST_FRAME, "BV 首帧", "多 P 视频随分 P 展示不同首帧"),
         ),
         selected = current,
         onApply = onApply,
@@ -253,6 +302,11 @@ private fun KeywordsSheet(
             )
         }
     }
+}
+
+private fun coverDisplayModeLabel(mode: CoverDisplayMode): String = when (mode) {
+    CoverDisplayMode.BV_COVER -> "BV 封面"
+    CoverDisplayMode.FIRST_FRAME -> "BV 首帧"
 }
 
 private fun imageFormatLabel(format: ImageFormat): String = when (format) {

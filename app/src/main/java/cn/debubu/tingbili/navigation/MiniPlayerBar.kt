@@ -51,9 +51,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.debubu.tingbili.core.data.model.Track
-import cn.debubu.tingbili.core.ui.LocalImageFormat
-import cn.debubu.tingbili.core.ui.formatDurationMs
+import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.data.model.queueLabel
+import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
+import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
+import cn.debubu.tingbili.core.ui.formatDurationMs
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
 import cn.debubu.tingbili.data.bilibili.dto.biliImage
 import coil3.compose.AsyncImage
@@ -135,9 +138,12 @@ private fun DismissableBarContent(
     bottomFlush: Boolean = false,
 ) {
     val imageFormat = LocalImageFormat.current
+    val coverDisplayMode = LocalCoverDisplayMode.current
+    val singlePartUsesBvCover = LocalSinglePartUsesBvCover.current
     // 槽位每 500ms 跟进度重组一次：URL 与文案缓存，不重复拼串
-    val coverUrl = remember(track.cover, imageFormat) {
-        track.cover.biliImage(BiliImageVariant.ListThumb, imageFormat)
+    val coverUrl = remember(track, coverDisplayMode, singlePartUsesBvCover, imageFormat) {
+        track.playbackCover(coverDisplayMode, singlePartUsesBvCover)
+            .biliImage(BiliImageVariant.ListThumb, imageFormat)
     }
     val title = remember(track) {
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }

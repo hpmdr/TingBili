@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,15 @@ class GeneralSettingsViewModelTest {
         vm.setImageFormat(ImageFormat.JPEG)
         advanceUntilIdle()
         assertEquals(ImageFormat.JPEG, prefs.imageFormat.first())
+    }
+
+    @Test fun `cover display mode and single part exception persist`() = runTest(dispatcher) {
+        val vm = GeneralSettingsViewModel(prefs)
+        vm.setCoverDisplayMode(CoverDisplayMode.FIRST_FRAME)
+        vm.setSinglePartUsesBvCover(false)
+        advanceUntilIdle()
+        assertEquals(CoverDisplayMode.FIRST_FRAME, prefs.coverDisplayMode.first())
+        assertEquals(false, prefs.singlePartUsesBvCover.first())
     }
 
     @Test fun `add and remove keyword`() = runTest(dispatcher) {

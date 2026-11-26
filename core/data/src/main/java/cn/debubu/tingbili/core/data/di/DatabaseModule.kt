@@ -109,6 +109,15 @@ object DatabaseModule {
         }
     }
 
+    /** v20：收藏分 P 保存首帧预览地址，播放时可选择与 BV 封面分开展示。 */
+    private val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `FavoriteTrackEntity` ADD COLUMN `firstFrame` TEXT")
+            db.execSQL("ALTER TABLE `FavoriteTrackEntity` ADD COLUMN `pageCount` INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE `BvFavoritePageEntity` ADD COLUMN `firstFrame` TEXT")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): TingBiliDatabase =
@@ -120,6 +129,7 @@ object DatabaseModule {
                 MIGRATION_16_17,
                 MIGRATION_17_18,
                 MIGRATION_18_19,
+                MIGRATION_19_20,
             )
             // 注意：不要再接 fallbackToDestructiveMigrationOnDowngrade(true)，
             // 它会把 requireMigration 重新设为 true，导致升级 fallback 失效。

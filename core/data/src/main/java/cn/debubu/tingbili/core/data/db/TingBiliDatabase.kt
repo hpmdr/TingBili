@@ -20,7 +20,8 @@ import androidx.room.RoomDatabase
     // v18：PlayUrlCacheEntity 补 audioCode 列（底部音质标签显示实际生效档）。
     //      简单加列，写手写迁移避免破坏性升级清掉收藏/历史。
     // v19：PlayQueueSnapshotEntity 补 shuffleOrderJson 列（洗牌顺序 App 自持，杀进程恢复接着走）。
-    version = 19,
+    // v20：收藏的分 P 补 firstFrame/pageCount 列（首帧封面只影响播放展示，原 BV 封面保持不变）。
+    version = 20,
     exportSchema = false,
 )
 abstract class TingBiliDatabase : RoomDatabase() {

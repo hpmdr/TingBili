@@ -118,6 +118,8 @@ class BackupViewModel @Inject constructor(
             settings.darkMode,
             settings.darkThemeStyle,
             settings.imageFormat,
+            settings.coverDisplayMode,
+            settings.singlePartUsesBvCover,
             settings.homeKeywords,
             settings.cacheMaxMb,
             settings.autoCheckUpdate,

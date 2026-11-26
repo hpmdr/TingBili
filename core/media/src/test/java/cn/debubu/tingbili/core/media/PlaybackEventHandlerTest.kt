@@ -79,7 +79,7 @@ class PlaybackEventHandlerTest {
         override suspend fun onRetryRecover(): PlaybackEventHandler.RecoverResult = recover
     }
 
-    private fun track(cid: Long = 1L) = Track("BV1", cid, "t", "a", "", 1000, null)
+    private fun track(cid: Long = 1L) = Track("BV1", cid, "t", "a", "", durationMs = 1000, subtitleUrl = null)
 
     private lateinit var transport: FakeTransport
     private lateinit var listener: FakeListener

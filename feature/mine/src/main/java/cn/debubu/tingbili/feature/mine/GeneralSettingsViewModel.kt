@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,6 +24,22 @@ class GeneralSettingsViewModel @Inject constructor(
 
     fun setImageFormat(v: ImageFormat) {
         viewModelScope.launch { prefs.setImageFormat(v) }
+    }
+
+    val coverDisplayMode: StateFlow<CoverDisplayMode> = prefs.coverDisplayMode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), CoverDisplayMode.BV_COVER
+    )
+
+    val singlePartUsesBvCover: StateFlow<Boolean> = prefs.singlePartUsesBvCover.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setCoverDisplayMode(mode: CoverDisplayMode) {
+        viewModelScope.launch { prefs.setCoverDisplayMode(mode) }
+    }
+
+    fun setSinglePartUsesBvCover(enabled: Boolean) {
+        viewModelScope.launch { prefs.setSinglePartUsesBvCover(enabled) }
     }
 
     /** 首页推荐词（设置页可增减，至少保留一个） */

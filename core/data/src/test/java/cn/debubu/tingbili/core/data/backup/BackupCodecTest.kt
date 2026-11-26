@@ -1,5 +1,6 @@
 package cn.debubu.tingbili.core.data.backup
 
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,11 +17,13 @@ class BackupCodecTest {
                 settings = SettingsBackup(
                     stepSec = 30,
                     audioQuality = 30280,
+                    coverDisplayMode = CoverDisplayMode.FIRST_FRAME.name,
+                    singlePartUsesBvCover = true,
                     homeKeywords = listOf("悬疑", "有声书"),
                     searchHistory = listOf("盗墓"),
                 ),
                 folders = listOf(FolderBackup(1, "我的最爱", isDefault = true)),
-                tracks = listOf(TrackBackup(1, "BV1", 1001, "曲目")),
+                tracks = listOf(TrackBackup(1, "BV1", 1001, "曲目", pageCount = 3, firstFrame = "https://first")),
                 bvFavorites = listOf(BvFavoriteBackup("BV1", "合集")),
                 bvPages = listOf(BvPageBackup("BV1", 1001, 1, "P1")),
                 history = listOf(HistoryBackup("BV1", 1001, 5000, 1000, 3000, 0, "BV1")),

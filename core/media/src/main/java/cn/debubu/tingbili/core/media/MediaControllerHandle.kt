@@ -30,6 +30,9 @@ class MediaControllerHandle @Inject constructor(
         set(value) { controller()?.shuffleModeEnabled = value }
     override val currentMediaItemIndex: Int get() = controller()?.currentMediaItemIndex ?: 0
 
+    override fun getMediaItemAt(index: Int): MediaItem? =
+        runCatching { controller()?.getMediaItemAt(index) }.getOrNull()
+
     override fun setMediaItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long) {
         controller()?.setMediaItems(items, startIndex, startPositionMs)
     }

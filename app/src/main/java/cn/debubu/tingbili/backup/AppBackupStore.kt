@@ -125,6 +125,8 @@ class AppBackupStore @Inject constructor(
                         durationMs = track.durationMs,
                         videoTitle = track.videoTitle,
                         pageIndex = track.pageIndex,
+                        pageCount = track.pageCount,
+                        firstFrame = track.firstFrame,
                         order = track.order,
                     )
                 }
@@ -218,13 +220,13 @@ private fun FavoriteFolderEntity.toBackup(): FolderBackup =
     FolderBackup(id, name, isDefault, createdAt, sortOrder)
 
 private fun FavoriteTrackEntity.toBackup(): TrackBackup =
-    TrackBackup(folderId, bvid, cid, title, author, cover, durationMs, videoTitle, pageIndex, order)
+    TrackBackup(folderId, bvid, cid, title, author, cover, durationMs, videoTitle, pageIndex, pageCount, firstFrame, order)
 
 private fun BvFavoriteEntity.toBackup(): BvFavoriteBackup =
     BvFavoriteBackup(bvid, title, author, authorMid, cover, durationMs, pageCount, addedAt, lastSyncedAt)
 
 private fun BvFavoritePageEntity.toBackup(): BvPageBackup =
-    BvPageBackup(bvid, cid, pageIndex, title, durationMs, order)
+    BvPageBackup(bvid, cid, pageIndex, title, durationMs, firstFrame, order)
 
 private fun HistoryEntity.toBackup(): HistoryBackup =
     HistoryBackup(bvid, cid, positionMs, updatedAt, listenDurationMs, sourceType, sourceId, sourceTitle)
@@ -233,7 +235,7 @@ private fun BvFavoriteBackup.toEntity(): BvFavoriteEntity =
     BvFavoriteEntity(bvid, title, author, authorMid, cover, durationMs, pageCount, addedAt, lastSyncedAt)
 
 private fun BvPageBackup.toEntity(): BvFavoritePageEntity =
-    BvFavoritePageEntity(bvid, cid, pageIndex, title, durationMs, order)
+    BvFavoritePageEntity(bvid, cid, pageIndex, title, durationMs, firstFrame, order)
 
 private fun HistoryBackup.toEntity(folderIdMap: Map<Long, Long>): HistoryEntity {
     val mappedSourceId = if (sourceType == HistoryEntity.SOURCE_FOLDER) {

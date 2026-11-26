@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import cn.debubu.tingbili.core.data.backup.SettingsBackup
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.DarkMode
 import cn.debubu.tingbili.core.data.model.DarkThemeStyle
 import cn.debubu.tingbili.core.data.model.ImageFormat
@@ -121,6 +122,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val customThemeColor: Flow<Int> = ds.data.map { it[CUSTOM_THEME_COLOR] ?: DEFAULT_THEME_COLOR }
     val dynamicColor: Flow<Boolean> = themeMode.map { it == ThemeMode.SYSTEM }
     val imageFormat: Flow<ImageFormat> = ds.data.map { ImageFormat.fromKey(it[IMAGE_FORMAT]) }
+    /** 播放相关封面的来源；只影响播放页、迷你播放器和系统媒体封面。 */
+    val coverDisplayMode: Flow<CoverDisplayMode> = ds.data.map { CoverDisplayMode.fromKey(it[COVER_DISPLAY_MODE]) }
+    /** 首帧模式下，单 P 视频仍使用 BV 封面。 */
+    val singlePartUsesBvCover: Flow<Boolean> = ds.data.map { it[SINGLE_PART_USES_BV_COVER] ?: true }
     /** 首页发现流策展关键词，设置页可增减；空时回落默认 */
     // 注意：ds.data 任何 key 写入都会发射（播放时进度每 500ms 写一次），
     // 必须去重，否则下游 combine 会反复重建推荐 Pager（首页无限刷新）。
@@ -256,6 +261,14 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
 
     suspend fun setImageFormat(v: ImageFormat) {
         ds.edit { it[IMAGE_FORMAT] = v.name }
+    }
+
+    suspend fun setCoverDisplayMode(mode: CoverDisplayMode) {
+        ds.edit { it[COVER_DISPLAY_MODE] = mode.name }
+    }
+
+    suspend fun setSinglePartUsesBvCover(v: Boolean) {
+        ds.edit { it[SINGLE_PART_USES_BV_COVER] = v }
     }
 
     suspend fun setHomeKeywords(keywords: List<String>) {
@@ -397,6 +410,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             darkMode = p[DARK_MODE],
             darkThemeStyle = p[DARK_THEME_STYLE],
             imageFormat = p[IMAGE_FORMAT],
+            coverDisplayMode = p[COVER_DISPLAY_MODE],
+            singlePartUsesBvCover = p[SINGLE_PART_USES_BV_COVER],
             homeKeywords = p[HOME_KEYWORDS]?.split(",")?.map(String::trim)?.filter(String::isNotBlank),
             cacheMaxMb = p[CACHE_MAX_MB],
             autoCheckUpdate = p[AUTO_CHECK_UPDATE],
@@ -428,6 +443,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             s.darkMode?.let { p[DARK_MODE] = it }
             s.darkThemeStyle?.let { p[DARK_THEME_STYLE] = it }
             s.imageFormat?.let { p[IMAGE_FORMAT] = it }
+            s.coverDisplayMode?.let {
+                p[COVER_DISPLAY_MODE] = CoverDisplayMode.fromKey(it).name
+            }
+            s.singlePartUsesBvCover?.let { p[SINGLE_PART_USES_BV_COVER] = it }
             s.homeKeywords?.let { keywords ->
                 val cleaned = keywords.map(String::trim).filter(String::isNotBlank).distinct()
                 if (cleaned.isEmpty()) p.remove(HOME_KEYWORDS) else p[HOME_KEYWORDS] = cleaned.joinToString(",")
@@ -482,6 +501,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val DARK_THEME_STYLE = stringPreferencesKey("dark_theme_style")
         val DEFAULT_THEME_COLOR: Int = 0xFFFF6699.toInt()
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
+        val COVER_DISPLAY_MODE = stringPreferencesKey("cover_display_mode")
+        val SINGLE_PART_USES_BV_COVER = androidx.datastore.preferences.core.booleanPreferencesKey("single_part_uses_bv_cover")
         val HOME_KEYWORDS = stringPreferencesKey("home_keywords")
         val SEARCH_HISTORY_JSON = stringPreferencesKey("search_history_json")
         const val MAX_SEARCH_HISTORY = 15

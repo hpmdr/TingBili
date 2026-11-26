@@ -8,6 +8,7 @@ import cn.debubu.tingbili.core.data.db.TingBiliDatabase
 import cn.debubu.tingbili.core.data.model.BvFavoritePageSnapshot
 import cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.toTrack
 import cn.debubu.tingbili.core.data.repository.DefaultFavoritesRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -36,6 +37,7 @@ class FavoritesRepositoryTest {
         title = "P$cid",
         author = "up",
         cover = "https://cover/$cid",
+        firstFrame = "https://first/$cid",
         durationMs = cid * 1_000,
         subtitleUrl = null,
         pageCount = 3,
@@ -46,8 +48,8 @@ class FavoritesRepositoryTest {
     private fun snapshot(
         title: String = "书",
         pages: List<BvFavoritePageSnapshot> = listOf(
-            BvFavoritePageSnapshot(1, 1, "P1", 1_000),
-            BvFavoritePageSnapshot(2, 2, "P2", 2_000),
+            BvFavoritePageSnapshot(1, 1, "P1", 1_000, "https://first/1"),
+            BvFavoritePageSnapshot(2, 2, "P2", 2_000, "https://first/2"),
         ),
     ): BvFavoriteSnapshot = BvFavoriteSnapshot(
         bvid = "BV1",
@@ -109,6 +111,9 @@ class FavoritesRepositoryTest {
         val manualResult = repo.addTracksToFolders(setOf(manualId), listOf(track(1), track(2)))
         assertEquals(2, manualResult.added)
         assertEquals(0, manualResult.skipped)
+        val restored = repo.observeTracks(manualId).first().single { it.cid == 2L }.toTrack()
+        assertEquals("https://first/2", restored.firstFrame)
+        assertEquals(3, restored.pageCount)
         assertEquals(listOf(1L, 2L), db.favoriteDao().getTracks(manualId).map { it.cid })
 
         val duplicate = repo.addTracksToFolders(setOf(manualId), listOf(track(1)))
@@ -176,6 +181,7 @@ class FavoritesRepositoryTest {
         assertNotNull(first)
         assertEquals(2, first!!.pageCount)
         assertEquals(2, dao.getBvPages("BV1").size)
+        assertEquals("https://first/2", dao.getBvPages("BV1").single { it.cid == 2L }.firstFrame)
         val addedAt = first.addedAt
 
         repo.refreshBvFavorite(snapshot(title = "新标题", pages = listOf(BvFavoritePageSnapshot(3, 1, "P1", 3_000))))

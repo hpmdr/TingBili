@@ -84,7 +84,7 @@ class HistoryTrackerTest {
         override fun onPlaybackStalled(gapMs: Long, positionMs: Long) { stalls += gapMs to positionMs }
     }
 
-    private fun track() = Track("BV1", 1, "t", "a", "", 10000, null)
+    private fun track() = Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null)
 
     @Test
     fun `tick updates memory and saves after 10s`() = runTest {

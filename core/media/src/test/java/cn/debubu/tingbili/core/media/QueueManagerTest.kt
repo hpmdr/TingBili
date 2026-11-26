@@ -58,7 +58,7 @@ class QueueManagerTest {
     }
 
     private fun track(bvid: String, cid: Long, duration: Long = 10000) =
-        Track(bvid, cid, "t", "a", "", duration, null)
+        Track(bvid, cid, "t", "a", "", durationMs = duration, subtitleUrl = null)
 
     @Test
     fun `restore empty returns null and keeps empty state`() = runTest {
@@ -111,6 +111,23 @@ class QueueManagerTest {
         assertEquals(2, decoded.size)
         assertEquals(1, dao.snapshot!!.currentIndex)
         assertEquals("书", dao.snapshot!!.sourceTitle)
+    }
+
+    @Test
+    fun `long queue snapshot keeps current part instead of clamping to cutoff`() = runTest {
+        manager.attach(this, listener)
+        val tracks = (1..120).map { track("BV1", it.toLong()) }
+        manager.setActiveQueue(tracks, 110, "书")
+        runCurrent()
+
+        val decoded = cn.debubu.tingbili.core.data.db.PlayQueueJson.decode(dao.snapshot!!.tracksJson)
+        assertEquals(100, decoded.size)
+        assertEquals(21L, decoded.first().cid)
+        assertEquals(111L, decoded[dao.snapshot!!.currentIndex].cid)
+        assertEquals(120L, decoded.last().cid)
+
+        val restored = QueueManager(dao, prefs).also { it.attach(this, listener) }.restore()
+        assertEquals(111L, restored?.queue?.get(restored.index)?.cid)
     }
 
     @Test

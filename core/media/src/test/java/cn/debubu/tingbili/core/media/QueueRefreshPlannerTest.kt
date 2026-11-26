@@ -8,7 +8,7 @@ import org.junit.Test
 class QueueRefreshPlannerTest {
 
     private fun track(bvid: String, cid: Long, title: String = "t") =
-        Track(bvid, cid, title, "a", "", 1000, null)
+        Track(bvid, cid, title, "a", "", durationMs = 1000, subtitleUrl = null)
 
     @Test
     fun `append adds one with zero removals`() {

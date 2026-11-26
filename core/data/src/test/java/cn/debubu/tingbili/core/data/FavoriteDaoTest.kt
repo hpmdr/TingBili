@@ -161,8 +161,8 @@ class FavoriteDaoTest {
         )
         dao.insertBvPages(
             listOf(
-                BvFavoritePageEntity("BV1", 1, 1, "P1", 1_000, 0),
-                BvFavoritePageEntity("BV1", 2, 2, "P2", 2_000, 1),
+                BvFavoritePageEntity("BV1", 1, 1, "P1", 1_000, "https://first1", 0),
+                BvFavoritePageEntity("BV1", 2, 2, "P2", 2_000, null, 1),
             )
         )
         assertEquals(2, dao.getBvPages("BV1").size)

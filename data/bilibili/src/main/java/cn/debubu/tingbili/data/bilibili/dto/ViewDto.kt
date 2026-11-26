@@ -3,6 +3,7 @@ package cn.debubu.tingbili.data.bilibili.dto
 import cn.debubu.tingbili.core.data.model.BvFavoritePageSnapshot
 import cn.debubu.tingbili.core.data.model.BvFavoriteSnapshot
 import cn.debubu.tingbili.core.data.model.Track
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -61,7 +62,8 @@ data class ViewPage(
     val page: Int = 0,
     val part: String = "",
     val duration: Int = 0,
-    val dimension: Dimension? = null
+    val dimension: Dimension? = null,
+    @SerialName("first_frame") val firstFrame: String? = null,
 )
 
 @Serializable
@@ -103,6 +105,7 @@ fun ViewData.toFavoriteSnapshot(): BvFavoriteSnapshot {
                 pageIndex = track.pageIndex ?: (index + 1),
                 title = track.title,
                 durationMs = track.durationMs,
+                firstFrame = track.firstFrame,
             )
         },
     )
@@ -140,6 +143,7 @@ fun ViewData.toTracks(): List<Track> {
             title = title,
             author = author,
             cover = cover,
+            firstFrame = page.firstFrame?.takeIf { it.isNotBlank() }?.normalizeBiliImageUrl(),
             durationMs = page.duration * 1000L,
             subtitleUrl = subtitle?.list?.firstOrNull()?.subtitle_url?.takeIf { it.isNotBlank() },
             pageCount = pages.size,

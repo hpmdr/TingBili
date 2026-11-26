@@ -49,6 +49,8 @@ data class TrackBackup(
     val durationMs: Long = 0L,
     val videoTitle: String? = null,
     val pageIndex: Int? = null,
+    val pageCount: Int = 1,
+    val firstFrame: String? = null,
     val order: Int = 0,
 )
 
@@ -72,6 +74,7 @@ data class BvPageBackup(
     val pageIndex: Int,
     val title: String,
     val durationMs: Long = 0L,
+    val firstFrame: String? = null,
     val order: Int = 0,
 )
 
@@ -108,6 +111,8 @@ data class SettingsBackup(
     val darkMode: String? = null,
     val darkThemeStyle: String? = null,
     val imageFormat: String? = null,
+    val coverDisplayMode: String? = null,
+    val singlePartUsesBvCover: Boolean? = null,
     val homeKeywords: List<String>? = null,
     val cacheMaxMb: Int? = null,
     val autoCheckUpdate: Boolean? = null,

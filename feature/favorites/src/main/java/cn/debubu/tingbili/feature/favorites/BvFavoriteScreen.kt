@@ -468,6 +468,8 @@ private fun BvFavoritePageEntity.toDisplayEntity(parent: BvFavoriteEntity): Favo
         author = parent.author,
         cover = parent.cover,
         durationMs = durationMs,
+        pageCount = parent.pageCount,
+        firstFrame = firstFrame,
         videoTitle = parent.title,
         pageIndex = pageIndex,
         order = order,

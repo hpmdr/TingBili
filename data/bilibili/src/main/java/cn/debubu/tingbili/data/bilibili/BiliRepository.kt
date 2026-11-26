@@ -204,7 +204,10 @@ class BiliRepository @Inject constructor(
                 // 封面/头像可能是 http:// 明文，Android 默认禁明文会加载失败，统一升级 https
                 val normalized = data.copy(
                     pic = data.pic.normalizeBiliImageUrl(),
-                    owner = data.owner?.copy(face = data.owner.face.normalizeBiliImageUrl())
+                    pages = data.pages.map { page ->
+                        page.copy(firstFrame = page.firstFrame?.takeIf { it.isNotBlank() }?.normalizeBiliImageUrl())
+                    },
+                    owner = data.owner?.copy(face = data.owner.face.normalizeBiliImageUrl()),
                 )
                 if (bvid.isNotBlank()) {
                     viewMutex.withLock { detailCache[bvid] = DetailEntry(normalized, System.currentTimeMillis()) }

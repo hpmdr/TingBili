@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.Track
 import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
@@ -22,7 +23,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -72,6 +74,7 @@ class PlayerManagerTest {
         }
 
         override val mediaItemCount: Int get() = mediaItems.size
+        override fun getMediaItemAt(index: Int): MediaItem? = mediaItems.getOrNull(index)
         override fun addMediaItem(index: Int, item: MediaItem) {
             mediaItems = mediaItems.toMutableList().also { it.add(index.coerceIn(0, it.size), item) }
         }
@@ -177,7 +180,11 @@ class PlayerManagerTest {
             return url?.let { ResolvedAudio(it) }
         }
         override suspend fun tracksOf(bvid: String): List<Track> = emptyList()
-        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? = null
+        val artworkInputs = mutableListOf<String>()
+        override fun artwork(cover: String, format: ImageFormat): android.net.Uri? {
+            artworkInputs += cover
+            return null
+        }
     }
 
     class FakeNetworkMonitor(initial: Boolean = true) : NetworkMonitor {
@@ -221,7 +228,7 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         fakePlayer.setCurrentPosition(0L)
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         assertEquals("BV1", playerManager.state.value.currentTrack?.bvid)
         assertEquals(1, fakePlayer.mediaItems.size)
@@ -230,12 +237,43 @@ class PlayerManagerTest {
         playerManager.release()
     }
 
+    @Test
+    fun `cover preference persists without rebuilding media before listener dispatch`() = runTest {
+        playerManager.testScope = this
+        val track = Track(
+            "BV1", 1, "t", "a", "bv", durationMs = 10_000, subtitleUrl = null,
+            firstFrame = "first",
+            pageCount = 1,
+        )
+        playerManager.play(listOf(track), 0)
+        val before = fakePlayer.mediaItems.single()
+        fakeResolvers.artworkInputs.clear()
+        val replaceCallsBefore = fakePlayer.replaceCalls
+
+        prefs.setCoverDisplayMode(CoverDisplayMode.FIRST_FRAME)
+        runCurrent()
+        shadowOf(Looper.getMainLooper()).idle()
+        runCurrent()
+        delay(1000)
+        runCurrent()
+        val after = fakePlayer.mediaItems.single()
+
+        assertEquals(CoverDisplayMode.FIRST_FRAME, prefs.coverDisplayMode.first())
+        assertEquals("bv", fakeResolvers.artworkInputs.last())
+        assertEquals(replaceCallsBefore, fakePlayer.replaceCalls)
+        assertEquals(before.mediaId, after.mediaId)
+        assertEquals(before.localConfiguration?.uri, after.localConfiguration?.uri)
+        assertEquals(before.localConfiguration?.customCacheKey, after.localConfiguration?.customCacheKey)
+        assertEquals(before.mediaMetadata.title, after.mediaMetadata.title)
+        playerManager.release()
+    }
+
     /** 换档必须换缓存键：FLAC 与 AAC 共用 bvid:cid 会把旧档字节按新格式解析（EOF 播放失败） */
     @Test
     fun `quality switch rebuilds item with new cache key`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10_000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         assertEquals("BV1:1:30232", fakePlayer.mediaItems.first().localConfiguration?.customCacheKey)
 
@@ -258,7 +296,7 @@ class PlayerManagerTest {
                 )
             )
         )
-        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", 10_000, null))
+        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", durationMs = 10_000, subtitleUrl = null))
         assertEquals(30280, AudioBitrateRegistry.codeOf("BV1", 1))
         AudioBitrateRegistry.clear()
         playerManager.release()
@@ -277,7 +315,7 @@ class PlayerManagerTest {
                 )
             )
         )
-        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", 10_000, null))
+        playerManager.prewarmAudioCode(Track("BV1", 1, "t", "a", "", durationMs = 10_000, subtitleUrl = null))
         assertEquals(30280, AudioBitrateRegistry.codeOf("BV1", 1))
         AudioBitrateRegistry.clear()
         playerManager.release()
@@ -288,10 +326,10 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
-            Track("BV1", 3, "p3", "a", "", 10_000, null),
-            Track("BV1", 4, "p4", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 3, "p3", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 4, "p4", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 1, "收藏夹", sourceFolderId = 7L)
         playerManager.seekTo(1234L)
@@ -317,8 +355,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.PURE_RANDOM)
@@ -344,9 +382,9 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
-            Track("BV1", 3, "p3", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 3, "p3", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 1)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
@@ -367,8 +405,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.PURE_RANDOM)
@@ -386,8 +424,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
@@ -417,8 +455,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         prefs.setRandomPlayMode(cn.debubu.tingbili.core.data.model.RandomPlayMode.SHUFFLE)
@@ -442,9 +480,9 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
-            Track("BV1", 3, "p3", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 3, "p3", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         // 牌序写死 [0,2,1]：当前停在逻辑末位 p3，本轮还没走完
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
@@ -474,9 +512,9 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
-            Track("BV1", 3, "p3", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 3, "p3", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         // 牌序写死 [0,2,1]：Exo 自动连到逻辑下一首 p2 时，本轮下一位是 p3，改跳过去
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
@@ -508,9 +546,9 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
-            Track("BV1", 3, "p3", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 3, "p3", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
             tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
@@ -536,8 +574,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         runCurrent()
@@ -567,8 +605,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "p1", "a", "", 10_000, null),
-            Track("BV1", 2, "p2", "a", "", 10_000, null),
+            Track("BV1", 1, "p1", "a", "", durationMs = 10_000, subtitleUrl = null),
+            Track("BV1", 2, "p2", "a", "", durationMs = 10_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         runCurrent()
@@ -604,7 +642,7 @@ class PlayerManagerTest {
                 sourceTitle = "胖宝宝",
             )
         )
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10_000, subtitleUrl = null))
         playerManager.play(tracks, 0, "胖宝宝", sourceFolderId = 7L)
         assertEquals(6_000L, fakePlayer.currentPosition)
         playerManager.release()
@@ -624,7 +662,7 @@ class PlayerManagerTest {
                 sourceTitle = "T",
             )
         )
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10_000, subtitleUrl = null))
         // 从收藏夹 7 起播，但夹记录不存在 → 回退该分 P 最近一条
         playerManager.play(tracks, 0, "胖宝宝", sourceFolderId = 7L)
         assertEquals(4_000L, fakePlayer.currentPosition)
@@ -635,8 +673,8 @@ class PlayerManagerTest {
     fun `syncFolderQueue appends new P without touching the playing item`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1), 0, "收藏夹", sourceFolderId = 7L)
         assertEquals(7L, playerManager.state.value.sourceFolderId)
 
@@ -652,8 +690,8 @@ class PlayerManagerTest {
     fun `syncFolderQueue ignores folders other than the queue source`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1), 0, "收藏夹", sourceFolderId = 7L)
 
         assertFalse(playerManager.syncFolderQueue(8L, listOf(p1, p2), "别的夹"))
@@ -666,8 +704,8 @@ class PlayerManagerTest {
     fun `syncFolderQueue reorder rebuilds transport and keeps playing item`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
 
         assertTrue(playerManager.syncFolderQueue(7L, listOf(p2, p1), "收藏夹"))
@@ -684,8 +722,8 @@ class PlayerManagerTest {
     fun `syncFolderQueue stops and clears queue when folder is emptied`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
 
         assertTrue(playerManager.syncFolderQueue(7L, emptyList(), "收藏夹"))
@@ -706,9 +744,9 @@ class PlayerManagerTest {
     fun `syncFolderQueue keeps reverse order when folder changes`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
-        val p3 = Track("BV1", 3, "p3", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p3 = Track("BV1", 3, "p3", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1, p2), 0, "收藏夹", sourceFolderId = 7L)
         playerManager.setPlayOrder(cn.debubu.tingbili.core.media.PlayOrder.REVERSE)
 
@@ -724,8 +762,8 @@ class PlayerManagerTest {
     fun `syncFolderQueue keeps playing item when removed from folder`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val p1 = Track("BV1", 1, "p1", "a", "", 1000, null)
-        val p2 = Track("BV1", 2, "p2", "a", "", 1000, null)
+        val p1 = Track("BV1", 1, "p1", "a", "", durationMs = 1000, subtitleUrl = null)
+        val p2 = Track("BV1", 2, "p2", "a", "", durationMs = 1000, subtitleUrl = null)
         playerManager.play(listOf(p1, p2), 1, "收藏夹", sourceFolderId = 7L)
 
         assertTrue(playerManager.syncFolderQueue(7L, listOf(p1), "收藏夹"))
@@ -739,7 +777,7 @@ class PlayerManagerTest {
     fun `sleep timer pauses at zero and clears`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         playerManager.startSleepTimer(60)
         assertEquals(60, playerManager.state.value.sleepRemainSec)
         advanceTimeBy(61_000)
@@ -754,7 +792,7 @@ class PlayerManagerTest {
     fun `sleep timer cancel clears state`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         playerManager.startSleepTimer(60)
         playerManager.cancelSleepTimer()
         assertEquals(null, playerManager.state.value.sleepRemainSec)
@@ -770,8 +808,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 3_600_000, null),
-            Track("BV2", 2, "t2", "a", "", 3_600_000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 3_600_000, subtitleUrl = null),
+            Track("BV2", 2, "t2", "a", "", durationMs = 3_600_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         playerManager.startSleepTimer(60, finishChapter = true)
@@ -795,7 +833,7 @@ class PlayerManagerTest {
     fun `sleep timer persists deadline and clears on fire`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         playerManager.startSleepTimer(60)
         runCurrent()
         assertEquals(60, prefs.sleepTotalSec.first())
@@ -811,7 +849,7 @@ class PlayerManagerTest {
     fun `restore resumes future deadline`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         prefs.saveSleepTimerState(testScheduler.currentTime + 50_000, 60, false)
         playerManager.restoreSleepTimer()
         runCurrent()
@@ -824,7 +862,7 @@ class PlayerManagerTest {
     fun `restore with expired deadline pauses immediately`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         assertTrue(playerManager.state.value.isPlaying)
         advanceTimeBy(10_000)
         runCurrent()
@@ -842,8 +880,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 3_600_000, null),
-            Track("BV1", 2, "t2", "a", "", 3_600_000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 3_600_000, subtitleUrl = null),
+            Track("BV1", 2, "t2", "a", "", durationMs = 3_600_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         prefs.setSleepFinishChapter(true)
@@ -863,7 +901,7 @@ class PlayerManagerTest {
     fun `sleep timer setFinishChapter off mid-countdown stops at time`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         playerManager.startSleepTimer(60, finishChapter = true)
         playerManager.setSleepFinishChapter(false)
         assertEquals(false, playerManager.state.value.sleepFinishChapter)
@@ -879,12 +917,12 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
-            Track("BV1", 1, "P1", "a", "", 1000, null),
-            Track("BV1", 2, "P2", "a", "", 1000, null),
+            Track("BV1", 1, "P1", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 2, "P2", "a", "", durationMs = 1000, subtitleUrl = null),
         )
         playerManager.play(old, 0)
         runCurrent()
-        val res = playerManager.refreshQueue(old + Track("BV1", 3, "P3", "a", "", 1000, null), "书")
+        val res = playerManager.refreshQueue(old + Track("BV1", 3, "P3", "a", "", durationMs = 1000, subtitleUrl = null), "书")
         assertEquals(1, res.added)
         assertEquals(0, res.removed)
         assertEquals(3, fakePlayer.mediaItems.size)
@@ -899,16 +937,16 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
-            Track("BV1", 1, "P1", "a", "", 1000, null),
-            Track("BV1", 2, "P2", "a", "", 1000, null),
-            Track("BV1", 3, "P3", "a", "", 1000, null),
+            Track("BV1", 1, "P1", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 2, "P2", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 3, "P3", "a", "", durationMs = 1000, subtitleUrl = null),
         )
         playerManager.play(old, 1)
         runCurrent()
         val new = listOf(
-            Track("BV1", 1, "P1-new", "a", "", 1000, null),
-            Track("BV1", 2, "P2", "a", "", 1000, null),
-            Track("BV1", 4, "P4", "a", "", 1000, null),
+            Track("BV1", 1, "P1-new", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 2, "P2", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 4, "P4", "a", "", durationMs = 1000, subtitleUrl = null),
         )
         val res = playerManager.refreshQueue(new, "书")
         assertEquals(1, res.added)
@@ -926,8 +964,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val old = listOf(
-            Track("BV1", 1, "P1", "a", "", 1000, null),
-            Track("BV1", 2, "P2", "a", "", 1000, null),
+            Track("BV1", 1, "P1", "a", "", durationMs = 1000, subtitleUrl = null),
+            Track("BV1", 2, "P2", "a", "", durationMs = 1000, subtitleUrl = null),
         )
         playerManager.play(old, 0)
         runCurrent()
@@ -946,7 +984,7 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val appContext = ApplicationProvider.getApplicationContext<Context>()
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         // 前台服务由 Media3 在真正开始播放时拉起并 startForeground；手动提前起服务会让
         // 「起了服务但 5s 内没 startForeground」成为系统杀进程的理由（REVIEW_REPORT G-12）。
         // 这里锁住新契约：play() 不再手动 startForegroundService。
@@ -966,7 +1004,7 @@ class PlayerManagerTest {
         fakePlayer.setCurrentPosition(5000L)
         fakePlayer.setDuration(100000L)
         // need queue for state
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 1000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null)), 0)
         fakePlayer.setCurrentPosition(5000L)
         playerManager.seekStep(+1)
         // 5000 + 15000 = 20000
@@ -995,7 +1033,7 @@ class PlayerManagerTest {
         var now = 0L
         playerManager.clock = { now }
         AudioPipelineMonitor.onOffloadedPlaybackChanged(true)
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 600_000, subtitleUrl = null)), 0)
         fakePlayer.play()
         // play() 内部 setMediaItems 会把位置重置为起点，这里再摆到 5s 作为基线
         fakePlayer.setCurrentPosition(5_000L)
@@ -1019,7 +1057,7 @@ class PlayerManagerTest {
         var now = 0L
         playerManager.clock = { now }
         AudioPipelineMonitor.resetTrackState()
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 600_000, subtitleUrl = null)), 0)
         fakePlayer.play()
         fakePlayer.setCurrentPosition(5_000L)
         now = 1_000L
@@ -1039,7 +1077,7 @@ class PlayerManagerTest {
         // 缓冲/offload 出声时 isPlaying 可能为假，但暂停落点必须按播放器位置落盘/显字
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 600_000, subtitleUrl = null)), 0)
         fakePlayer.setCurrentPosition(30_000L)
         fakePlayer.pause()
         playerManager.pause()
@@ -1055,7 +1093,7 @@ class PlayerManagerTest {
         var deep = 0L
         playerManager.deepSleepClock = { deep }
         AudioPipelineMonitor.resetTrackState()
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 600_000, subtitleUrl = null)), 0)
         fakePlayer.pause()
         now = 2_000L
         playerManager.onUiVisible() // 首次只建深睡基线
@@ -1077,7 +1115,7 @@ class PlayerManagerTest {
         var deep = 0L
         playerManager.deepSleepClock = { deep }
         AudioPipelineMonitor.onOffloadedPlaybackChanged(true)
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 600_000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 600_000, subtitleUrl = null)), 0)
         fakePlayer.play()
         fakePlayer.setCurrentPosition(5_000L)
         now = 2_000L
@@ -1098,8 +1136,8 @@ class PlayerManagerTest {
         playerManager.clock = { now }
         playerManager.deepSleepClock = { 0L }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 600_000, null),
-            Track("BV1", 2, "t2", "a", "", 600_000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 600_000, subtitleUrl = null),
+            Track("BV1", 2, "t2", "a", "", durationMs = 600_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         // 夜间自动切到第 2 集，UI 的 transition 事件被冻结漏掉
@@ -1158,7 +1196,7 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
 
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null))
         fakePlayer.setCurrentPosition(12345L)
         playerManager.play(tracks, 0)
         // fakePlayer.isPlaying true after play
@@ -1178,7 +1216,7 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
 
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null))
         fakePlayer.setCurrentPosition(5000L)
         playerManager.play(tracks, 0)
         runCurrent()
@@ -1197,8 +1235,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 10000, null),
-            Track("BV1", 2, "t2", "a", "", 10000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 10000, subtitleUrl = null),
+            Track("BV1", 2, "t2", "a", "", durationMs = 10000, subtitleUrl = null),
         )
         fakePlayer.setCurrentPosition(1000L)
         playerManager.play(tracks, 0)
@@ -1221,8 +1259,8 @@ class PlayerManagerTest {
     @Test
     fun `restore restores queue and position from prefs`() = runTest {
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "cover1", 10000, null),
-            Track("BV2", 2, "t2", "a", "cover2", 20000, null)
+            Track("BV1", 1, "t1", "a", "cover1", durationMs = 10000, subtitleUrl = null),
+            Track("BV2", 2, "t2", "a", "cover2", durationMs = 20000, subtitleUrl = null)
         )
         fakePlayQueue.snapshot = cn.debubu.tingbili.core.data.db.PlayQueueSnapshotEntity(
             tracksJson = cn.debubu.tingbili.core.data.db.PlayQueueJson.encode(tracks),
@@ -1253,7 +1291,7 @@ class PlayerManagerTest {
     fun `play persists queue for restore`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 1000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 1000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         runCurrent()
         // Room snapshot should contain queue
@@ -1269,7 +1307,7 @@ class PlayerManagerTest {
     fun `seek persists position`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 10000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         runCurrent()
         playerManager.seekTo(4200L)
@@ -1282,7 +1320,7 @@ class PlayerManagerTest {
     fun `play sets loading and custom cache key`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV99", 123, "t", "a", "", 10000, null))
+        val tracks = listOf(Track("BV99", 123, "t", "a", "", durationMs = 10000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         runCurrent()
         // loading should be false after success
@@ -1299,7 +1337,7 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         // 67 P 的 BV 也不该在起播前批量解析直链（否则瞬间打 67 次 playurl 触发风控）
-        val tracks = (1..5).map { Track("BV1", it.toLong(), "t$it", "a", "", 1000, null) }
+        val tracks = (1..5).map { Track("BV1", it.toLong(), "t$it", "a", "", durationMs = 1000, subtitleUrl = null) }
         playerManager.play(tracks, 0)
         runCurrent()
         assertEquals(5, fakePlayer.mediaItems.size)
@@ -1314,7 +1352,7 @@ class PlayerManagerTest {
     fun `play failure while old track playing restores old track and resumes`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BVOLD", 1, "old", "a", "", 100_000, null)), 0)
+        playerManager.play(listOf(Track("BVOLD", 1, "old", "a", "", durationMs = 100_000, subtitleUrl = null)), 0)
         runCurrent()
         fakePlayer.play()
         fakePlayer.setCurrentPosition(30_000L)
@@ -1322,7 +1360,7 @@ class PlayerManagerTest {
 
         // 新曲目装载失败：不能留下「新标题 + 旧声音」
         fakePlayer.failSetMediaItems = true
-        playerManager.play(listOf(Track("BVNEW", 2, "new", "a", "", 10_000, null)), 0)
+        playerManager.play(listOf(Track("BVNEW", 2, "new", "a", "", durationMs = 10_000, subtitleUrl = null)), 0)
         runCurrent()
 
         val state = playerManager.state.value
@@ -1340,7 +1378,7 @@ class PlayerManagerTest {
     fun `url expiry 403 triggers retry with lazy item`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", 10000, null)), 0)
+        playerManager.play(listOf(Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null)), 0)
         runCurrent()
         val before = fakePlayer.mediaItems.first()
         assertEquals(0, fakePlayer.replaceCalls)
@@ -1362,7 +1400,7 @@ class PlayerManagerTest {
     fun `network restore auto retries connectivity playback error`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 100_000, subtitleUrl = null))
         fakeNetwork.setOnline(false)
         runCurrent()
         playerManager.play(tracks, 0)
@@ -1400,7 +1438,7 @@ class PlayerManagerTest {
     fun `network restore ignores non-connectivity errors`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 100_000, subtitleUrl = null))
         fakeNetwork.setOnline(false)
         runCurrent()
         playerManager.play(tracks, 0)
@@ -1426,7 +1464,7 @@ class PlayerManagerTest {
     fun `network restore stops after max attempts`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 100_000, subtitleUrl = null))
         fakeNetwork.setOnline(false)
         runCurrent()
         playerManager.play(tracks, 0)
@@ -1481,7 +1519,7 @@ class PlayerManagerTest {
     fun `dismiss clears error and suppresses auto retry until next error`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t", "a", "", 100_000, null))
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 100_000, subtitleUrl = null))
         fakeNetwork.setOnline(false)
         runCurrent()
         playerManager.play(tracks, 0)
@@ -1521,8 +1559,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 100_000, null),
-            Track("BV1", 2, "t2", "a", "", 100_000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 100_000, subtitleUrl = null),
+            Track("BV1", 2, "t2", "a", "", durationMs = 100_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         val itemsAfterPlay = fakePlayer.mediaItems.size
@@ -1540,7 +1578,7 @@ class PlayerManagerTest {
     fun `playOrResume same track while paused resumes`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
-        val tracks = listOf(Track("BV1", 1, "t1", "a", "", 100_000, null))
+        val tracks = listOf(Track("BV1", 1, "t1", "a", "", durationMs = 100_000, subtitleUrl = null))
         playerManager.play(tracks, 0)
         playerManager.pause()
         assertFalse(playerManager.state.value.isPlaying)
@@ -1558,8 +1596,8 @@ class PlayerManagerTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }
         val tracks = listOf(
-            Track("BV1", 1, "t1", "a", "", 100_000, null),
-            Track("BV1", 2, "t2", "a", "", 100_000, null),
+            Track("BV1", 1, "t1", "a", "", durationMs = 100_000, subtitleUrl = null),
+            Track("BV1", 2, "t2", "a", "", durationMs = 100_000, subtitleUrl = null),
         )
         playerManager.play(tracks, 0)
         assertEquals(1L, playerManager.state.value.currentTrack?.cid)

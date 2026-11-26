@@ -4,7 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
+import cn.debubu.tingbili.core.data.model.ImageFormat
+import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
 
 /**
  * 图片格式的作用域：只包有封面的页（首页/搜索/详情/歌单/历史/播放/mini 条/我的/B站收藏与历史）。
@@ -18,5 +22,12 @@ fun ImageFormatScope(
     content: @Composable () -> Unit,
 ) {
     val imageFormat by viewModel.imageFormat.collectAsStateWithLifecycle()
-    CompositionLocalProvider(LocalImageFormat provides imageFormat, content = content)
+    val coverDisplayMode by viewModel.coverDisplayMode.collectAsStateWithLifecycle()
+    val singlePartUsesBvCover by viewModel.singlePartUsesBvCover.collectAsStateWithLifecycle()
+    CompositionLocalProvider(
+        LocalImageFormat provides imageFormat,
+        LocalCoverDisplayMode provides coverDisplayMode,
+        LocalSinglePartUsesBvCover provides singlePartUsesBvCover,
+        content = content,
+    )
 }

@@ -12,9 +12,11 @@ import cn.debubu.tingbili.core.data.db.PlayUrlCacheDao
 import cn.debubu.tingbili.core.data.db.PlayUrlCacheEntity
 import cn.debubu.tingbili.core.data.db.HistoryDao
 import cn.debubu.tingbili.core.data.db.HistoryEntity
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
 import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
@@ -29,6 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
@@ -305,6 +309,23 @@ class PlayerManager @Inject constructor(
         override fun currentSpeed(): Float = _state.value.speed
         override fun onSpeedResetTo1x() { _state.update { it.copy(speed = 1f) } }
     }
+    private var coverSettingsJob: Job? = null
+
+    /** 封面偏好只在值变化时更新，避免进度写 DataStore 引起无关的 MediaItem 替换。 */
+    private fun observeCoverSettings(monitorScope: CoroutineScope) {
+        coverSettingsJob?.cancel()
+        coverSettingsJob = monitorScope.launch {
+            combine(
+                prefs.coverDisplayMode,
+                prefs.singlePartUsesBvCover,
+                prefs.imageFormat,
+                prefs.audioQuality,
+            ) { mode, singlePartUsesBvCover, imageFormat, audioQuality ->
+                CoverSettings(mode, singlePartUsesBvCover, imageFormat, audioQuality)
+            }.distinctUntilChanged().collect(::refreshNotificationArtwork)
+        }
+    }
+
     init {
         // 冷启动静默恢复上次队列与进度（暂停态，仅恢复 UI 状态，不自动播放）
         sleepTimer.attach(scope, sleepListener)
@@ -312,6 +333,7 @@ class PlayerManager @Inject constructor(
         queueManager.attach(scope, queueListener)
         audioPolicy.attach(scope, audioListener)
         attachNetworkMonitor(scope)
+        observeCoverSettings(scope)
         // 使用 scope 而非 effectiveScope：构造时 testScope 尚未来得及注入，测试可显式调用 restoreLastPlayback()
         scope.launch {
             restoreLastPlayback()
@@ -366,6 +388,58 @@ class PlayerManager @Inject constructor(
             }
         } catch (_: Exception) {
         }
+    }
+
+    @Volatile
+    private var coverSettings = CoverSettings(CoverDisplayMode.BV_COVER, true, ImageFormat.AVIF, DEFAULT_AUDIO_QUALITY)
+
+    @Volatile
+    private var lastCoverSettings: CoverSettings? = null
+
+    private data class CoverSettings(
+        val mode: CoverDisplayMode,
+        val singlePartUsesBvCover: Boolean,
+        val imageFormat: ImageFormat,
+        val audioQuality: Int,
+    )
+
+    private fun buildItem(
+        track: Track,
+        queueIndex: Int? = null,
+        imageFormat: ImageFormat = coverSettings.imageFormat,
+        audioQuality: Int = coverSettings.audioQuality,
+    ): MediaItem = playUrlPipeline.buildItem(
+        track = track,
+        imageFormat = imageFormat,
+        audioQuality = audioQuality,
+        queueIndex = queueIndex,
+        coverDisplayMode = coverSettings.mode,
+        singlePartUsesBvCover = coverSettings.singlePartUsesBvCover,
+    )
+
+    /** 只改当前 MediaItem 的封面元数据，保留原 URI、缓存键、标题和播放位置。 */
+    private fun refreshNotificationArtwork(settings: CoverSettings) {
+        lastCoverSettings = settings
+        coverSettings = settings
+        val count = transport.mediaItemCount
+        if (count == 0) return
+        val current = _state.value.currentTrack ?: return
+        val index = currentIndex
+        if (index !in 0 until count || index !in queue.indices) return
+        var replaced = false
+        for (i in 0 until count) {
+            val track = if (i == index) current else queue.getOrNull(i) ?: continue
+            val item = runCatching { transport.getMediaItemAt(i) }.getOrNull() ?: continue
+            val artworkUri = artwork.artwork(
+                track.playbackCover(settings.mode, settings.singlePartUsesBvCover),
+                settings.imageFormat,
+            )
+            if (item.mediaMetadata.artworkUri == artworkUri) continue
+            val metadata = item.mediaMetadata.buildUpon().setArtworkUri(artworkUri).build()
+            runCatching { transport.replaceMediaItem(i, item.buildUpon().setMediaMetadata(metadata).build()) }
+            replaced = true
+        }
+        if (replaced) positionSyncGraceUntilMs = clock() + POSITION_SYNC_GRACE_MS
     }
 
     /** 恢复上次播放的队列与进度到 UI 状态，暂停态；损坏/空队列时静默忽略 */
@@ -593,7 +667,7 @@ class PlayerManager @Inject constructor(
                     // 在播项不动（换 uri 会打断当前播放），它的通知标题最多滞后到切歌。
                     // 元数据变了但直链要等真正开播才解析，直接换惰性 item 即可
                     try {
-                        transport.replaceMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, audioQuality, i))
+                        transport.replaceMediaItem(i, buildItem(item, i, imageFormat, audioQuality))
                     } catch (_: Exception) {
                     }
                 }
@@ -601,7 +675,7 @@ class PlayerManager @Inject constructor(
             }
             if (expected.any { it.queueKey() == item.queueKey() }) break // 重排：停手保平安
             try {
-                transport.addMediaItem(i, playUrlPipeline.buildItem(item, imageFormat, audioQuality, i))
+                transport.addMediaItem(i, buildItem(item, i, imageFormat, audioQuality))
             } catch (_: Exception) {
                 continue
             }
@@ -671,7 +745,7 @@ class PlayerManager @Inject constructor(
             try {
                 transport.setMediaItems(
                     plan.final.mapIndexed { i, track ->
-                        playUrlPipeline.buildItem(track, imageFormat, audioQuality, i)
+                        buildItem(track, i, imageFormat, audioQuality)
                     },
                     plan.playingFinalIdx,
                     pos,
@@ -842,7 +916,7 @@ class PlayerManager @Inject constructor(
         val imageFormat = prefs.imageFormat.first()
         val audioQuality = prefs.audioQuality.first()
         transport.setMediaItems(
-            q.mapIndexed { i, track -> playUrlPipeline.buildItem(track, imageFormat, audioQuality, i) },
+            q.mapIndexed { i, track -> buildItem(track, i, imageFormat, audioQuality) },
             safe,
             pos,
         )
@@ -991,7 +1065,7 @@ class PlayerManager @Inject constructor(
             transport.shuffleModeEnabled = false
             transport.setMediaItems(
                 playableTracks.mapIndexed { i, track ->
-                    playUrlPipeline.buildItem(track, imageFormat, audioQuality, i)
+                    buildItem(track, i, imageFormat, audioQuality)
                 },
                 startIndex,
                 resolvedStartPosition,
@@ -1336,6 +1410,8 @@ class PlayerManager @Inject constructor(
     }
 
     fun release() {
+        coverSettingsJob?.cancel()
+        coverSettingsJob = null
         networkMonitorJob?.cancel()
         networkMonitorJob = null
         historyTracker.release()
@@ -1370,6 +1446,7 @@ class PlayerManager @Inject constructor(
                 }
             }
             randomRedirectTarget = -1
+            lastCoverSettings?.let(::refreshNotificationArtwork)
             // 洗牌：transport 永远是逻辑顺序，自动连播会先落到逻辑下一首；
             // 不是本轮顺序的下一位就改跳过去，保证“每轮每集一次”。手动点播（SEEK）不干预。
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
@@ -1480,7 +1557,7 @@ class PlayerManager @Inject constructor(
             val imageFormat = prefs.imageFormat.first()
             val audioQuality = prefs.audioQuality.first()
             runCatching { playUrlCache.delete("${track.bvid}:${track.cid}") }
-            transport.replaceMediaItem(idx, playUrlPipeline.buildItem(track, imageFormat, audioQuality, idx))
+            transport.replaceMediaItem(idx, buildItem(track, idx, imageFormat, audioQuality))
             transport.prepare()
             transport.seekTo(pos)
             transport.play()
@@ -1509,7 +1586,7 @@ class PlayerManager @Inject constructor(
         val pos = _state.value.positionMs.coerceAtLeast(transport.currentPosition)
         transport.replaceMediaItem(
             idx,
-            playUrlPipeline.buildItem(track, prefs.imageFormat.first(), audioQuality, idx),
+            buildItem(track, idx, prefs.imageFormat.first(), audioQuality),
         )
         transport.prepare()
         transport.seekTo(pos)
@@ -1518,6 +1595,7 @@ class PlayerManager @Inject constructor(
     }
 
     private companion object {
+        const val DEFAULT_AUDIO_QUALITY: Int = PreferencesRepository.DEFAULT_AUDIO_QUALITY
         /** 网络恢复自动重试的冷却：抖动网络下别连击，同位置重试间隔至少它 */
         const val NETWORK_RETRY_COOLDOWN_MS = 30_000L
         /** 网络恢复自动重试上限：超过即停手，等用户手动（Phase 3 弹窗接管决策）。 */

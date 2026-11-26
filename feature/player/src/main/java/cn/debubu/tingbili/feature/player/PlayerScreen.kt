@@ -132,7 +132,10 @@ import androidx.compose.ui.unit.sp
 import java.time.LocalTime
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cn.debubu.tingbili.core.data.model.playbackCover
+import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliLyricList
@@ -157,6 +160,8 @@ fun PlayerScreen(
     vm: PlayerViewModel = hiltViewModel()
 ) {
     val imageFormat = LocalImageFormat.current
+    val coverDisplayMode = LocalCoverDisplayMode.current
+    val singlePartUsesBvCover = LocalSinglePartUsesBvCover.current
     val clipboard = LocalClipboard.current
     val trackUi by vm.trackUi.collectAsStateWithLifecycle()
     // 注意：进度流（1Hz）不在这里订阅——它只被「进度条 / 辅助栏 / 定时弹层」用，
@@ -209,7 +214,8 @@ fun PlayerScreen(
         }
     }
 
-    val coverModel = trackUi.track?.cover
+    val coverModel = trackUi.track
+        ?.playbackCover(coverDisplayMode, singlePartUsesBvCover)
         ?.takeIf { it.isNotBlank() }
         ?.biliImage(BiliImageVariant.LargeCover, imageFormat)
     // 纯色背景：曾试过“全屏模糊封面 + 渐变罩子”，罩子压完几乎看不见，还多一层全屏 RenderEffect，已移除
