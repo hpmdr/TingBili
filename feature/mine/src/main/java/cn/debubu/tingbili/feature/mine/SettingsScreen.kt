@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Memory
@@ -80,6 +81,7 @@ fun SettingsScreen(
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
     val coverDisplayMode by vm.coverDisplayMode.collectAsStateWithLifecycle()
+    val showQueueNumber by vm.showQueueNumber.collectAsStateWithLifecycle()
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val offloadActive by vm.offloadEverActive.collectAsStateWithLifecycle()
@@ -171,6 +173,15 @@ fun SettingsScreen(
                         subtitle = "高档需登录/会员，拿不到自动回落",
                         value = AudioQuality.fromCode(audioQuality).shortDesc,
                         onClick = onOpenQuality,
+                    )
+                    SettingDivider()
+                    SettingSwitchRow(
+                        icon = Icons.Filled.FormatListNumbered,
+                        accent = SettingAccent.BLUE,
+                        title = "显示序号",
+                        subtitle = "章节标题前加队列序号；关掉只显示 P 名（播放页/迷你条/通知栏同步）",
+                        checked = showQueueNumber,
+                        onCheckedChange = { vm.setShowQueueNumber(it) },
                     )
                     SettingDivider()
                     val notificationsUsable = notificationsEnabled || notificationExempt

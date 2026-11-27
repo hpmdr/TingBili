@@ -20,9 +20,10 @@ internal fun playerHeaderTitle(track: Track?): String =
  *
  * 混播收藏夹里各条分属不同 BV，`P{n}` 各说各话；队列序号才是统一口径。
  * `queueIndex` 为 0-based 的当前下标；无效（<0）时退化到分 P 标题。
+ * [showNumber] 来自播放设置「显示序号」，关闭时只给 P 名（迷你条/通知栏传同一开关保持口径）。
  */
-internal fun playerChapterLabel(track: Track?, queueIndex: Int = -1): String {
+internal fun playerChapterLabel(track: Track?, queueIndex: Int = -1, showNumber: Boolean = true): String {
     if (track == null || track.title.isBlank()) return "未播放"
-    if (queueIndex >= 0) return track.queueLabel(queueIndex)
+    if (queueIndex >= 0) return track.queueLabel(queueIndex, showNumber)
     return track.episodeLabel()
 }

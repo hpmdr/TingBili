@@ -56,6 +56,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setSinglePartUsesBvCover(enabled) }
     }
 
+    /** 章节行显示队列序号（播放页/迷你条/通知栏同步；关掉只显示 P 名） */
+    val showQueueNumber: StateFlow<Boolean> = prefs.showQueueNumber.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+    fun setShowQueueNumber(v: Boolean) {
+        viewModelScope.launch { prefs.setShowQueueNumber(v) }
+    }
+
     /** 睡眠定时「到点后播完本章再停」默认开关（落盘；播放页定时弹窗沿用，下次定时生效） */
     val sleepFinishChapter: StateFlow<Boolean> = prefs.sleepFinishChapter.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), false

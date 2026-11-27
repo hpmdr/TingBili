@@ -29,8 +29,10 @@ fun Track.episodeLabel(): String {
  *
  * 混播收藏夹里各条分属不同 BV，`P{n}` 各说各话；队列序号才是所有来源的统一口径。
  * 播放页章节行、迷你条副标题、通知栏标题都用它；`queueIndex` 为 0-based 下标。
+ * [showNumber] 关闭时只给名字（播放设置「显示序号」），三处调用方必须同传一个值保持口径一致。
  */
-fun Track.queueLabel(queueIndex: Int): String {
+fun Track.queueLabel(queueIndex: Int, showNumber: Boolean = true): String {
     val name = title.ifBlank { bvid }
+    if (!showNumber) return name
     return String.format(java.util.Locale.ROOT, "%02d · %s", queueIndex + 1, name)
 }

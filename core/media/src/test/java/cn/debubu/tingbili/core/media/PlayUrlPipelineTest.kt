@@ -94,6 +94,11 @@ class PlayUrlPipelineTest {
             "03 · 295-308",
             pipeline.buildItem(part, ImageFormat.WEBP, 30232, 2).mediaMetadata.title,
         )
+        // 「显示序号」关闭：通知栏标题只留 P 名
+        assertEquals(
+            "295-308",
+            pipeline.buildItem(part, ImageFormat.WEBP, 30232, 2, showQueueNumber = false).mediaMetadata.title,
+        )
     }
 
     @Test

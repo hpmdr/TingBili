@@ -74,6 +74,21 @@ class PlayerHeaderTest {
     }
 
     @Test
+    fun `chapter hides queue number when show number off`() {
+        // 播放设置「显示序号」关闭：只剩 P 名
+        assertEquals(
+            "M　1-30",
+            playerChapterLabel(track(title = "M　1-30", videoTitle = "民调局异闻录", pageIndex = 17), 2, false),
+        )
+        assertEquals("M　1-30", playerChapterLabel(track(title = "M　1-30"), 0, false))
+        // 关了序号但序号未知时，仍走分 P 标题（P17 前缀保留）
+        assertEquals(
+            "P17 · M　1-30",
+            playerChapterLabel(track(title = "M　1-30", videoTitle = "民调局异闻录", pageIndex = 17), -1, false),
+        )
+    }
+
+    @Test
     fun `chapter has no prefix for unknown index`() {
         assertEquals("M　1-30", playerChapterLabel(track(title = "M　1-30")))
         assertEquals("未播放", playerChapterLabel(null))

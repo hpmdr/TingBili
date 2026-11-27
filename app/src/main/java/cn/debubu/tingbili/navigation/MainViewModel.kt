@@ -233,6 +233,11 @@ class MainViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = true,
     )
+    val showQueueNumber = prefs.showQueueNumber.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = true,
+    )
     val themeMode = prefs.themeMode.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

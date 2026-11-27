@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.test.core.app.ApplicationProvider
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,6 +73,23 @@ class SettingsViewModelTest {
         vm.setStep(1)
         advanceUntilIdle()
         assertEquals(5, prefs.stepSec.first())
+    }
+
+    @Test fun `cover display mode and single part exception persist`() = runTest(dispatcher) {
+        val vm = SettingsViewModel(prefs)
+        vm.setCoverDisplayMode(CoverDisplayMode.FIRST_FRAME)
+        vm.setSinglePartUsesBvCover(false)
+        advanceUntilIdle()
+        assertEquals(CoverDisplayMode.FIRST_FRAME, prefs.coverDisplayMode.first())
+        assertEquals(false, prefs.singlePartUsesBvCover.first())
+    }
+
+    @Test fun `show queue number persists and defaults on`() = runTest(dispatcher) {
+        assertEquals(true, prefs.showQueueNumber.first())
+        val vm = SettingsViewModel(prefs)
+        vm.setShowQueueNumber(false)
+        advanceUntilIdle()
+        assertEquals(false, prefs.showQueueNumber.first())
     }
 
     @Test fun `sleep finish chapter persists`() = runTest(dispatcher) {

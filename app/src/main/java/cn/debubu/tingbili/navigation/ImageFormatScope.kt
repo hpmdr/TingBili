@@ -8,6 +8,7 @@ import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalShowQueueNumber
 import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
 
 /**
@@ -24,10 +25,12 @@ fun ImageFormatScope(
     val imageFormat by viewModel.imageFormat.collectAsStateWithLifecycle()
     val coverDisplayMode by viewModel.coverDisplayMode.collectAsStateWithLifecycle()
     val singlePartUsesBvCover by viewModel.singlePartUsesBvCover.collectAsStateWithLifecycle()
+    val showQueueNumber by viewModel.showQueueNumber.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalImageFormat provides imageFormat,
         LocalCoverDisplayMode provides coverDisplayMode,
         LocalSinglePartUsesBvCover provides singlePartUsesBvCover,
+        LocalShowQueueNumber provides showQueueNumber,
         content = content,
     )
 }

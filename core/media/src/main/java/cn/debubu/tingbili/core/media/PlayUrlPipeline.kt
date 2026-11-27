@@ -38,6 +38,7 @@ class PlayUrlPipeline(
      * Track→MediaItem（mediaId `bvid:cid`：播放/刷新对位、测试断言都认它；URI 是惰性协议）。
      * 标题用队列序号（`queueIndex` 为 0-based 下标）：混播时 `P{n}` 各说各话，
      * 只有队列序号是统一口径；不传则退化到分 P 标题（兼容旧调用）。
+     * [showQueueNumber] 为播放设置「显示序号」，关闭时标题只给 P 名。
      *
      * [audioQuality] 必须进缓存键：不同档位是不同编码（AAC / FLAC / E-AC-3），
      * 共用 `bvid:cid` 会让换档时复用上一档的缓存字节，播放器按新格式解析旧 MP4，
@@ -50,6 +51,7 @@ class PlayUrlPipeline(
         queueIndex: Int? = null,
         coverDisplayMode: CoverDisplayMode = CoverDisplayMode.BV_COVER,
         singlePartUsesBvCover: Boolean = true,
+        showQueueNumber: Boolean = true,
     ): MediaItem =
         MediaItem.Builder()
             .setUri(AudioUrlResolver.lazyUri(track.bvid, track.cid))
@@ -58,7 +60,7 @@ class PlayUrlPipeline(
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(
-                        if (queueIndex != null && queueIndex >= 0) track.queueLabel(queueIndex)
+                        if (queueIndex != null && queueIndex >= 0) track.queueLabel(queueIndex, showQueueNumber)
                         else track.episodeLabel()
                     )
                     .setArtist(track.author)

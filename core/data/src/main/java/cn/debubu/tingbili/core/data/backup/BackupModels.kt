@@ -113,6 +113,7 @@ data class SettingsBackup(
     val imageFormat: String? = null,
     val coverDisplayMode: String? = null,
     val singlePartUsesBvCover: Boolean? = null,
+    val showQueueNumber: Boolean? = null,
     val homeKeywords: List<String>? = null,
     val cacheMaxMb: Int? = null,
     val autoCheckUpdate: Boolean? = null,

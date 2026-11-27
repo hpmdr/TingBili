@@ -126,6 +126,8 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
     val coverDisplayMode: Flow<CoverDisplayMode> = ds.data.map { CoverDisplayMode.fromKey(it[COVER_DISPLAY_MODE]) }
     /** 首帧模式下，单 P 视频仍使用 BV 封面。 */
     val singlePartUsesBvCover: Flow<Boolean> = ds.data.map { it[SINGLE_PART_USES_BV_COVER] ?: true }
+    /** 章节行显示队列序号（`03 · 章节名`）；关掉只显示 P 名，播放页/迷你条/通知栏同步生效 */
+    val showQueueNumber: Flow<Boolean> = ds.data.map { it[SHOW_QUEUE_NUMBER] ?: true }
     /** 首页发现流策展关键词，设置页可增减；空时回落默认 */
     // 注意：ds.data 任何 key 写入都会发射（播放时进度每 500ms 写一次），
     // 必须去重，否则下游 combine 会反复重建推荐 Pager（首页无限刷新）。
@@ -271,6 +273,10 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         ds.edit { it[SINGLE_PART_USES_BV_COVER] = v }
     }
 
+    suspend fun setShowQueueNumber(v: Boolean) {
+        ds.edit { it[SHOW_QUEUE_NUMBER] = v }
+    }
+
     suspend fun setHomeKeywords(keywords: List<String>) {
         val cleaned = keywords.map { it.trim() }.filter { it.isNotBlank() }.distinct()
         ds.edit {
@@ -412,6 +418,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
             imageFormat = p[IMAGE_FORMAT],
             coverDisplayMode = p[COVER_DISPLAY_MODE],
             singlePartUsesBvCover = p[SINGLE_PART_USES_BV_COVER],
+            showQueueNumber = p[SHOW_QUEUE_NUMBER],
             homeKeywords = p[HOME_KEYWORDS]?.split(",")?.map(String::trim)?.filter(String::isNotBlank),
             cacheMaxMb = p[CACHE_MAX_MB],
             autoCheckUpdate = p[AUTO_CHECK_UPDATE],
@@ -447,6 +454,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
                 p[COVER_DISPLAY_MODE] = CoverDisplayMode.fromKey(it).name
             }
             s.singlePartUsesBvCover?.let { p[SINGLE_PART_USES_BV_COVER] = it }
+            s.showQueueNumber?.let { p[SHOW_QUEUE_NUMBER] = it }
             s.homeKeywords?.let { keywords ->
                 val cleaned = keywords.map(String::trim).filter(String::isNotBlank).distinct()
                 if (cleaned.isEmpty()) p.remove(HOME_KEYWORDS) else p[HOME_KEYWORDS] = cleaned.joinToString(",")
@@ -503,6 +511,7 @@ class PreferencesRepository(private val ds: DataStore<Preferences>) {
         val IMAGE_FORMAT = stringPreferencesKey("image_format")
         val COVER_DISPLAY_MODE = stringPreferencesKey("cover_display_mode")
         val SINGLE_PART_USES_BV_COVER = androidx.datastore.preferences.core.booleanPreferencesKey("single_part_uses_bv_cover")
+        val SHOW_QUEUE_NUMBER = androidx.datastore.preferences.core.booleanPreferencesKey("show_queue_number")
         val HOME_KEYWORDS = stringPreferencesKey("home_keywords")
         val SEARCH_HISTORY_JSON = stringPreferencesKey("search_history_json")
         const val MAX_SEARCH_HISTORY = 15

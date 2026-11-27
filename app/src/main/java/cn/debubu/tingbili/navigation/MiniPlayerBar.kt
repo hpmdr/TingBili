@@ -55,6 +55,7 @@ import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.data.model.queueLabel
 import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalShowQueueNumber
 import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
 import cn.debubu.tingbili.core.ui.formatDurationMs
 import cn.debubu.tingbili.data.bilibili.dto.BiliImageVariant
@@ -149,8 +150,9 @@ private fun DismissableBarContent(
         track.videoTitle?.takeIf { it.isNotBlank() } ?: track.title.ifBlank { track.bvid }
     }
     // 副标题=当前歌曲：`03 · 章节名`（队列序号口径；主标题仍是合集名，回答“在听哪本书”）
-    val subtitle = remember(track, queueIndex) {
-        if (queueIndex >= 0) track.queueLabel(queueIndex)
+    val showQueueNumber = LocalShowQueueNumber.current
+    val subtitle = remember(track, queueIndex, showQueueNumber) {
+        if (queueIndex >= 0) track.queueLabel(queueIndex, showQueueNumber)
         else track.title.ifBlank { track.bvid }
     }
     val progress = if (durationMs > 0L) {

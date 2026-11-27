@@ -62,4 +62,12 @@ class TrackLabelsTest {
         assertEquals("03 · 295-308", t.queueLabel(2))
         assertEquals("01 · 一首单曲", track("一首单曲").queueLabel(0))
     }
+
+    @Test
+    fun `queue label hides number when show number off`() {
+        // 播放设置「显示序号」关闭：三处（播放页/迷你/通知栏）只显示 P 名
+        val t = track("295-308", videoTitle = "无限流悬疑多人有声", pageIndex = 17)
+        assertEquals("295-308", t.queueLabel(2, showNumber = false))
+        assertEquals("295-308", t.queueLabel(0, showNumber = false))
+    }
 }

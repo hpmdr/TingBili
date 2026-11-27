@@ -19,6 +19,7 @@ class BackupCodecTest {
                     audioQuality = 30280,
                     coverDisplayMode = CoverDisplayMode.FIRST_FRAME.name,
                     singlePartUsesBvCover = true,
+                    showQueueNumber = false,
                     homeKeywords = listOf("悬疑", "有声书"),
                     searchHistory = listOf("盗墓"),
                 ),

@@ -135,6 +135,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
+import cn.debubu.tingbili.core.ui.LocalShowQueueNumber
 import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
 import cn.debubu.tingbili.core.ui.SubtitleTypography
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
@@ -263,7 +264,11 @@ fun PlayerScreen(
             // 章节标题行：左标题列吃剩余宽度（weight=1f，最多两行省略），
             // 右侧爱心固定 48dp 再长也挤不动；点标题进章节目录看全文。
             PlayerChapterHeader(
-                chapterLabel = playerChapterLabel(trackUi.track, trackUi.currentIndex),
+                chapterLabel = playerChapterLabel(
+                    trackUi.track,
+                    trackUi.currentIndex,
+                    LocalShowQueueNumber.current,
+                ),
                 author = trackUi.track?.author,
                 favoriteAvailable = trackUi.track != null,
                 isFavorite = isDefaultFavorite,

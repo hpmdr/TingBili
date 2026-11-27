@@ -120,6 +120,7 @@ class BackupViewModel @Inject constructor(
             settings.imageFormat,
             settings.coverDisplayMode,
             settings.singlePartUsesBvCover,
+            settings.showQueueNumber,
             settings.homeKeywords,
             settings.cacheMaxMb,
             settings.autoCheckUpdate,
