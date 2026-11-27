@@ -1317,6 +1317,30 @@ class PlayerManagerTest {
     }
 
     @Test
+    fun `playing false during buffering keeps loading until ready`() = runTest {
+        playerManager.testScope = this
+        playerManager.clock = { testScheduler.currentTime }
+        val tracks = listOf(Track("BV1", 1, "t", "a", "", durationMs = 10000, subtitleUrl = null))
+        playerManager.play(tracks, 0)
+        runCurrent()
+        // seek 落点重新拉数据：BUFFERING 置加载，ExoPlayer 的 isPlaying 同时为假
+        fakePlayer.pause()
+        fakePlayer.storedListener?.onPlaybackStateChanged(Player.STATE_BUFFERING)
+        assertTrue(playerManager.state.value.isLoading)
+        fakePlayer.storedListener?.onIsPlayingChanged(false)
+        // 旧逻辑这里无条件清 isLoading，与 BUFFERING 回调竞态把转圈闪没
+        assertTrue(playerManager.state.value.isLoading)
+        assertEquals(false, playerManager.state.value.isPlaying)
+        // READY 后恢复出声：加载态收敛
+        fakePlayer.play()
+        fakePlayer.storedListener?.onPlaybackStateChanged(Player.STATE_READY)
+        fakePlayer.storedListener?.onIsPlayingChanged(true)
+        assertEquals(false, playerManager.state.value.isLoading)
+        assertEquals(true, playerManager.state.value.isPlaying)
+        playerManager.release()
+    }
+
+    @Test
     fun `play sets loading and custom cache key`() = runTest {
         playerManager.testScope = this
         playerManager.clock = { testScheduler.currentTime }

@@ -16,7 +16,9 @@ import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.ImageFormat
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.core.data.model.Track
+import cn.debubu.tingbili.core.data.model.episodeLabel
 import cn.debubu.tingbili.core.data.model.playbackCover
+import cn.debubu.tingbili.core.data.model.queueLabel
 import cn.debubu.tingbili.core.data.network.AlwaysOnlineNetworkMonitor
 import cn.debubu.tingbili.core.data.network.CONNECTIVITY_MARK
 import cn.debubu.tingbili.core.data.network.NetworkMonitor
@@ -311,7 +313,7 @@ class PlayerManager @Inject constructor(
     }
     private var coverSettingsJob: Job? = null
 
-    /** 封面偏好只在值变化时更新，避免进度写 DataStore 引起无关的 MediaItem 替换。 */
+    /** 封面/标题偏好只在值变化时更新，避免进度写 DataStore 引起无关的 MediaItem 替换。 */
     private fun observeCoverSettings(monitorScope: CoroutineScope) {
         coverSettingsJob?.cancel()
         coverSettingsJob = monitorScope.launch {
@@ -320,8 +322,9 @@ class PlayerManager @Inject constructor(
                 prefs.singlePartUsesBvCover,
                 prefs.imageFormat,
                 prefs.audioQuality,
-            ) { mode, singlePartUsesBvCover, imageFormat, audioQuality ->
-                CoverSettings(mode, singlePartUsesBvCover, imageFormat, audioQuality)
+                prefs.showQueueNumber,
+            ) { mode, singlePartUsesBvCover, imageFormat, audioQuality, showQueueNumber ->
+                CoverSettings(mode, singlePartUsesBvCover, imageFormat, audioQuality, showQueueNumber)
             }.distinctUntilChanged().collect(::refreshNotificationArtwork)
         }
     }
@@ -391,16 +394,20 @@ class PlayerManager @Inject constructor(
     }
 
     @Volatile
-    private var coverSettings = CoverSettings(CoverDisplayMode.BV_COVER, true, ImageFormat.AVIF, DEFAULT_AUDIO_QUALITY)
+    private var coverSettings = CoverSettings(
+        CoverDisplayMode.BV_COVER, true, ImageFormat.AVIF, DEFAULT_AUDIO_QUALITY, true,
+    )
 
     @Volatile
     private var lastCoverSettings: CoverSettings? = null
 
+    /** MediaItem 元数据偏好：封面来源 + 图片格式 + 音质（进缓存键） + 通知栏序号显示。 */
     private data class CoverSettings(
         val mode: CoverDisplayMode,
         val singlePartUsesBvCover: Boolean,
         val imageFormat: ImageFormat,
         val audioQuality: Int,
+        val showQueueNumber: Boolean,
     )
 
     private fun buildItem(
@@ -415,9 +422,13 @@ class PlayerManager @Inject constructor(
         queueIndex = queueIndex,
         coverDisplayMode = coverSettings.mode,
         singlePartUsesBvCover = coverSettings.singlePartUsesBvCover,
+        showQueueNumber = coverSettings.showQueueNumber,
     )
 
-    /** 只改当前 MediaItem 的封面元数据，保留原 URI、缓存键、标题和播放位置。 */
+    /**
+     * 只改当前 MediaItem 的封面与标题元数据，保留原 URI、缓存键和播放位置。
+     * 「显示序号」开关也走这里：标题随开关实时更新，不用重建整个队列。
+     */
     private fun refreshNotificationArtwork(settings: CoverSettings) {
         lastCoverSettings = settings
         coverSettings = settings
@@ -434,8 +445,13 @@ class PlayerManager @Inject constructor(
                 track.playbackCover(settings.mode, settings.singlePartUsesBvCover),
                 settings.imageFormat,
             )
-            if (item.mediaMetadata.artworkUri == artworkUri) continue
-            val metadata = item.mediaMetadata.buildUpon().setArtworkUri(artworkUri).build()
+            val title = if (i in queue.indices) track.queueLabel(i, settings.showQueueNumber)
+            else track.episodeLabel()
+            if (item.mediaMetadata.artworkUri == artworkUri && item.mediaMetadata.title == title) continue
+            val metadata = item.mediaMetadata.buildUpon()
+                .setArtworkUri(artworkUri)
+                .setTitle(title)
+                .build()
             runCatching { transport.replaceMediaItem(i, item.buildUpon().setMediaMetadata(metadata).build()) }
             replaced = true
         }
@@ -1492,7 +1508,9 @@ class PlayerManager @Inject constructor(
             _state.update {
                 it.copy(
                     isPlaying = isPlaying,
-                    isLoading = false,
+                    // 只在真正出声时收敛加载态；变 false 多为 seek/缓冲的瞬时回落，
+                    // 此时清 isLoading 会与 onPlayerStateChanged(BUFFERING) 竞态、把转圈闪没
+                    isLoading = if (isPlaying) false else it.isLoading,
                     // 真正在出声了，之前的错误横幅即过期（各重试入口不断播 swap 时靠这一句收敛）
                     errorMessage = if (isPlaying) null else it.errorMessage,
                 )

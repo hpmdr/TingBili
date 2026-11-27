@@ -53,7 +53,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
@@ -82,6 +81,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -98,8 +98,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.first
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,10 +118,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -363,10 +376,14 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // 加载期 enabled=false 只为挡住点击与读屏语义；Material3 的 disabled 会把
+            // LocalContentColor 压暗造成闪灰，这里把内容色钉回环境原色，视觉保持不变。
+            val sideIconColor = LocalContentColor.current
             IconButton(onClick = { vm.previous() }, enabled = !trackUi.isLoading) {
                 Icon(
                     Icons.Default.SkipPrevious,
                     contentDescription = "上一首",
+                    tint = sideIconColor,
                     modifier = Modifier.size(30.dp),
                 )
             }
@@ -376,47 +393,22 @@ fun PlayerScreen(
                     seconds = trackUi.stepSec,
                     forward = false,
                     contentDescription = "后退${trackUi.stepSec}秒",
+                    color = sideIconColor,
                 )
             }
 
-            if (trackUi.isLoading) {
-                Box(
-                    modifier = Modifier.size(64.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .shadow(12.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.tertiary,
-                                ),
-                            ),
-                        )
-                        .clickable(onClick = { vm.toggle() }),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (trackUi.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (trackUi.isPlaying) "暂停" else "播放",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
-            }
+            PlayPauseButton(
+                isPlaying = trackUi.isPlaying,
+                isLoading = trackUi.isLoading,
+                onClick = vm::toggle,
+            )
 
             IconButton(onClick = { vm.skipForward() }, enabled = !trackUi.isLoading) {
                 SkipIcon(
                     seconds = trackUi.stepSec,
                     forward = true,
                     contentDescription = "前进${trackUi.stepSec}秒",
+                    color = sideIconColor,
                 )
             }
 
@@ -424,6 +416,7 @@ fun PlayerScreen(
                 Icon(
                     Icons.Default.SkipNext,
                     contentDescription = "下一首",
+                    tint = sideIconColor,
                     modifier = Modifier.size(30.dp),
                 )
             }
@@ -909,6 +902,7 @@ private fun SkipIcon(
     seconds: Int,
     forward: Boolean,
     contentDescription: String,
+    color: Color = LocalContentColor.current,
 ) {
     Box(
         modifier = Modifier.size(34.dp),
@@ -917,14 +911,121 @@ private fun SkipIcon(
         Icon(
             imageVector = if (forward) Icons.Default.Refresh else Icons.Default.Replay,
             contentDescription = contentDescription,
+            tint = color,
             modifier = Modifier.size(34.dp),
         )
         Text(
             text = seconds.toString(),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
+            color = color,
             modifier = Modifier.offset(y = 1.dp),
         )
+    }
+}
+
+/**
+ * 播放/暂停按钮：固定 68dp 圆形容器，三态（播放/暂停/加载）只换内容不换尺寸，
+ * 上方字幕组件高度不会因加载或状态切换而跳动。
+ */
+@Composable
+private fun PlayPauseButton(
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "pressScale",
+    )
+    // 播放↔暂停交叉淡入 + 弹性缩放（Apple Music 风格）。
+    // seek/缓冲期间 ExoPlayer 会瞬时把 isPlaying 报 false（STATE_BUFFERING 定义如此），
+    // 加载中冻结在上一个稳定态，避免图标在快进快退时弹离暂停又弹回。
+    var stablePlaying by remember { mutableStateOf(isPlaying) }
+    if (!isLoading) stablePlaying = isPlaying
+    val glyphPlaying = if (isLoading) stablePlaying else isPlaying
+    val playScale by animateFloatAsState(
+        targetValue = if (glyphPlaying) 0f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "playScale",
+    )
+    val pauseScale by animateFloatAsState(
+        targetValue = if (glyphPlaying) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "pauseScale",
+    )
+    // 加载态延迟 300ms 才出现，快速加载不闪转圈
+    var spinnerOn by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            delay(300)
+            spinnerOn = true
+        } else {
+            spinnerOn = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(68.dp)
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .shadow(12.dp, CircleShape)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = !isLoading,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = if (glyphPlaying) null else "播放",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier
+                .size(36.dp)
+                .graphicsLayer {
+                    scaleX = playScale
+                    scaleY = playScale
+                    alpha = playScale
+                },
+        )
+        Icon(
+            imageVector = Icons.Default.Pause,
+            contentDescription = if (glyphPlaying) "暂停" else null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier
+                .size(36.dp)
+                .graphicsLayer {
+                    scaleX = pauseScale
+                    scaleY = pauseScale
+                    alpha = pauseScale
+                },
+        )
+        // 加载：圆内叠半透明压暗 + 转圈，容器尺寸不变
+        AnimatedVisibility(
+            visible = spinnerOn,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(36.dp),
+                    strokeWidth = 3.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
     }
 }
 
@@ -1047,29 +1148,110 @@ private fun PlayerChapterHeader(
         }
         if (favoriteAvailable) {
             Spacer(Modifier.width(8.dp))
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .combinedClickable(
-                        onClickLabel = if (isFavorite) "取消收藏到我的最爱" else "收藏到我的最爱",
-                        onLongClickLabel = "选择收藏夹",
-                        onClick = onFavoriteClick,
-                        onLongClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onFavoriteLongClick()
-                        },
+            FavoriteHeartButton(
+                isFavorite = isFavorite,
+                onClick = onFavoriteClick,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onFavoriteLongClick()
+                },
+            )
+        }
+    }
+}
+
+/**
+ * 收藏爱心（方案 B）：收藏/取消都做 spring 弹跳 + 空心↔实心交叉，
+ * 收藏方向额外一圈扩散圆环（取消不放，保持不对称）。
+ * 所有动画值只在 graphicsLayer / Canvas 绘制阶段读取，不触发每帧重组；
+ * 容器 48dp 恒定，不参与布局变化。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FavoriteHeartButton(
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val filledTint = MaterialTheme.colorScheme.primary
+    val outlineTint = MaterialTheme.colorScheme.onSurface
+    // 空心↔实心交叉比例：只在 graphicsLayer lambda 里读，Draw 阶段生效
+    val crossfade by animateFloatAsState(
+        targetValue = if (isFavorite) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "heartCrossfade",
+    )
+    val popScale = remember { Animatable(1f) }
+    val ringProgress = remember { Animatable(0f) }
+    // 跳过首次组合：只在状态真正翻转时弹跳/放环
+    var prevFavorite by remember { mutableStateOf(isFavorite) }
+    LaunchedEffect(isFavorite) {
+        if (prevFavorite == isFavorite) return@LaunchedEffect
+        prevFavorite = isFavorite
+        coroutineScope {
+            launch {
+                popScale.snapTo(0.86f)
+                popScale.animateTo(
+                    1f,
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium,
                     ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    // 外层 combinedClickable 已设 onClickLabel/onLongClickLabel，这里再给描述会被 TalkBack 念两遍（REVIEW_REPORT H-04）
-                    contentDescription = null,
-                    tint = if (isFavorite) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
                 )
             }
+            if (isFavorite) launch {
+                ringProgress.snapTo(0f)
+                ringProgress.animateTo(1f, tween(480, easing = FastOutSlowInEasing))
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                onClickLabel = if (isFavorite) "取消收藏到我的最爱" else "收藏到我的最爱",
+                onLongClickLabel = "选择收藏夹",
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 扩散圆环：绘制阶段读 ringProgress；静止时 0/1 都不画
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val p = ringProgress.value
+            if (p > 0f && p < 1f) {
+                val maxR = size.minDimension / 2f
+                drawCircle(
+                    color = filledTint.copy(alpha = (1f - p) * 0.7f),
+                    radius = maxR * (0.35f + 0.75f * p),
+                    style = Stroke(width = 2.5.dp.toPx()),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.graphicsLayer {
+                scaleX = popScale.value
+                scaleY = popScale.value
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.FavoriteBorder,
+                // 外层 combinedClickable 已设标签，这里再给描述会被 TalkBack 念两遍（REVIEW_REPORT H-04）
+                contentDescription = null,
+                tint = outlineTint,
+                modifier = Modifier.graphicsLayer { alpha = 1f - crossfade },
+            )
+            Icon(
+                imageVector = Icons.Filled.Favorite,
+                contentDescription = null,
+                tint = filledTint,
+                modifier = Modifier.graphicsLayer { alpha = crossfade },
+            )
         }
     }
 }
