@@ -136,6 +136,7 @@ import cn.debubu.tingbili.core.data.model.playbackCover
 import cn.debubu.tingbili.core.ui.LocalCoverDisplayMode
 import cn.debubu.tingbili.core.ui.LocalImageFormat
 import cn.debubu.tingbili.core.ui.LocalSinglePartUsesBvCover
+import cn.debubu.tingbili.core.ui.SubtitleTypography
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderOption
 import cn.debubu.tingbili.core.ui.component.FavoriteFolderSinglePickerSheet
 import cn.debubu.tingbili.core.ui.component.TingBiliLyricList
@@ -1601,22 +1602,12 @@ private fun FullscreenLyricsList(
             val isCurrent = tone == LyricTone.Current
             Text(
                 text = line.text,
+                // 高亮 titleMedium(16sp)×1.25、正文 bodyMedium(14sp)×1.1，行高同倍放大保固定行高比；
+                // 与「字幕字号」设置页预览共用 [SubtitleTypography]，两处不会漂移
                 style = if (isCurrent) {
-                    // 高亮取 titleMedium(16sp)×1.25=20sp，行高同倍放大(24sp→30sp)保 1.5 倍行高
-                    MaterialTheme.typography.titleMedium.copy(
-                        fontSize = MaterialTheme.typography.titleMedium.fontSize *
-                            FULLSCREEN_HIGHLIGHT_SCALE * state.subtitleScale,
-                        lineHeight = MaterialTheme.typography.titleMedium.lineHeight *
-                            FULLSCREEN_HIGHLIGHT_SCALE * state.subtitleScale,
-                    )
+                    SubtitleTypography.highlight(state.subtitleScale)
                 } else {
-                    // 正文取 bodyMedium(14sp)×1.1≈15.4sp，行高同倍放大(20sp→22sp)保 1.43 倍行高
-                    MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = MaterialTheme.typography.bodyMedium.fontSize *
-                            FULLSCREEN_BODY_SCALE * state.subtitleScale,
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight *
-                            FULLSCREEN_BODY_SCALE * state.subtitleScale,
-                    )
+                    SubtitleTypography.body(state.subtitleScale)
                 },
                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                 color = when (tone) {
@@ -1644,13 +1635,11 @@ private fun FullscreenLyricsList(
 private data class JumpUndo(val fromMs: Long, val toLabel: String, val token: Long)
 
 /**
- * 全屏字幕排印（方案 A）：高亮 16sp×1.25，正文 14sp×1.1，上下 fade 各占约 11% 视口。
+ * 全屏字幕的 fade/行距（排印倍数见 [SubtitleTypography]）：上下 fade 各占约 11% 视口。
  *
  * 行距只给 4dp：每行自带 6dp 上下内边距（点击热区），两者叠加才是行间空白（4+6+6=16dp）。
  * 原先 12dp 叠加后达 24dp，比迷你卡（2dp）松 4 倍，已按视觉稿收紧。
  */
-private const val FULLSCREEN_HIGHLIGHT_SCALE = 1.25f
-private const val FULLSCREEN_BODY_SCALE = 1.1f
 private const val FULLSCREEN_FADE_FRACTION = 0.11f
 private val FULLSCREEN_LINE_SPACING = 4.dp
 

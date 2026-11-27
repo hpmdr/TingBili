@@ -31,6 +31,7 @@ import cn.debubu.tingbili.feature.mine.AboutScreen
 import cn.debubu.tingbili.feature.mine.AppearanceScreen
 import cn.debubu.tingbili.feature.mine.BackupScreen
 import cn.debubu.tingbili.feature.mine.AudioDecodersScreen
+import cn.debubu.tingbili.feature.mine.CoverSettingsScreen
 import cn.debubu.tingbili.feature.mine.GeneralSettingsScreen
 import cn.debubu.tingbili.feature.favorites.BiliFavDetailScreen
 import cn.debubu.tingbili.feature.favorites.BiliFavoritesScreen
@@ -38,6 +39,7 @@ import cn.debubu.tingbili.feature.favorites.BiliToviewScreen
 import cn.debubu.tingbili.feature.mine.BiliHistoryScreen
 import cn.debubu.tingbili.feature.mine.MeScreen
 import cn.debubu.tingbili.feature.mine.StorageSettingsScreen
+import cn.debubu.tingbili.feature.mine.SubtitleSettingsScreen
 import cn.debubu.tingbili.feature.mine.QualityScreen
 import cn.debubu.tingbili.feature.mine.SettingsScreen
 
@@ -95,10 +97,18 @@ fun AppRootNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenAudioDecoders = { navController.navigate(AudioDecodersRoute) },
                 onOpenQuality = { navController.navigate(QualityRoute) },
+                onOpenCoverSettings = { navController.navigate(CoverSettingsRoute) },
+                onOpenSubtitleSettings = { navController.navigate(SubtitleSettingsRoute) },
             )
         }
         composable<QualityRoute> {
             QualityScreen(onBack = { navController.popBackStack() })
+        }
+        composable<CoverSettingsRoute> {
+            CoverSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable<SubtitleSettingsRoute> {
+            SubtitleSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable<StorageRoute> {
             StorageSettingsScreen(onBack = { navController.popBackStack() })

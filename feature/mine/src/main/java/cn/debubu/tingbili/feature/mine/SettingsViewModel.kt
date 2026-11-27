@@ -3,6 +3,7 @@ package cn.debubu.tingbili.feature.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.debubu.tingbili.core.data.datastore.PreferencesRepository
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,7 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 「播放设置」：步长 + 字幕字号 + 睡眠偏好 + 解码开关 + 默认音质（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与推荐词在其他设置，缓存在存储设置。 */
+/** 「播放设置」：步长 + 字幕字号 + 播放封面 + 睡眠偏好 + 解码开关 + 默认音质（播放页 ⋮→播放设置跳这里，唯一入口）。图片格式与推荐词在其他设置，缓存在存储设置。 */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val prefs: PreferencesRepository
@@ -36,6 +37,23 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
     fun setSubtitleScale(v: Float) {
         viewModelScope.launch { prefs.setSubtitleScale(v) }
+    }
+
+    val coverDisplayMode: StateFlow<CoverDisplayMode> = prefs.coverDisplayMode.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), CoverDisplayMode.BV_COVER
+    )
+
+    val singlePartUsesBvCover: StateFlow<Boolean> = prefs.singlePartUsesBvCover.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), true
+    )
+
+    fun setCoverDisplayMode(mode: CoverDisplayMode) {
+        viewModelScope.launch { prefs.setCoverDisplayMode(mode) }
+    }
+
+    /** 仅在播放封面选择「BV 首帧」时作为子设置展示。 */
+    fun setSinglePartUsesBvCover(enabled: Boolean) {
+        viewModelScope.launch { prefs.setSinglePartUsesBvCover(enabled) }
     }
 
     /** 睡眠定时「到点后播完本章再停」默认开关（落盘；播放页定时弹窗沿用，下次定时生效） */

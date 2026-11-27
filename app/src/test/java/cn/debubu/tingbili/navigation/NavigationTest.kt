@@ -400,4 +400,34 @@ class NavigationTest {
         composeTestRule.runOnIdle { navController.navigate(QualityRoute) }
         composeTestRule.onNodeWithText("quality").assertIsDisplayed()
     }
+
+    @Test
+    fun `coverSettingsRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = SettingsRoute) {
+                composable<SettingsRoute> { Text("settings") }
+                composable<CoverSettingsRoute> { Text("cover settings") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(CoverSettingsRoute) }
+        composeTestRule.onNodeWithText("cover settings").assertIsDisplayed()
+    }
+
+    @Test
+    fun `subtitleSettingsRoute resolves in nav graph`() {
+        lateinit var navController: TestNavHostController
+        composeTestRule.setContent {
+            navController = TestNavHostController(LocalContext.current)
+            navController.navigatorProvider.addNavigator(ComposeNavigator())
+            NavHost(navController = navController, startDestination = SettingsRoute) {
+                composable<SettingsRoute> { Text("settings") }
+                composable<SubtitleSettingsRoute> { Text("subtitle settings") }
+            }
+        }
+        composeTestRule.runOnIdle { navController.navigate(SubtitleSettingsRoute) }
+        composeTestRule.onNodeWithText("subtitle settings").assertIsDisplayed()
+    }
 }

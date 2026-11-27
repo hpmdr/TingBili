@@ -26,7 +26,7 @@ object MeRoute
 @Serializable
 object AppearanceRoute
 
-/** 二级页：播放设置（步长 / 字幕 / 睡眠偏好 / 解码 / 默认音质） */
+/** 二级页：播放设置（步长 / 字幕字号入口 / 播放封面入口 / 睡眠偏好 / 解码 / 默认音质） */
 @Serializable
 object SettingsRoute
 
@@ -49,6 +49,14 @@ object BackupRoute
 /** 二级页：默认音质（播放设置 → 默认音质进入，唯一入口） */
 @Serializable
 object QualityRoute
+
+/** 二级页：播放封面（播放设置 → 播放封面进入，唯一入口：来源模式 + 单 P 子开关） */
+@Serializable
+object CoverSettingsRoute
+
+/** 二级页：字幕字号（播放设置 → 字幕字号进入，唯一入口：四档 + 实时预览） */
+@Serializable
+object SubtitleSettingsRoute
 
 /** 二级页：本机音频解码器实测列表（MediaCodecList 枚举，仅展示定位用） */
 @Serializable

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shuffle
@@ -62,19 +63,23 @@ import cn.debubu.tingbili.core.ui.component.TingBiliScaffold
 import cn.debubu.tingbili.core.ui.component.TingBiliStepSlider
 import cn.debubu.tingbili.core.ui.component.TingBiliTopAppBar
 import cn.debubu.tingbili.data.bilibili.dto.AudioQuality
+import cn.debubu.tingbili.core.data.model.CoverDisplayMode
 import cn.debubu.tingbili.core.data.model.RandomPlayMode
 
-/** 二级页：播放设置（播放分组：步长 / 字幕 / 随机 / 默认音质 + 睡眠偏好 / 解码开关）。 */
+/** 二级页：播放设置（播放分组：步长 / 字幕 / 封面入口 / 随机 / 默认音质 + 睡眠偏好 / 解码开关）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAudioDecoders: () -> Unit,
     onOpenQuality: () -> Unit,
+    onOpenCoverSettings: () -> Unit = {},
+    onOpenSubtitleSettings: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel(),
 ) {
     val step by vm.stepSec.collectAsStateWithLifecycle()
     val subtitleScale by vm.subtitleScale.collectAsStateWithLifecycle()
+    val coverDisplayMode by vm.coverDisplayMode.collectAsStateWithLifecycle()
     val audioHwDecode by vm.audioHwDecode.collectAsStateWithLifecycle()
     val audioOffload by vm.audioOffload.collectAsStateWithLifecycle()
     val offloadActive by vm.offloadEverActive.collectAsStateWithLifecycle()
@@ -83,7 +88,6 @@ fun SettingsScreen(
     val randomPlayMode by vm.randomPlayMode.collectAsStateWithLifecycle()
     val sleepFinishChapter by vm.sleepFinishChapter.collectAsStateWithLifecycle()
     var showStepSheet by remember { mutableStateOf(false) }
-    var showSubtitleSheet by remember { mutableStateOf(false) }
     var showRandomModeSheet by remember { mutableStateOf(false) }
 
     // 通知栏播放控制：媒体通知豁免 POST_NOTIFICATIONS，只有用户手动关闭系统通知才会失效。
@@ -136,7 +140,16 @@ fun SettingsScreen(
                         title = "字幕字号",
                         subtitle = "全屏与迷你字幕同步缩放",
                         value = subtitleScaleLabel(subtitleScale),
-                        onClick = { showSubtitleSheet = true },
+                        onClick = onOpenSubtitleSettings,
+                    )
+                    SettingDivider()
+                    SettingRow(
+                        icon = Icons.Filled.Image,
+                        accent = SettingAccent.PURPLE,
+                        title = "播放封面",
+                        subtitle = "播放页、迷你播放器与系统媒体封面",
+                        value = coverDisplayModeLabel(coverDisplayMode),
+                        onClick = onOpenCoverSettings,
                     )
                     SettingDivider()
                     SettingRow(
@@ -250,16 +263,6 @@ fun SettingsScreen(
             onDismiss = { showStepSheet = false },
         )
     }
-    if (showSubtitleSheet) {
-        SubtitleScaleSheet(
-            current = subtitleScale,
-            onApply = {
-                vm.setSubtitleScale(it)
-                showSubtitleSheet = false
-            },
-            onDismiss = { showSubtitleSheet = false },
-        )
-    }
     if (showRandomModeSheet) {
         TingBiliChoiceSheet(
             title = "随机播放方式",
@@ -284,6 +287,11 @@ fun SettingsScreen(
             onDismiss = { showRandomModeSheet = false },
         )
     }
+}
+
+private fun coverDisplayModeLabel(mode: CoverDisplayMode): String = when (mode) {
+    CoverDisplayMode.BV_COVER -> "BV 封面"
+    CoverDisplayMode.FIRST_FRAME -> "BV 首帧"
 }
 
 /**
@@ -350,28 +358,6 @@ private const val STEP_MIN = 5
 private const val STEP_MAX = 60
 private const val STEP_INTERVAL = 5
 private val STEP_PRESETS = listOf(5, 15, 30, 60)
-
-/** 字幕字号：选择类弹层，点选预览，应用后生效。 */
-@Composable
-private fun SubtitleScaleSheet(
-    current: Float,
-    onApply: (Float) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    TingBiliChoiceSheet(
-        title = "字幕字号",
-        subtitle = "选择预览，应用后全屏与迷你字幕同步缩放。",
-        options = listOf(
-            TingBiliChoiceOption(0.85f, "小", "相对系数 0.85，叠加系统字体大小"),
-            TingBiliChoiceOption(1f, "标准", "相对系数 1.0，叠加系统字体大小"),
-            TingBiliChoiceOption(1.15f, "大", "相对系数 1.15，叠加系统字体大小"),
-            TingBiliChoiceOption(1.3f, "特大", "相对系数 1.3，叠加系统字体大小"),
-        ),
-        selected = current,
-        onApply = onApply,
-        onDismiss = onDismiss,
-    )
-}
 
 /**
  * 13+ 未授予 POST_NOTIFICATIONS 时，媒体会话通知仍可显示（平台豁免）。
