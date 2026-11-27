@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -252,22 +250,10 @@ private fun CustomColorSheet(
     }
     var hexText by remember(initialColor) { mutableStateOf(previewColor.toHex()) }
     var hexError by remember { mutableStateOf(false) }
-    // 最近颜色只放内存：防“调乱了回不去”，不进 DataStore
-    val recents = remember { mutableStateListOf<Int>() }
-    // 手势同帧内写 state 读不到（要等下一帧重组）：抬手记最近颜色必须读这个同步 ref
-    val draftHsv = remember(initialColor) { initialHsv.copyOf() }
-    fun pushRecent(argb: Int) {
-        recents.remove(argb)
-        recents.add(0, argb)
-        while (recents.size > 5) recents.removeAt(recents.lastIndex)
-    }
     fun syncDraft(h: Float, sat: Float, v: Float) {
         hue = h
         saturation = sat
         brightness = v
-        draftHsv[0] = h
-        draftHsv[1] = sat
-        draftHsv[2] = v
         hexText = Color(hsvToArgb(h, sat, v)).toHex()
         hexError = false
     }
@@ -279,11 +265,9 @@ private fun CustomColorSheet(
             (0.15f + (1f - p.y / size.height) * 0.85f).coerceIn(0.15f, 1f),
         )
     }
-    val onSvRelease by rememberUpdatedState { pushRecent(hsvToArgb(draftHsv[0], draftHsv[1], draftHsv[2])) }
     val onHuePoint by rememberUpdatedState { p: Offset, size: Size ->
         syncDraft((p.x / size.width * 360f).coerceIn(0f, 360f), saturation, brightness)
     }
-    val onHueRelease by rememberUpdatedState { pushRecent(hsvToArgb(draftHsv[0], draftHsv[1], draftHsv[2])) }
     // 预览直接用落库同一套生成逻辑：所见即生效后的主题
     val scheme = remember(previewColor, darkTheme, darkAmoled) {
         brandedColorScheme(previewColor, darkTheme, darkAmoled)
@@ -325,7 +309,7 @@ private fun CustomColorSheet(
                     .fillMaxWidth()
                     .height(200.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .pickGesture(onPoint = onSvPoint, onRelease = onSvRelease)
+                    .pickGesture(onPoint = onSvPoint)
                     .semantics { contentDescription = "饱和度和明度二维取色板" },
             ) {
                 val w = size.width
@@ -346,7 +330,7 @@ private fun CustomColorSheet(
                     .fillMaxWidth()
                     .height(28.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .pickGesture(onPoint = onHuePoint, onRelease = onHueRelease)
+                    .pickGesture(onPoint = onHuePoint)
                     .semantics { contentDescription = "色相取色条" },
             ) {
                 drawRect(hueRainbow)
@@ -369,7 +353,6 @@ private fun CustomColorSheet(
                             val parsed = parseHexToHsv(upper)
                             if (parsed != null) {
                                 syncDraft(parsed[0], parsed[1], parsed[2])
-                                pushRecent(Color(hsvToArgb(parsed[0], parsed[1], parsed[2])).toArgb())
                             } else {
                                 hexError = true
                             }
@@ -390,45 +373,18 @@ private fun CustomColorSheet(
                 Spacer(Modifier.size(10.dp))
                 ColorSwatch(previewColor)
             }
-            if (recents.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "最近使用",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        recents.forEach { argb ->
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(argb))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                    .clickable {
-                                        FloatArray(3).also { android.graphics.Color.colorToHSV(argb, it) }
-                                            .let { syncDraft(it[0], it[1], it[2].coerceAtLeast(0.15f)) }
-                                    }
-                                    .semantics { contentDescription = "最近颜色 ${Color(argb).toHex()}" },
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
-/** 点按+拖拽通用手势：消费位移避免跟 BottomSheet 滚动打架，抬手回调用来记“最近颜色”。 */
+/** 点按+拖拽通用手势：消费位移避免跟 BottomSheet 滚动打架。 */
 @Composable
 private fun Modifier.pickGesture(
     onPoint: (Offset, Size) -> Unit,
-    onRelease: () -> Unit,
 ): Modifier {
     // key 必须用 Unit 常驻：回调每帧都变，若拿回调当 key，拖动中 detector 会反复重启，
-    // 手势被取消、尾段丢失、onRelease 永远不触发；用 rememberUpdatedState 在内部读最新值。
+    // 手势被取消、尾段丢失；用 rememberUpdatedState 在内部读最新值。
     val latestPoint = rememberUpdatedState(onPoint)
-    val latestRelease = rememberUpdatedState(onRelease)
     return pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown()
@@ -438,7 +394,6 @@ private fun Modifier.pickGesture(
                 event.changes.forEach { it.consume() }
                 event.changes.firstOrNull()?.position?.let { latestPoint.value(it, size.toSize()) }
             } while (event.changes.any { it.pressed })
-            latestRelease.value()
         }
     }
 }
